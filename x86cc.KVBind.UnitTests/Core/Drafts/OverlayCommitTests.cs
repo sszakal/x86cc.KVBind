@@ -1,0 +1,98 @@
+using AwesomeAssertions;
+using x86cc.KVBind.Core.Model;
+
+namespace x86cc.KVBind.UnitTests.Core;
+
+public class OverlayCommitTests
+{
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void OverlayCommit_WhenUserIsEmpty_Throws(string? user)
+    {
+        var snapshot = new KVSnapshot();
+        var act = () => KVOverlay.Create(snapshot, user!);
+
+        act.Should().Throw<ArgumentException>().WithMessage("Overlay user cannot be empty.*");
+    }
+
+    [Fact]
+    public void OverlayCommit_WhenUserIsClearedAfterCreation_Throws()
+    {
+        var overlay = KVOverlay.Create(new KVSnapshot(), "editor");
+        var act = () => overlay.User = "";
+
+        act.Should().Throw<ArgumentException>().WithMessage("Overlay user cannot be empty.*");
+    }
+
+    [Fact]
+    public void OverlayCommit_WhenCreated_CapturesSnapshotVersionAndLastCommit()
+    {
+        var snapshot = new KVSnapshot
+        {
+            Version = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            LastCommitId = Guid.Parse("22222222-2222-2222-2222-222222222222")
+        };
+
+        var overlay = KVOverlay.Create(snapshot, "editor");
+
+        overlay.AggregateId.Should().Be(snapshot.AggregateId);
+        overlay.BaseSnapshotVersion.Should().Be(snapshot.Version);
+        overlay.BaseCommitId.Should().Be(snapshot.LastCommitId);
+        overlay.User.Should().Be("editor");
+    }
+
+    [Fact]
+    public void OverlayCommit_WhenConvertedToCommit_CopiesUserTimestampAndChanges()
+    {
+        var timestamp = new DateTimeOffset(2026, 6, 1, 12, 30, 0, TimeSpan.Zero);
+        var snapshot = new KVSnapshot();
+        var overlay = KVOverlay.Create(snapshot, "editor");
+        overlay.Set("Title", "Draft");
+        overlay.Remove("Items/old");
+
+        var commit = overlay.ToCommit(timestamp);
+
+        commit.AggregateId.Should().Be(snapshot.AggregateId);
+        commit.PreviousCommitId.Should().Be(snapshot.LastCommitId);
+        commit.User.Should().Be("editor");
+        commit.Timestamp.Should().Be(timestamp);
+        commit.AddedOrChanged.Should().ContainKey("Title").WhoseValue.Should().Be("Draft");
+        commit.Removed.Should().Contain("Items/old");
+    }
+
+    [Fact]
+    public void OverlayCommit_WhenConvertedToCommit_CopiesCollectionsWithoutSharingMutableState()
+    {
+        var overlay = KVOverlay.Create(new KVSnapshot(), "editor");
+        overlay.Set("Title", "Draft");
+        overlay.Remove("Items/old");
+
+        var commit = overlay.ToCommit(DateTimeOffset.UtcNow);
+
+        overlay.Set("Title", "Changed after commit");
+        overlay.Set("Other", "New value");
+        overlay.RestorePath("Items/old");
+
+        commit.AddedOrChanged.Should().ContainKey("Title").WhoseValue.Should().Be("Draft");
+        commit.AddedOrChanged.Should().NotContainKey("Other");
+        commit.Removed.Should().Contain("Items/old");
+    }
+
+    [Fact]
+    public void OverlayCommit_WhenOverlayIsEmpty_CreatesEmptyCommitWithMetadata()
+    {
+        var timestamp = new DateTimeOffset(2026, 6, 1, 12, 30, 0, TimeSpan.Zero);
+        var snapshot = new KVSnapshot();
+        var overlay = KVOverlay.Create(snapshot, "editor");
+
+        var commit = overlay.ToCommit(timestamp);
+
+        commit.AggregateId.Should().Be(snapshot.AggregateId);
+        commit.User.Should().Be("editor");
+        commit.Timestamp.Should().Be(timestamp);
+        commit.AddedOrChanged.Should().BeEmpty();
+        commit.Removed.Should().BeEmpty();
+    }
+}
