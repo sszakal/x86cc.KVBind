@@ -131,7 +131,7 @@ public sealed class InsuranceClaimAggregateService(
         return ProjectDraft(draft);
     }
 
-    public async Task<ClaimCommitResponse?> CommitDraftAsync(
+    public async Task<CommitClaimDraftResult?> CommitDraftAsync(
         Guid claimId,
         Guid draftId,
         CommitClaimDraftRequest request,
@@ -149,12 +149,24 @@ public sealed class InsuranceClaimAggregateService(
             return null;
         }
 
+        NormalizeSnapshot(snapshotDocument.Snapshot);
+        if (!IsDraftBasedOnLatestSnapshot(draft, snapshotDocument.Snapshot))
+        {
+            return CommitClaimDraftResult.Stale(new StaleDraftResponse(
+                claimId,
+                draftId,
+                draft.BaseSnapshotVersion,
+                snapshotDocument.Snapshot.Version,
+                draft.BaseCommitId,
+                snapshotDocument.Snapshot.LastCommitId,
+                "Draft is based on an older snapshot. Sync with master before committing."));
+        }
+
         var overlay = draft.ToOverlay();
         NormalizeOverlay(overlay);
         var root = Bind(overlay);
         var commit = root.CreateCommit(DateTimeOffset.UtcNow);
 
-        NormalizeSnapshot(snapshotDocument.Snapshot);
         snapshotDocument.Snapshot.Apply(commit);
         if (!string.IsNullOrWhiteSpace(request.User))
         {
@@ -172,11 +184,11 @@ public sealed class InsuranceClaimAggregateService(
         session.Delete<ClaimOverlayDocument>(draftId);
         await session.SaveChangesAsync(cancellationToken);
 
-        return new ClaimCommitResponse(
+        return CommitClaimDraftResult.Committed(new ClaimCommitResponse(
             claimId,
             draftId,
             commit.CommitId,
-            ProjectSnapshot(snapshotDocument.Snapshot));
+            ProjectSnapshot(snapshotDocument.Snapshot)));
     }
 
     public async Task<IReadOnlyList<ClaimChangeSetResponse>> ListChangeSetsAsync(Guid claimId, CancellationToken cancellationToken)
@@ -201,6 +213,12 @@ public sealed class InsuranceClaimAggregateService(
     {
         var model = KVModelRoot.Create(overlay, definitionFactory.Definition);
         return KVRootNode.Create<InsuranceClaim>(model, definitionFactory.Definition);
+    }
+
+    private static bool IsDraftBasedOnLatestSnapshot(ClaimOverlayDocument draft, KVSnapshot latestSnapshot)
+    {
+        return draft.BaseSnapshotVersion == latestSnapshot.Version
+               && draft.BaseCommitId == latestSnapshot.LastCommitId;
     }
 
     private ClaimSnapshotResponse ProjectSnapshot(KVSnapshot snapshot)

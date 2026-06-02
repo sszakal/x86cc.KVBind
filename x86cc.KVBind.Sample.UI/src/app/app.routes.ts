@@ -18,6 +18,9 @@ import { VideosComponent } from './pages/ui-elements/videos/videos.component';
 import { SignInComponent } from './pages/auth-pages/sign-in/sign-in.component';
 import { SignUpComponent } from './pages/auth-pages/sign-up/sign-up.component';
 import { CalenderComponent } from './pages/calender/calender.component';
+import { ClaimsListComponent } from './features/claims/claims-list.component';
+import { ClaimDetailComponent } from './features/claims/claim-detail.component';
+import { ClaimDraftComponent } from './features/claims/claim-draft.component';
 
 export const routes: Routes = [
   {
@@ -35,6 +38,21 @@ export const routes: Routes = [
         path:'calendar',
         component:CalenderComponent,
         title:'Angular Calender | TailAdmin - Angular Admin Dashboard Template'
+      },
+      {
+        path:'claims',
+        component:ClaimsListComponent,
+        title:'Insurance Claims | KVBind Sample'
+      },
+      {
+        path:'claims/:claimId',
+        component:ClaimDetailComponent,
+        title:'Claim Snapshot | KVBind Sample'
+      },
+      {
+        path:'claims/:claimId/drafts/:draftId',
+        component:ClaimDraftComponent,
+        title:'Claim Draft | KVBind Sample'
       },
       {
         path:'profile',

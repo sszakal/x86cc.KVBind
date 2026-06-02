@@ -1,0 +1,171 @@
+import { HttpClient } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { Observable } from 'rxjs';
+
+export interface CreateClaimRequest {
+  claimNumber: string;
+  incidentDate: string | null;
+  description: string | null;
+  policyNumber: string | null;
+  coverageType: string | null;
+  user: string;
+}
+
+export interface OpenClaimDraftRequest {
+  user: string;
+}
+
+export interface CommitClaimDraftRequest {
+  user: string;
+}
+
+export interface ClaimSummaryResponse {
+  claimId: string;
+  claimNumber: string | null;
+  status: string | null;
+  description: string | null;
+  claimedTotal: number;
+  snapshotVersion: string;
+  lastCommitId: string | null;
+}
+
+export interface ClaimSnapshotResponse {
+  claimId: string;
+  claim: ClaimDataResponse;
+  snapshotVersion: string;
+  lastCommitId: string | null;
+  lastCommitTimestamp: string | null;
+}
+
+export interface ClaimDraftResponse {
+  draftId: string;
+  claimId: string;
+  user: string;
+  claim: ClaimDataResponse;
+  baseSnapshotVersion: string;
+  baseCommitId: string | null;
+  changes: ClaimChangeResponse[];
+}
+
+export interface ClaimCommitResponse {
+  claimId: string;
+  draftId: string;
+  commitId: string;
+  snapshot: ClaimSnapshotResponse;
+}
+
+export interface StaleDraftResponse {
+  claimId: string;
+  draftId: string;
+  draftBaseSnapshotVersion: string;
+  latestSnapshotVersion: string;
+  draftBaseCommitId: string | null;
+  latestCommitId: string | null;
+  message: string;
+}
+
+export interface ClaimChangeSetResponse {
+  commitId: string;
+  previousCommitId: string | null;
+  user: string;
+  timestamp: string;
+  addedOrChangedPaths: string[];
+  removedPaths: string[];
+}
+
+export interface ClaimDataResponse {
+  claimNumber: string | null;
+  status: string | null;
+  incidentDate: string | null;
+  description: string | null;
+  claimedTotal: number;
+  policy: ClaimPolicyResponse;
+  damagedItems: DamagedItemResponse[];
+  notes: ClaimNoteResponse[];
+  claimant: ClaimantResponse | null;
+}
+
+export interface ClaimPolicyResponse {
+  policyNumber: string | null;
+  coverageType: string | null;
+}
+
+export interface DamagedItemResponse {
+  itemId: string;
+  description: string | null;
+  estimatedAmount: number;
+}
+
+export interface ClaimNoteResponse {
+  itemId: string;
+  text: string | null;
+}
+
+export interface ClaimantResponse {
+  type: string;
+  displayName: string | null;
+}
+
+export interface ClaimChangeResponse {
+  path: string;
+  changeType: string;
+}
+
+export interface ClaimPatchOperationRequest {
+  operationCode: string;
+  path: string;
+  value?: unknown;
+}
+
+@Injectable({ providedIn: 'root' })
+export class ClaimApiService {
+  private readonly defaultBaseUrl = 'http://localhost:5101/api/claims';
+
+  constructor(private readonly http: HttpClient) {}
+
+  get apiBaseUrl(): string {
+    return localStorage.getItem('kvbind.apiBaseUrl') ?? this.defaultBaseUrl;
+  }
+
+  setApiBaseUrl(value: string): void {
+    const trimmed = value.trim().replace(/\/$/, '');
+    if (trimmed.length === 0) {
+      localStorage.removeItem('kvbind.apiBaseUrl');
+      return;
+    }
+
+    localStorage.setItem('kvbind.apiBaseUrl', trimmed);
+  }
+
+  listClaims(): Observable<ClaimSummaryResponse[]> {
+    return this.http.get<ClaimSummaryResponse[]>(this.apiBaseUrl);
+  }
+
+  createClaim(request: CreateClaimRequest): Observable<ClaimSnapshotResponse> {
+    return this.http.post<ClaimSnapshotResponse>(this.apiBaseUrl, request);
+  }
+
+  getSnapshot(claimId: string): Observable<ClaimSnapshotResponse> {
+    return this.http.get<ClaimSnapshotResponse>(`${this.apiBaseUrl}/${claimId}/snapshot`);
+  }
+
+  openDraft(claimId: string, request: OpenClaimDraftRequest): Observable<ClaimDraftResponse> {
+    return this.http.post<ClaimDraftResponse>(`${this.apiBaseUrl}/${claimId}/drafts`, request);
+  }
+
+  getDraft(claimId: string, draftId: string): Observable<ClaimDraftResponse> {
+    return this.http.get<ClaimDraftResponse>(`${this.apiBaseUrl}/${claimId}/drafts/${draftId}`);
+  }
+
+  patchDraft(claimId: string, draftId: string, operations: ClaimPatchOperationRequest[]): Observable<ClaimDraftResponse> {
+    return this.http.post<ClaimDraftResponse>(`${this.apiBaseUrl}/${claimId}/drafts/${draftId}/patch`, operations);
+  }
+
+  commitDraft(claimId: string, draftId: string, request: CommitClaimDraftRequest): Observable<ClaimCommitResponse> {
+    return this.http.post<ClaimCommitResponse>(`${this.apiBaseUrl}/${claimId}/drafts/${draftId}/commit`, request);
+  }
+
+  listChangeSets(claimId: string): Observable<ClaimChangeSetResponse[]> {
+    return this.http.get<ClaimChangeSetResponse[]>(`${this.apiBaseUrl}/${claimId}/changesets`);
+  }
+}

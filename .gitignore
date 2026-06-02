@@ -39,7 +39,13 @@ ScaffoldingReadMe.txt
 # Others
 ~$*
 *~
+.DS_Store
 CodeCoverage/
+
+# Node / Angular
+node_modules/
+dist/
+.angular/
 
 # MSBuild Binary and Structured Log
 *.binlog

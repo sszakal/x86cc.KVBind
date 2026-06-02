@@ -1,0 +1,79 @@
+<div class="space-y-6">
+  <div class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div>
+        <p class="text-sm font-medium text-brand-500">KVBind sample</p>
+        <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Insurance Claims</h1>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Create claims, open draft overlays, and inspect committed snapshots.</p>
+      </div>
+      <button class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800" (click)="loadClaims()">
+        Refresh
+      </button>
+    </div>
+
+    <div class="mt-5 grid gap-3 lg:grid-cols-[1fr_auto]">
+      <input class="h-11 rounded-lg border border-gray-300 px-4 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="apiBaseUrl" placeholder="API base URL" />
+      <button class="h-11 rounded-lg bg-gray-900 px-4 text-sm font-medium text-white dark:bg-white dark:text-gray-900" (click)="updateApiBaseUrl()">Use API URL</button>
+    </div>
+  </div>
+
+  @if (error) {
+    <div class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">{{ error }}</div>
+  }
+
+  <div class="grid gap-6 xl:grid-cols-[420px_1fr]">
+    <form class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]" (ngSubmit)="createClaim()">
+      <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Create claim</h2>
+      <div class="mt-5 space-y-4">
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Claim number
+          <input class="mt-1 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="form.claimNumber" name="claimNumber" required />
+        </label>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Incident date
+          <input type="date" class="mt-1 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="form.incidentDate" name="incidentDate" />
+        </label>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Description
+          <textarea class="mt-1 min-h-24 w-full rounded-lg border border-gray-300 px-4 py-3 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="form.description" name="description"></textarea>
+        </label>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Policy number
+            <input class="mt-1 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="form.policyNumber" name="policyNumber" />
+          </label>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Coverage type
+            <input class="mt-1 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="form.coverageType" name="coverageType" />
+          </label>
+        </div>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">User
+          <input class="mt-1 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="form.user" name="user" required />
+        </label>
+      </div>
+      <button class="mt-5 h-11 w-full rounded-lg bg-brand-500 px-4 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50" [disabled]="saving">{{ saving ? 'Creating...' : 'Create claim' }}</button>
+    </form>
+
+    <div class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+      <div class="mb-4 flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Committed snapshots</h2>
+        @if (loading) { <span class="text-sm text-gray-500">Loading...</span> }
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[720px] text-left text-sm">
+          <thead class="border-b border-gray-100 text-xs uppercase text-gray-500 dark:border-gray-800">
+            <tr><th class="py-3">Claim</th><th class="py-3">Status</th><th class="py-3">Total</th><th class="py-3">Snapshot</th><th class="py-3"></th></tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+            @for (claim of claims; track claim.claimId) {
+              <tr class="text-gray-700 dark:text-gray-300">
+                <td class="py-4"><div class="font-medium text-gray-900 dark:text-white">{{ claim.claimNumber || 'Unnumbered' }}</div><div class="text-xs text-gray-500">{{ claim.description }}</div></td>
+                <td class="py-4">{{ claim.status }}</td>
+                <td class="py-4">{{ claim.claimedTotal | currency }}</td>
+                <td class="py-4 font-mono text-xs">{{ claim.snapshotVersion }}</td>
+                <td class="py-4 text-right"><a class="text-brand-500 hover:text-brand-600" [routerLink]="['/claims', claim.claimId]">Open</a></td>
+              </tr>
+            } @empty {
+              <tr><td class="py-8 text-center text-gray-500" colspan="5">No claims yet.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

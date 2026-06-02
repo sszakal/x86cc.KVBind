@@ -6,6 +6,13 @@ using x86cc.KVBind.Sample.Api.Persistence;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AngularDev", policy => policy
+        .WithOrigins("http://localhost:4200")
+        .AllowAnyHeader()
+        .AllowAnyMethod());
+});
 
 var kvbindConnectionString = builder.Configuration.GetConnectionString("kvbind")
     ?? throw new InvalidOperationException("Connection string 'kvbind' is required. Run the API through the Aspire AppHost.");
@@ -27,6 +34,11 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseCors("AngularDev");
+}
 
 if (app.Environment.IsDevelopment())
 {

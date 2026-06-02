@@ -47,6 +47,22 @@ public sealed record ClaimCommitResponse(
     Guid CommitId,
     ClaimSnapshotResponse Snapshot);
 
+public sealed record CommitClaimDraftResult(ClaimCommitResponse? Commit, StaleDraftResponse? StaleDraft)
+{
+    public static CommitClaimDraftResult Committed(ClaimCommitResponse commit) => new(commit, null);
+
+    public static CommitClaimDraftResult Stale(StaleDraftResponse staleDraft) => new(null, staleDraft);
+}
+
+public sealed record StaleDraftResponse(
+    Guid ClaimId,
+    Guid DraftId,
+    Guid DraftBaseSnapshotVersion,
+    Guid LatestSnapshotVersion,
+    Guid? DraftBaseCommitId,
+    Guid? LatestCommitId,
+    string Message);
+
 public sealed record ClaimChangeSetResponse(
     Guid CommitId,
     Guid? PreviousCommitId,

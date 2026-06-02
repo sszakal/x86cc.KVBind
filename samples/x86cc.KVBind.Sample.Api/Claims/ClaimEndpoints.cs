@@ -82,7 +82,14 @@ public static class ClaimEndpoints
                 CancellationToken cancellationToken) =>
             {
                 var response = await service.CommitDraftAsync(claimId, draftId, request, cancellationToken);
-                return response is null ? Results.NotFound() : Results.Ok(response);
+                if (response is null)
+                {
+                    return Results.NotFound();
+                }
+
+                return response.StaleDraft is not null
+                    ? Results.Conflict(response.StaleDraft)
+                    : Results.Ok(response.Commit);
             })
             .WithName("CommitClaimDraft")
             .WithSummary("Commits a persisted draft overlay into the claim snapshot and records a changeset.");
