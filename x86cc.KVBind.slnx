@@ -1,5 +1,9 @@
 <Solution>
-   <Folder Name="/Sample/" />
+   <Folder Name="/Sample/">
+      <Project Path="samples/x86cc.KVBind.Sample.Api/x86cc.KVBind.Sample.Api.csproj" />
+      <Project Path="samples/x86cc.KVBind.Sample.AppHost/x86cc.KVBind.Sample.AppHost.csproj" />
+      <Project Path="samples/x86cc.KVBind.Sample.ServiceDefaults/x86cc.KVBind.Sample.ServiceDefaults.csproj" />
+   </Folder>
    <Folder Name="/SolutionItems/">
       <File Path="AGENTS.md" />
       <File Path="README.md" />

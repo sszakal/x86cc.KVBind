@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Npgsql" Version="13.2.2" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.1" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\x86cc.KVBind.Sample.ServiceDefaults\x86cc.KVBind.Sample.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\..\x86cc.KVBind.Core\x86cc.KVBind.Core.csproj" />
+  </ItemGroup>
+
+</Project>

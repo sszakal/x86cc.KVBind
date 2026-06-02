@@ -1,0 +1,19 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.2.2">
+
+  <ItemGroup>
+    <ProjectReference Include="..\x86cc.KVBind.Sample.Api\x86cc.KVBind.Sample.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.2.2" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>f86217b6-5981-419d-b69b-7d97bafa1a2b</UserSecretsId>
+  </PropertyGroup>
+
+</Project>
