@@ -15,7 +15,7 @@ public sealed class SourceGenerator : IIncrementalGenerator
     private static readonly DiagnosticDescriptor PropertyMustBePartial = new(
         id: "KVB001",
         title: "KVBind property must be partial",
-        messageFormat: "Property '{0}' must be declared as partial to be KV-bound.",
+        messageFormat: "Property '{0}' must be declared as partial to be KV-bound",
         category: "KVBind.SourceGenerator",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -31,7 +31,7 @@ public sealed class SourceGenerator : IIncrementalGenerator
     private static readonly DiagnosticDescriptor DuplicateCanonicalKey = new(
         id: "KVB003",
         title: "Duplicate canonical key",
-        messageFormat: "Type '{0}' contains duplicate canonical key '{1}'.",
+        messageFormat: "Type '{0}' contains duplicate canonical key '{1}'",
         category: "KVBind.SourceGenerator",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
