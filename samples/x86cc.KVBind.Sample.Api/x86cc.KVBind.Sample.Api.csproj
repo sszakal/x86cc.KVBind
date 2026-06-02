@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="Aspire.Npgsql" Version="13.2.2" />
+    <PackageReference Include="Marten" Version="9.4.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.1" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.1" />
   </ItemGroup>
@@ -15,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\x86cc.KVBind.Sample.ServiceDefaults\x86cc.KVBind.Sample.ServiceDefaults.csproj" />
     <ProjectReference Include="..\..\x86cc.KVBind.Core\x86cc.KVBind.Core.csproj" />
+    <ProjectReference Include="..\..\x86cc.KVBind.SourceGenerator\x86cc.KVBind.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

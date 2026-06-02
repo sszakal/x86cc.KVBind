@@ -27,6 +27,23 @@ public sealed class KVSnapshot
 
     public IReadOnlyCollection<string> Keys => Data.Keys;
 
+    public KVSnapshot Clone()
+    {
+        return new KVSnapshot
+        {
+            AggregateId = AggregateId,
+            Timestamp = Timestamp,
+            LastCommitId = LastCommitId,
+            LastCommitTimestamp = LastCommitTimestamp,
+            Created = Created,
+            CreatedBy = CreatedBy,
+            Modified = Modified,
+            ModifiedBy = ModifiedBy,
+            Version = Version,
+            Data = new Dictionary<string, object?>(Data, StringComparer.Ordinal)
+        };
+    }
+
     public bool TryGet(string path, out object? value)
     {
         return Data.TryGetValue(path, out value);

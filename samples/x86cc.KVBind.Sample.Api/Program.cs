@@ -1,11 +1,27 @@
+using Marten;
+using Weasel.Core;
+using x86cc.KVBind.Sample.Api.Claims;
+using x86cc.KVBind.Sample.Api.Persistence;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
-if (!string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("kvbind")))
+var kvbindConnectionString = builder.Configuration.GetConnectionString("kvbind")
+    ?? throw new InvalidOperationException("Connection string 'kvbind' is required. Run the API through the Aspire AppHost.");
+
+builder.AddNpgsqlDataSource("kvbind");
+
+builder.Services.AddMarten(options =>
 {
-    builder.AddNpgsqlDataSource("kvbind");
-}
+    options.Connection(kvbindConnectionString);
+    options.Schema.For<ClaimSnapshotDocument>().Identity(x => x.Id);
+    options.Schema.For<ClaimOverlayDocument>().Identity(x => x.Id);
+    options.Schema.For<ClaimChangeSetDocument>().Identity(x => x.Id);
+});
+
+builder.Services.AddSingleton<InsuranceClaimDefinitionFactory>();
+builder.Services.AddScoped<InsuranceClaimAggregateService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -31,6 +47,8 @@ app.MapGet("/api/demo/status", (IConfiguration configuration) =>
 })
 .WithName("GetDemoStatus")
 .WithSummary("Reports whether the sample API is configured with the Aspire PostgreSQL database.");
+
+app.MapClaimEndpoints();
 
 app.Run();
 

@@ -44,6 +44,29 @@ public class OverlayCommitTests
     }
 
     [Fact]
+    public void SnapshotClone_WhenSourceIsMutated_PreservesCopiedState()
+    {
+        var snapshot = new KVSnapshot
+        {
+            AggregateId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            Version = Guid.Parse("22222222-2222-2222-2222-222222222222"),
+            LastCommitId = Guid.Parse("33333333-3333-3333-3333-333333333333"),
+            ModifiedBy = "editor"
+        };
+        snapshot.Data["Title"] = "Original";
+
+        var clone = snapshot.Clone();
+        snapshot.Data["Title"] = "Changed";
+        snapshot.Version = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        snapshot.LastCommitId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+
+        clone.AggregateId.Should().Be(Guid.Parse("11111111-1111-1111-1111-111111111111"));
+        clone.Version.Should().Be(Guid.Parse("22222222-2222-2222-2222-222222222222"));
+        clone.LastCommitId.Should().Be(Guid.Parse("33333333-3333-3333-3333-333333333333"));
+        clone.Data.Should().ContainKey("Title").WhoseValue.Should().Be("Original");
+    }
+
+    [Fact]
     public void OverlayCommit_WhenConvertedToCommit_CopiesUserTimestampAndChanges()
     {
         var timestamp = new DateTimeOffset(2026, 6, 1, 12, 30, 0, TimeSpan.Zero);
