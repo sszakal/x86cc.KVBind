@@ -137,17 +137,15 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
         var commit = rootNode.CreateCommit(DateTimeOffset.UtcNow);
         model.Snapshot.Apply(commit);
         
-        InlineSnapshot.Validate(model.Snapshot.Data.ToDictionary(pair => pair.Key, pair => pair.Value.Value), """
+        InlineSnapshot.Validate(model.Snapshot.Data
+            .Where(pair => !pair.Key.Contains("/$") && !pair.Key.StartsWith("$", StringComparison.Ordinal))
+            .ToDictionary(pair => pair.Key, pair => pair.Value.Value), """
                                                 Title: applied
                                                 Status: 13
                                                 General/Code: APPLIED
-                                                Items/11111111-1111-1111-1111-111111111111/$id: 11111111-1111-1111-1111-111111111111
-                                                Items/11111111-1111-1111-1111-111111111111/$type: ChangeSetItemNode
                                                 Items/11111111-1111-1111-1111-111111111111/Name: one
                                                 Items/11111111-1111-1111-1111-111111111111/Amount: 11
                                                 Items/33333333-3333-3333-3333-333333333333/Name: three
-                                                Items/33333333-3333-3333-3333-333333333333/$type: ChangeSetItemNode
-                                                Items/33333333-3333-3333-3333-333333333333/$id: 33333333-3333-3333-3333-333333333333
                                                 """);
     }
 

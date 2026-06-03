@@ -254,15 +254,9 @@ public abstract class KVNode: IKVNode
 
     internal KVModel GetNestedNodeModel(string nestedNodeKey)
     {
-        if (_nestedSlotModels.TryGetValue(nestedNodeKey, out var slotModel))
-        {
-            return slotModel;
-        }
-
-        // Lazily create if not pre-populated (e.g. accessed before first full bind).
-        slotModel = Model.CreateChildModel(nestedNodeKey);
-        _nestedSlotModels[nestedNodeKey] = slotModel;
-        return slotModel;
+        return _nestedSlotModels.TryGetValue(nestedNodeKey, out var slotModel)
+            ? slotModel
+            : throw new InvalidOperationException($"Nested node slot '{nestedNodeKey}' is not initialized. Ensure the node is fully bound.");
     }
 
     private void DetachActiveNestedNode(string nestedNodeKey)
@@ -286,7 +280,7 @@ public abstract class KVNode: IKVNode
 
         // Remove all draft values under this path except $type.
         var toRemove = new List<string>();
-        foreach (var key in overlay.AddedOrChanged.Keys)
+        foreach (var key in overlay.Changes.Keys)
         {
             if (KVPath.IsSameOrDescendant(key, prefix) && !string.Equals(key, typeKey, StringComparison.Ordinal))
             {

@@ -17,9 +17,9 @@ public class DeepGraphBindingTests : DeepGraphTestBase
         root.Patch(KVPatchOperation.Init($"/{leafPath}/Animal", "DOG"));
         root.Patch(KVPatchOperation.Set($"/{leafPath}/Animal/DogName", "Rex"));
 
-        model.Overlay.AddedOrChanged.Should().ContainKey($"{leafPath}/LeafField").WhoseValue.Should().Be("leaf-1");
-        model.Overlay.AddedOrChanged.Should().ContainKey($"{leafPath}/Animal/$type").WhoseValue.Should().Be("DOG");
-        model.Overlay.AddedOrChanged.Should().ContainKey($"{leafPath}/Animal/DogName").WhoseValue.Should().Be("Rex");
+        model.Overlay.Changes.Should().ContainKey($"{leafPath}/LeafField").WhoseValue.Should().Be("leaf-1");
+        model.Overlay.Changes.Should().ContainKey($"{leafPath}/Animal/$type").WhoseValue.Should().Be("DOG");
+        model.Overlay.Changes.Should().ContainKey($"{leafPath}/Animal/DogName").WhoseValue.Should().Be("Rex");
 
         var dog = leaf.Animal.Should().BeOfType<DeepDogNode>().Subject;
         dog.DogName.Should().Be("Rex");

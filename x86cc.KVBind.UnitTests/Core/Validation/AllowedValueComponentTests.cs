@@ -36,7 +36,7 @@ public class AllowedValueComponentTests : KVModelTestBase
         rootNode.GetAllChanges().Changes.Should().Contain(change => change.Path == "CompensationType");
         rootNode.CompensationType.Should().Be(CompensationEmployeeType.Assistant);
         
-        InlineSnapshot.Validate(model.Overlay.AddedOrChanged.ToDictionary(pair => pair.Key, pair => pair.Value.Value), """
+        InlineSnapshot.Validate(model.Overlay.Changes.ToDictionary(pair => pair.Key, pair => pair.Value.Value), """
                                                 CompensationType: assistant_hourly
                                                 """);
         

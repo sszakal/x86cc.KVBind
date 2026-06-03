@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace x86cc.KVBind.Core.Model;
 
@@ -29,152 +30,91 @@ public sealed class KVOverlay
 
     public KVSnapshot Snapshot { get; }
 
-    public Dictionary<string, KVValue> AddedOrChanged { get; set; } = new(StringComparer.Ordinal);
-
-    public HashSet<string> Removed { get; set; } = new(StringComparer.Ordinal);
-
-    public IReadOnlyCollection<string> Keys
-    {
-        get
-        {
-            var keys = new HashSet<string>(Snapshot.Keys, StringComparer.Ordinal);
-            keys.UnionWith(AddedOrChanged.Keys);
-            keys.RemoveWhere(IsRemoved);
-            return keys;
-        }
-    }
+    // Single dictionary: regular KVValue = change, KVValue.Tombstone = deleted path (and its descendants).
+    public Dictionary<string, KVValue> Changes { get; set; } = new(StringComparer.Ordinal);
 
     public static KVOverlay Create(KVSnapshot snapshot, string user) => new(snapshot, user);
 
     public bool TryGet(string path, out KVValue? value)
     {
-        if (IsRemoved(path))
-        {
-            value = default;
-            return false;
-        }
-
-        if (AddedOrChanged.TryGetValue(path, out value))
-        {
-            return true;
-        }
-
+        if (IsRemoved(path)) { value = default; return false; }
+        if (Changes.TryGetValue(path, out value)) return true; // not tombstone since IsRemoved would have caught it
+        value = null;
         return Snapshot.TryGet(path, out value);
     }
 
-    public bool TryGetSnapshotValue(string path, out KVValue? value)
-    {
-        return Snapshot.TryGet(path, out value);
-    }
+    public bool TryGetSnapshotValue(string path, out KVValue? value) => Snapshot.TryGet(path, out value);
 
     public bool TryGetDraftValue(string path, out KVValue? value)
     {
-        return AddedOrChanged.TryGetValue(path, out value);
+        if (Changes.TryGetValue(path, out value) && value != KVValue.Tombstone) return true;
+        value = null;
+        return false;
     }
 
-    public bool HasRemovedPath(string path)
+    // True if this exact path has a tombstone (not an ancestor).
+    public bool HasRemovedPath(string path) =>
+        Changes.TryGetValue(path, out var v) && v == KVValue.Tombstone;
+
+    // True if path or any ancestor has a tombstone.
+    public bool IsRemoved(string path)
     {
-        return Removed.Contains(path);
+        if (HasRemovedPath(path)) return true;
+        var p = path;
+        var slash = p.LastIndexOf('/');
+        while (slash >= 0)
+        {
+            p = p[..slash];
+            if (HasRemovedPath(p)) return true;
+            slash = p.LastIndexOf('/');
+        }
+        return false;
     }
 
+    // Remove a direct tombstone at this path (un-delete without touching descendants).
     public void RestorePath(string path)
     {
-        Removed.Remove(path);
-    }
-
-    public IEnumerable<KeyValuePair<string, object?>> DirectDraftValues(string parentPath, Func<string, bool>? excludeSegment = null)
-    {
-        foreach (var pair in AddedOrChanged)
-        {
-            if (KVPath.TryGetDirectSegment(pair.Key, parentPath, excludeSegment, out var segment))
-            {
-                yield return new KeyValuePair<string, object?>(segment, pair.Value.Value);
-            }
-        }
-    }
-
-    public IEnumerable<string> DirectKeys(string parentPath, Func<string, bool>? excludeSegment = null)
-    {
-        foreach (var key in Keys)
-        {
-            if (KVPath.TryGetDirectSegment(key, parentPath, excludeSegment, out var segment))
-            {
-                yield return segment;
-            }
-        }
-    }
-
-    public IEnumerable<string> DirectRemovedValues(string parentPath, Func<string, bool>? excludeSegment = null)
-    {
-        foreach (var removed in Removed)
-        {
-            if (KVPath.TryGetDirectSegment(removed, parentPath, excludeSegment, out var segment))
-            {
-                yield return segment;
-            }
-        }
+        if (Changes.TryGetValue(path, out var v) && v == KVValue.Tombstone)
+            Changes.Remove(path);
     }
 
     public void Set(string path, KVValue value)
     {
-        RemoveDescendantRemovalMarkers(path);
-        Removed.Remove(path);
-        AddedOrChanged[path] = value;
+        Changes[path] = value;
     }
 
     public bool Remove(string path)
     {
-        var hadValue = AddedOrChanged.Remove(path) || HasAddedOrChangedDescendant(path) || SnapshotContains(path);
-        RemoveAddedOrChangedDescendants(path);
-        Removed.Add(path);
+        var hadValue = Changes.ContainsKey(path)
+                    || Changes.Keys.Any(k => KVPath.IsSameOrDescendant(k, path) && !string.Equals(k, path, StringComparison.Ordinal))
+                    || Snapshot.ContainsPathOrDescendant(path);
+
+        // Clear all descendant entries
+        foreach (var key in Changes.Keys.Where(k => KVPath.IsSameOrDescendant(k, path)).ToList())
+            Changes.Remove(key);
+
+        Changes[path] = KVValue.Tombstone;
         return hadValue;
     }
 
-    public void Clear()
-    {
-        AddedOrChanged.Clear();
-        Removed.Clear();
-    }
+    public void Clear() => Changes.Clear();
 
     public void Discard(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        var normalized = KVPath.Normalize(path);
+        if (string.IsNullOrWhiteSpace(normalized)) { Clear(); return; }
 
-        var normalizedPath = KVPath.Normalize(path);
-        if (string.IsNullOrWhiteSpace(normalizedPath))
-        {
-            Clear();
-            return;
-        }
-
-        AddedOrChanged.Remove(normalizedPath);
-        RemoveAddedOrChangedDescendants(normalizedPath);
-        Removed.RemoveWhere(removed => KVPath.IsSameOrDescendant(removed, normalizedPath));
+        foreach (var key in Changes.Keys.Where(k => KVPath.IsSameOrDescendant(k, normalized)).ToList())
+            Changes.Remove(key);
     }
 
-    public bool IsSnapshotBacked(string path)
-    {
-        return Snapshot.ContainsPathOrDescendant(path);
-    }
+    public bool IsSnapshotBacked(string path) => Snapshot.ContainsPathOrDescendant(path);
 
     public bool HasDraftState(string path)
     {
-        foreach (var key in AddedOrChanged.Keys)
-        {
-            if (KVPath.IsSameOrDescendant(key, path))
-            {
-                return true;
-            }
-        }
-
-        foreach (var key in Removed)
-        {
-            if (KVPath.IsSameOrDescendant(key, path))
-            {
-                return true;
-            }
-        }
-
+        foreach (var key in Changes.Keys)
+            if (KVPath.IsSameOrDescendant(key, path)) return true;
         return false;
     }
 
@@ -187,74 +127,7 @@ public sealed class KVOverlay
             PreviousCommitId = BaseCommitId,
             User = User,
             Timestamp = timestamp,
-            AddedOrChanged = new Dictionary<string, KVValue>(AddedOrChanged, StringComparer.Ordinal),
-            Removed = new HashSet<string>(Removed, StringComparer.Ordinal)
+            Changes = new Dictionary<string, KVValue>(Changes, StringComparer.Ordinal)
         };
-    }
-
-    internal bool IsRemoved(string path)
-    {
-        foreach (var removed in Removed)
-        {
-            if (KVPath.IsSameOrDescendant(path, removed))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private bool SnapshotContains(string path)
-    {
-        if (Snapshot.Data.ContainsKey(path))
-        {
-            return true;
-        }
-
-        foreach (var key in Snapshot.Data.Keys)
-        {
-            if (KVPath.IsSameOrDescendant(key, path))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private bool HasAddedOrChangedDescendant(string path)
-    {
-        foreach (var key in AddedOrChanged.Keys)
-        {
-            if (KVPath.IsSameOrDescendant(key, path) && !string.Equals(key, path, StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private void RemoveAddedOrChangedDescendants(string path)
-    {
-        var keysToRemove = new List<string>();
-        foreach (var key in AddedOrChanged.Keys)
-        {
-            if (KVPath.IsSameOrDescendant(key, path) && !string.Equals(key, path, StringComparison.Ordinal))
-            {
-                keysToRemove.Add(key);
-            }
-        }
-
-        foreach (var key in keysToRemove)
-        {
-            AddedOrChanged.Remove(key);
-        }
-    }
-
-    private void RemoveDescendantRemovalMarkers(string path)
-    {
-        Removed.RemoveWhere(removed => KVPath.IsSameOrDescendant(removed, path) && !string.Equals(removed, path, StringComparison.Ordinal));
     }
 }

@@ -56,10 +56,10 @@ public class FieldGroupBindingTests : KVModelTestBase
         rootNode.NestedFieldGroups.SecondFieldGroup!.Field1 = "7";
         rootNode.NestedFieldGroups.SecondFieldGroup.Field2 = "8";
         
-        model.Overlay.AddedOrChanged.Should().ContainKey("FirstFieldGroup/Field1").WhoseValue.Should().Be("1");
-        model.Overlay.AddedOrChanged.Should().ContainKey("SecondFieldGroup/Field2").WhoseValue.Should().Be("4");
-        model.Overlay.AddedOrChanged.Should().ContainKey("NestedFieldGroups/FirstFieldGroup/Field1").WhoseValue.Should().Be("5");
-        model.Overlay.AddedOrChanged.Should().ContainKey("NestedFieldGroups/SecondFieldGroup/Field2").WhoseValue.Should().Be("8");
+        model.Overlay.Changes.Should().ContainKey("FirstFieldGroup/Field1").WhoseValue.Should().Be("1");
+        model.Overlay.Changes.Should().ContainKey("SecondFieldGroup/Field2").WhoseValue.Should().Be("4");
+        model.Overlay.Changes.Should().ContainKey("NestedFieldGroups/FirstFieldGroup/Field1").WhoseValue.Should().Be("5");
+        model.Overlay.Changes.Should().ContainKey("NestedFieldGroups/SecondFieldGroup/Field2").WhoseValue.Should().Be("8");
     }   
     
     [Fact]

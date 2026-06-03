@@ -81,15 +81,15 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         }
 
         reloaded.Should().NotBeNull();
-        reloaded!.AddedOrChanged[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/Amount"].Should().BeOfType<KVValue<decimal>>();
-        AssertStoredString(reloaded.AddedOrChanged["SmartStatus"], "approved");
-        AssertStoredString(reloaded.AddedOrChanged["CompensationType"], "manager_flat");
-        AssertStoredJsonArray(reloaded.AddedOrChanged[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/StatusHistory"], ["approved", "new"]);
-        AssertStoredJsonArray(reloaded.AddedOrChanged[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/StatusList"], ["new", "in_review"]);
-        AssertStoredJsonArray(reloaded.AddedOrChanged[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/CompensationHistory"], ["manager_flat", "assistant_hourly"]);
-        AssertStoredJsonArray(reloaded.AddedOrChanged[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/CompensationList"], ["assistant_hourly", "manager_flat"]);
-        reloaded.AddedOrChanged.Should().ContainKey("Contact/$type");
-        reloaded.Removed.Should().Contain($"Orders/{BaseOrderId:D}");
+        reloaded!.Changes[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/Amount"].Should().BeOfType<KVValue<decimal>>();
+        AssertStoredString(reloaded.Changes["SmartStatus"], "approved");
+        AssertStoredString(reloaded.Changes["CompensationType"], "manager_flat");
+        AssertStoredJsonArray(reloaded.Changes[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/StatusHistory"], ["approved", "new"]);
+        AssertStoredJsonArray(reloaded.Changes[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/StatusList"], ["new", "in_review"]);
+        AssertStoredJsonArray(reloaded.Changes[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/CompensationHistory"], ["manager_flat", "assistant_hourly"]);
+        AssertStoredJsonArray(reloaded.Changes[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/CompensationList"], ["assistant_hourly", "manager_flat"]);
+        reloaded.Changes.Should().ContainKey("Contact/$type");
+        reloaded.Changes.Should().ContainKey($"Orders/{BaseOrderId:D}").WhoseValue.Should().Be(KVValue.Tombstone);
 
         var draftRoot = Bind(reloaded.ToOverlay());
         AssertDraftGraph(draftRoot);
@@ -139,16 +139,16 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         }
 
         reloadedCommit.Should().NotBeNull();
-        reloadedCommit!.Commit.AddedOrChanged["DateTimeValue"].Should().BeOfType<KVValue<DateTime>>();
-        reloadedCommit.Commit.AddedOrChanged["Details"].Should().BeOfType<KVValue<ComplexDetails>>();
-        AssertStoredString(reloadedCommit.Commit.AddedOrChanged["SmartStatus"], "approved");
-        AssertStoredString(reloadedCommit.Commit.AddedOrChanged["CompensationType"], "manager_flat");
-        AssertStoredJsonArray(reloadedCommit.Commit.AddedOrChanged[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/StatusHistory"], ["approved", "new"]);
-        AssertStoredJsonArray(reloadedCommit.Commit.AddedOrChanged[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/StatusList"], ["new", "in_review"]);
-        AssertStoredJsonArray(reloadedCommit.Commit.AddedOrChanged[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/CompensationHistory"], ["manager_flat", "assistant_hourly"]);
-        AssertStoredJsonArray(reloadedCommit.Commit.AddedOrChanged[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/CompensationList"], ["assistant_hourly", "manager_flat"]);
-        reloadedCommit.Commit.AddedOrChanged.Should().ContainKey("Contact/$type");
-        reloadedCommit.Commit.Removed.Should().Contain($"Orders/{BaseOrderId:D}");
+        reloadedCommit!.Commit.Changes["DateTimeValue"].Should().BeOfType<KVValue<DateTime>>();
+        reloadedCommit.Commit.Changes["Details"].Should().BeOfType<KVValue<ComplexDetails>>();
+        AssertStoredString(reloadedCommit.Commit.Changes["SmartStatus"], "approved");
+        AssertStoredString(reloadedCommit.Commit.Changes["CompensationType"], "manager_flat");
+        AssertStoredJsonArray(reloadedCommit.Commit.Changes[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/StatusHistory"], ["approved", "new"]);
+        AssertStoredJsonArray(reloadedCommit.Commit.Changes[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/StatusList"], ["new", "in_review"]);
+        AssertStoredJsonArray(reloadedCommit.Commit.Changes[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/CompensationHistory"], ["manager_flat", "assistant_hourly"]);
+        AssertStoredJsonArray(reloadedCommit.Commit.Changes[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/CompensationList"], ["assistant_hourly", "manager_flat"]);
+        reloadedCommit.Commit.Changes.Should().ContainKey("Contact/$type");
+        reloadedCommit.Commit.Changes.Should().ContainKey($"Orders/{BaseOrderId:D}").WhoseValue.Should().Be(KVValue.Tombstone);
 
         reloadedSnapshot.Should().NotBeNull();
         var finalRoot = Bind(KVOverlay.Create(reloadedSnapshot!.Snapshot, "reader"));
@@ -203,12 +203,12 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
             finalOverlayDocument = (await session.LoadAsync<IntegrationOverlayDocument>(overlayDocument.Id))!;
         }
 
-        finalOverlayDocument.AddedOrChanged["Price"].Should().BeOfType<KVValue<decimal>>();
-        finalOverlayDocument.AddedOrChanged["DateLookingText"].Should().BeOfType<KVValue<string>>();
-        finalOverlayDocument.AddedOrChanged["DateTimeValue"].Should().BeOfType<KVValue<DateTime>>();
-        finalOverlayDocument.AddedOrChanged["Tags"].Should().BeOfType<KVValue<string[]>>();
-        AssertStoredString(finalOverlayDocument.AddedOrChanged["SmartStatus"], "approved");
-        AssertStoredString(finalOverlayDocument.AddedOrChanged["CompensationType"], "assistant_hourly");
+        finalOverlayDocument.Changes["Price"].Should().BeOfType<KVValue<decimal>>();
+        finalOverlayDocument.Changes["DateLookingText"].Should().BeOfType<KVValue<string>>();
+        finalOverlayDocument.Changes["DateTimeValue"].Should().BeOfType<KVValue<DateTime>>();
+        finalOverlayDocument.Changes["Tags"].Should().BeOfType<KVValue<string[]>>();
+        AssertStoredString(finalOverlayDocument.Changes["SmartStatus"], "approved");
+        AssertStoredString(finalOverlayDocument.Changes["CompensationType"], "assistant_hourly");
 
         var finalRoot = Bind(finalOverlayDocument.ToOverlay());
         finalRoot.Price.Should().Be(2000.02m);

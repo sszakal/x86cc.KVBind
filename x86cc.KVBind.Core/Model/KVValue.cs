@@ -7,6 +7,18 @@ namespace x86cc.KVBind.Core.Model;
 [JsonConverter(typeof(KVValueJsonConverter))]
 public abstract class KVValue : IEquatable<KVValue>
 {
+    // Sentinel representing a deleted path — used instead of a separate Removed set.
+    public static readonly KVValue Tombstone = new KVTombstoneValue();
+
+    private sealed class KVTombstoneValue : KVValue
+    {
+        public override object? Value => null;
+        public override bool Equals(object? obj) => obj is KVTombstoneValue;
+        public override int GetHashCode() => nameof(KVTombstoneValue).GetHashCode(StringComparison.Ordinal);
+        public override string ToString() => "(deleted)";
+    }
+
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public abstract object? Value { get; }

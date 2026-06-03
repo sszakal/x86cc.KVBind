@@ -86,14 +86,12 @@ public sealed class KVSnapshot
             throw new InvalidOperationException("Commit does not continue the snapshot commit chain.");
         }
 
-        foreach (var removed in commit.Removed)
+        foreach (var (path, value) in commit.Changes)
         {
-            RemovePathOrPrefix(Data, removed);
-        }
-
-        foreach (var pair in commit.AddedOrChanged)
-        {
-            Data[pair.Key] = pair.Value;
+            if (value == KVValue.Tombstone)
+                RemovePathOrPrefix(Data, path);
+            else
+                Data[path] = value;
         }
 
         LastCommitId = commit.CommitId;

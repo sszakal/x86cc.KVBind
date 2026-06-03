@@ -15,7 +15,6 @@ public sealed class KVCommit
 
     public DateTimeOffset Timestamp { get; set; }
 
-    public Dictionary<string, KVValue> AddedOrChanged { get; set; } = new(StringComparer.Ordinal);
-
-    public HashSet<string> Removed { get; set; } = new(StringComparer.Ordinal);
+    // Regular KVValue = upsert; KVValue.Tombstone = delete this path and its descendants.
+    public Dictionary<string, KVValue> Changes { get; set; } = new(StringComparer.Ordinal);
 }

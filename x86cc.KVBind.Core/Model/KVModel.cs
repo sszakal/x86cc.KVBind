@@ -80,24 +80,6 @@ public class KVModel
         _overlayRef.Value = overlay;
     }
 
-    // Enumerate direct child segments from the overlay (used by KVCollectionNode.Bind).
-    internal System.Collections.Generic.IReadOnlyList<string> DirectChildKeys()
-    {
-        var keys = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
-        foreach (var path in Overlay.Keys)
-        {
-            var relative = KVPath.RelativeTo(path, DataPath);
-            if (string.IsNullOrWhiteSpace(relative))
-            {
-                continue;
-            }
-
-            var firstSlash = relative.IndexOf('/');
-            keys.Add(firstSlash < 0 ? relative : relative[..firstSlash]);
-        }
-
-        return new System.Collections.Generic.List<string>(keys);
-    }
 
     private string ResolveDataPath(string segment)
     {

@@ -104,10 +104,10 @@ public class CollectionBindingTests : KVModelTestBase
         model.CollectionKey2.GetById(secondId)!.Field1.Should().Be("B1");
         model.CollectionKey2.GetById(secondId)!.Field2.Should().Be("B2");
         
-        data.Overlay.AddedOrChanged.Should().ContainKey("CollectionKey1/11111111-1111-1111-1111-111111111111/Field1").WhoseValue.Should().Be("A1");
-        data.Overlay.AddedOrChanged.Should().ContainKey("CollectionKey1/11111111-1111-1111-1111-111111111111/Field2").WhoseValue.Should().Be("A2");
-        data.Overlay.AddedOrChanged.Should().ContainKey("CollectionKey2/22222222-2222-2222-2222-222222222222/Field1").WhoseValue.Should().Be("B1");
-        data.Overlay.AddedOrChanged.Should().ContainKey("CollectionKey2/22222222-2222-2222-2222-222222222222/Field2").WhoseValue.Should().Be("B2");
+        data.Overlay.Changes.Should().ContainKey("CollectionKey1/11111111-1111-1111-1111-111111111111/Field1").WhoseValue.Should().Be("A1");
+        data.Overlay.Changes.Should().ContainKey("CollectionKey1/11111111-1111-1111-1111-111111111111/Field2").WhoseValue.Should().Be("A2");
+        data.Overlay.Changes.Should().ContainKey("CollectionKey2/22222222-2222-2222-2222-222222222222/Field1").WhoseValue.Should().Be("B1");
+        data.Overlay.Changes.Should().ContainKey("CollectionKey2/22222222-2222-2222-2222-222222222222/Field2").WhoseValue.Should().Be("B2");
     }
 
     [Fact]
@@ -204,6 +204,7 @@ public class CollectionBindingTests : KVModelTestBase
     {
         var data = new KVModelRoot();
         const string id = "777";
+        data.Set($"Items/$items", new string[] { id });
         data.Set($"Items/{id}/$type", "unknown");
         data.Set($"Items/{id}/Field1", "value");
 
@@ -282,10 +283,10 @@ public class CollectionBindingTests : KVModelTestBase
         level2FirstItemLevel2SecondItem.Field2 = "8";
      
         
-        model.Overlay.AddedOrChanged.Should().ContainKey("Level1Collection/11111111-1111-1111-1111-111111111111/Level2Collection/33333333-3333-3333-3333-333333333333/Field1").WhoseValue.Should().Be("1");
-        model.Overlay.AddedOrChanged.Should().ContainKey("Level1Collection/11111111-1111-1111-1111-111111111111/Level2Collection/44444444-4444-4444-4444-444444444444/Field2").WhoseValue.Should().Be("4");
-        model.Overlay.AddedOrChanged.Should().ContainKey("Level1Collection/22222222-2222-2222-2222-222222222222/Level2Collection/55555555-5555-5555-5555-555555555555/Field1").WhoseValue.Should().Be("5");
-        model.Overlay.AddedOrChanged.Should().ContainKey("Level1Collection/22222222-2222-2222-2222-222222222222/Level2Collection/66666666-6666-6666-6666-666666666666/Field2").WhoseValue.Should().Be("8");
+        model.Overlay.Changes.Should().ContainKey("Level1Collection/11111111-1111-1111-1111-111111111111/Level2Collection/33333333-3333-3333-3333-333333333333/Field1").WhoseValue.Should().Be("1");
+        model.Overlay.Changes.Should().ContainKey("Level1Collection/11111111-1111-1111-1111-111111111111/Level2Collection/44444444-4444-4444-4444-444444444444/Field2").WhoseValue.Should().Be("4");
+        model.Overlay.Changes.Should().ContainKey("Level1Collection/22222222-2222-2222-2222-222222222222/Level2Collection/55555555-5555-5555-5555-555555555555/Field1").WhoseValue.Should().Be("5");
+        model.Overlay.Changes.Should().ContainKey("Level1Collection/22222222-2222-2222-2222-222222222222/Level2Collection/66666666-6666-6666-6666-666666666666/Field2").WhoseValue.Should().Be("8");
         
         
         InlineSnapshot.Validate(rootNode, """

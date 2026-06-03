@@ -64,7 +64,7 @@ public class SnapshotReplayTests : DeepGraphTestBase
             PreviousCommitId = baseSnapshot.LastCommitId,
             User = "editor",
             Timestamp = new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero),
-            AddedOrChanged = new Dictionary<string, KVValue> { ["Title"] = "Changed" }
+            Changes = new Dictionary<string, KVValue> {["Title"] = "Changed" }
         };
         var second = new KVCommit
         {
@@ -73,8 +73,7 @@ public class SnapshotReplayTests : DeepGraphTestBase
             PreviousCommitId = first.CommitId,
             User = "editor",
             Timestamp = new DateTimeOffset(2026, 6, 1, 12, 1, 0, TimeSpan.Zero),
-            Removed = new HashSet<string> { "Items/old" },
-            AddedOrChanged = new Dictionary<string, KVValue> { ["Items/new/Name"] = "New" }
+            Changes = new Dictionary<string, KVValue> { ["Items/old"] = KVValue.Tombstone, ["Items/new/Name"] = "New" }
         };
 
         baseSnapshot.Apply([first, second]);
@@ -97,7 +96,7 @@ public class SnapshotReplayTests : DeepGraphTestBase
             CommitId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
             User = "editor",
             Timestamp = new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero),
-            AddedOrChanged = new Dictionary<string, KVValue> { ["Title"] = "Changed" }
+            Changes = new Dictionary<string, KVValue> {["Title"] = "Changed" }
         };
         var brokenSecond = new KVCommit
         {
@@ -106,7 +105,7 @@ public class SnapshotReplayTests : DeepGraphTestBase
             PreviousCommitId = Guid.Parse("44444444-4444-4444-4444-444444444444"),
             User = "editor",
             Timestamp = new DateTimeOffset(2026, 6, 1, 12, 1, 0, TimeSpan.Zero),
-            AddedOrChanged = new Dictionary<string, KVValue> { ["Other"] = "Should not apply" }
+            Changes = new Dictionary<string, KVValue> {["Other"] = "Should not apply" }
         };
 
         var act = () => snapshot.Apply([first, brokenSecond]);

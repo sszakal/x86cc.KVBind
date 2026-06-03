@@ -162,6 +162,7 @@ public class RootBindingTests : KVModelTestBase
     {
         var model = new KVModelRoot();
         const string id = "unknown-id";
+        model.Set($"Items/$items", new string[] { id });
         model.Set($"Items/{id}/$type", "unknown");
         model.Set($"Items/{id}/Value", "V");
         

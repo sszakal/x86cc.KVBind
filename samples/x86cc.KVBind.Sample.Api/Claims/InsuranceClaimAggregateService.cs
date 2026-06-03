@@ -211,8 +211,8 @@ public sealed class InsuranceClaimAggregateService(
                 document.Commit.PreviousCommitId,
                 document.Commit.User,
                 document.Commit.Timestamp,
-                document.Commit.AddedOrChanged.Keys.Order(StringComparer.Ordinal).ToArray(),
-                document.Commit.Removed.Order(StringComparer.Ordinal).ToArray(),
+                document.Commit.Changes.Keys.Where(k => document.Commit.Changes[k] != KVValue.Tombstone).Order(StringComparer.Ordinal).ToArray(),
+                document.Commit.Changes.Keys.Where(k => document.Commit.Changes[k] == KVValue.Tombstone).Order(StringComparer.Ordinal).ToArray(),
                 document.Changes.Count > 0
                     ? document.Changes
                     : ProjectCommitChanges(null, document.Commit)))
@@ -274,22 +274,24 @@ public sealed class InsuranceClaimAggregateService(
     private static IReadOnlyList<ClaimChangeResponse> ProjectCommitChanges(KVSnapshot? beforeSnapshot, KVCommit commit)
     {
         var changes = new List<ClaimChangeResponse>();
-        foreach (var pair in commit.AddedOrChanged.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        foreach (var pair in commit.Changes.OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
-            changes.Add(new ClaimChangeResponse(
-                NormalizeDisplayPath(pair.Key),
-                beforeSnapshot is not null && beforeSnapshot.TryGet(pair.Key, out _) ? "Updated" : "Added",
-                ProjectPathValue(beforeSnapshot, pair.Key),
-                pair.Value.Value));
-        }
-
-        foreach (var removed in commit.Removed.Order(StringComparer.Ordinal))
-        {
-            changes.Add(new ClaimChangeResponse(
-                NormalizeDisplayPath(removed),
-                "Removed",
-                ProjectPathValue(beforeSnapshot, removed),
-                null));
+            if (pair.Value == KVValue.Tombstone)
+            {
+                changes.Add(new ClaimChangeResponse(
+                    NormalizeDisplayPath(pair.Key),
+                    "Removed",
+                    ProjectPathValue(beforeSnapshot, pair.Key),
+                    null));
+            }
+            else
+            {
+                changes.Add(new ClaimChangeResponse(
+                    NormalizeDisplayPath(pair.Key),
+                    beforeSnapshot is not null && beforeSnapshot.TryGet(pair.Key, out _) ? "Updated" : "Added",
+                    ProjectPathValue(beforeSnapshot, pair.Key),
+                    pair.Value.Value));
+            }
         }
 
         return changes
@@ -316,7 +318,7 @@ public sealed class InsuranceClaimAggregateService(
     private static string NormalizeDisplayPath(string path)
     {
         var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries)
-            .Where(segment => segment is not "$type" and not "$id")
+            .Where(segment => segment is not "$type" and not "$items")
             .ToArray();
         return string.Join('/', segments);
     }
@@ -337,7 +339,9 @@ public sealed class InsuranceClaimAggregateService(
     {
         return overlay.TryGet(path, out var value) && value is not null
             ? value.Value
-            : overlay.Keys.Any(key => KVPathIsSameOrDescendant(key, path)) ? StructureValue : null;
+            : (overlay.Changes.Keys.Any(key => KVPathIsSameOrDescendant(key, path))
+               || overlay.Snapshot.Keys.Any(key => KVPathIsSameOrDescendant(key, path)))
+              ? StructureValue : null;
     }
 
     private static bool KVPathIsSameOrDescendant(string path, string ancestorPath)

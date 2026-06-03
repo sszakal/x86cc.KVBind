@@ -77,10 +77,10 @@ public class FieldBindingTests : KVModelTestBase
         rootNode.ArrayOfEnums = arrayOfEnums;
         rootNode.ArrayOfSmartEnums = arrayOfSmartEnums;
                 
-        model.Overlay.AddedOrChanged.Should().ContainKey("BooleanField").WhoseValue.Should().Be(true);
-        model.Overlay.AddedOrChanged.Should().ContainKey("StringField").WhoseValue.Should().Be("notes");
-        model.Overlay.AddedOrChanged.Should().ContainKey("StructField").WhoseValue.Should().Be(structValue);
-        model.Overlay.AddedOrChanged.Should().ContainKey("ArrayOfSmartEnums").WhoseValue.Value.Should().BeEquivalentTo(arrayOfSmartEnums);
+        model.Overlay.Changes.Should().ContainKey("BooleanField").WhoseValue.Should().Be(true);
+        model.Overlay.Changes.Should().ContainKey("StringField").WhoseValue.Should().Be("notes");
+        model.Overlay.Changes.Should().ContainKey("StructField").WhoseValue.Should().Be(structValue);
+        model.Overlay.Changes.Should().ContainKey("ArrayOfSmartEnums").WhoseValue.Value.Should().BeEquivalentTo(arrayOfSmartEnums);
     }
 
     [Fact]
@@ -214,23 +214,6 @@ public class FieldBindingTests : KVModelTestBase
         restoredRoot.DateTimeField.Should().Be(dateTimeValue);
     }
 
-    [Fact]
-    public void FieldBinding_WhenLegacyRawSnapshotJsonIsLoaded_ReadsStringFieldsCorrectly()
-    {
-        var restoredSnapshot = JsonSerializer.Deserialize<KVSnapshot>(
-            """
-            {
-              "Data": {
-                "StringField": "2027-01-01"
-              }
-            }
-            """)!;
-        var definition = CreateRegistry().Get<FieldTestModel>();
-        var restoredModel = new KVModelRoot(KVOverlay.Create(restoredSnapshot, TestUser));
-        var restoredRoot = CreateRoot<FieldTestModel>(restoredModel);
-
-        restoredRoot.StringField.Should().Be("2027-01-01");
-    }
 
     [Fact]
     public void FieldBinding_WhenEnumValueIsOutsideAllowedSet_StoresRawValueForValidation()

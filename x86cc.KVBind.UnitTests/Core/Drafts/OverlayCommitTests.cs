@@ -81,8 +81,8 @@ public class OverlayCommitTests
         commit.PreviousCommitId.Should().Be(snapshot.LastCommitId);
         commit.User.Should().Be("editor");
         commit.Timestamp.Should().Be(timestamp);
-        commit.AddedOrChanged.Should().ContainKey("Title").WhoseValue.Should().Be("Draft");
-        commit.Removed.Should().Contain("Items/old");
+        commit.Changes.Should().ContainKey("Title").WhoseValue.Should().Be("Draft");
+        commit.Changes.Should().ContainKey("Items/old").WhoseValue.Should().Be(KVValue.Tombstone);
     }
 
     [Fact]
@@ -98,9 +98,9 @@ public class OverlayCommitTests
         overlay.Set("Other", "New value");
         overlay.RestorePath("Items/old");
 
-        commit.AddedOrChanged.Should().ContainKey("Title").WhoseValue.Should().Be("Draft");
-        commit.AddedOrChanged.Should().NotContainKey("Other");
-        commit.Removed.Should().Contain("Items/old");
+        commit.Changes.Should().ContainKey("Title").WhoseValue.Should().Be("Draft");
+        commit.Changes.Should().NotContainKey("Other");
+        commit.Changes.Should().ContainKey("Items/old").WhoseValue.Should().Be(KVValue.Tombstone);
     }
 
     [Fact]
@@ -115,7 +115,6 @@ public class OverlayCommitTests
         commit.AggregateId.Should().Be(snapshot.AggregateId);
         commit.User.Should().Be("editor");
         commit.Timestamp.Should().Be(timestamp);
-        commit.AddedOrChanged.Should().BeEmpty();
-        commit.Removed.Should().BeEmpty();
+        commit.Changes.Should().BeEmpty();
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using x86cc.KVBind.Core.Abstractions;
 using x86cc.KVBind.Core.Model;
 
@@ -33,15 +34,16 @@ public abstract class KVCollectionNodeBase : IKVCollectionNode
 public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
     where TItem : KVCollectionItemNode, new()
 {
+    private const string ItemsKey = "$items";
+
     private readonly Dictionary<string, TItem> _items = new(StringComparer.Ordinal);
     private readonly List<string> _orderedItemIds = [];
-
-    // Tracks snapshot-backed items removed in the current draft (for delta computation).
-    private readonly HashSet<string> _removedItemIds = new(StringComparer.Ordinal);
 
     protected bool IsBound => Model is not null && Definition is not null;
 
     internal override string GetCanonicalPath() => Model?.DataPath ?? string.Empty;
+
+    private string ItemsPath => KVPath.Combine(Model.DataPath, ItemsKey);
 
     public override void Bind(KVModel model, KVCollectionDefinition definition, IKVNode? parent = null)
     {
@@ -54,15 +56,10 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
 
         _items.Clear();
         _orderedItemIds.Clear();
-        _removedItemIds.Clear();
 
-        foreach (var itemId in model.DirectChildKeys())
+        foreach (var itemId in ResolveItemIds(model))
         {
-            var itemDataPath = KVPath.Combine(model.DataPath, itemId);
-            if (model.Overlay.IsRemoved(itemDataPath)) continue;
-
             var itemModel = model.CreateChildModel(itemId);
-            KVCollectionItemNode.SetItemId(itemModel, itemId);
             var itemDefinition = ResolveItemDefinition(itemModel, itemId);
             var item = (TItem)Activator.CreateInstance(itemDefinition.ModelType)!;
             item.BindRuntime(itemModel, itemDefinition.NodeDefinition, this);
@@ -70,6 +67,14 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
             _items[itemId] = item;
             _orderedItemIds.Add(itemId);
         }
+    }
+
+    private static IEnumerable<string> ResolveItemIds(KVModel model)
+    {
+        var itemsPath = KVPath.Combine(model.DataPath, ItemsKey);
+        if (model.Overlay.TryGet(itemsPath, out var val) && val?.Value is string[] ids)
+            return ids;
+        return [];
     }
 
     public TItem Create() => Create(Guid.NewGuid());
@@ -99,19 +104,18 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
         }
 
         var item = (TItem)Activator.CreateInstance(itemDefinition.ModelType)!;
-        // Restore the path in case it was previously removed (re-adding a deleted item).
+        // Restore the path in case it was previously tombstoned (re-adding a deleted item).
         var itemDataPath = KVPath.Combine(Model.DataPath, itemId);
         Model.Overlay.RestorePath(itemDataPath);
-        _removedItemIds.Remove(itemId);
 
         var childModel = Model.CreateChildModel(itemId);
-        KVCollectionItemNode.SetItemId(childModel, itemId);
         KVCollectionItemNode.SetItemType(childModel, itemDefinition.TypeToken);
 
         item.BindRuntime(childModel, itemDefinition.NodeDefinition, this);
 
         _items[itemId] = item;
         _orderedItemIds.Add(itemId);
+        WriteItemsKey();
         EmitCollectionChange(itemId, oldValue: null, newValue: item);
         return item;
     }
@@ -170,18 +174,11 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
     {
         if (string.IsNullOrWhiteSpace(itemId)) return false;
 
-        if (!_items.Remove(itemId, out var item)) return false;
+        if (!_items.Remove(itemId, out _)) return false;
 
         _orderedItemIds.Remove(itemId);
-        var itemDataPath = KVPath.Combine(Model.DataPath, itemId);
-        Model.Overlay.Remove(itemDataPath);
-
-        // Track for delta computation only if it was snapshot-backed.
-        if (Model.Overlay.IsSnapshotBacked(itemDataPath))
-        {
-            _removedItemIds.Add(itemId);
-        }
-
+        Model.Overlay.Remove(KVPath.Combine(Model.DataPath, itemId));
+        WriteItemsKey();
         EmitCollectionChange(itemId, oldValue: itemId, newValue: null);
         return true;
     }
@@ -198,27 +195,42 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
 
         _orderedItemIds.RemoveAt(currentIndex);
         _orderedItemIds.Insert(toIndex, itemId);
+        WriteItemsKey();
         return true;
     }
 
     public override IReadOnlyList<string> GetActiveItemIds() => _orderedItemIds.AsReadOnly();
+
+    private void WriteItemsKey()
+    {
+        Model.Overlay.Set(ItemsPath, new KVValue<string[]>(_orderedItemIds.ToArray()));
+    }
 
     internal override KVChangeDeltaGroup ComputeDeltas(string collectionPath)
     {
         var deltas = new List<KVChangeDelta>();
         var children = new List<KVChangeDeltaGroup>();
 
-        // Removed items (snapshot-backed, deleted in draft).
-        foreach (var itemId in _removedItemIds)
+        // Build snapshot item set for comparison.
+        string[] snapIds = [];
+        if (Model.Overlay.TryGetSnapshotValue(ItemsPath, out var snapVal) && snapVal?.Value is string[] s)
+            snapIds = s;
+        var snapSet = new HashSet<string>(snapIds, StringComparer.Ordinal);
+        var draftSet = new HashSet<string>(_orderedItemIds, StringComparer.Ordinal);
+
+        // Items in snapshot but not in draft → removed.
+        foreach (var id in snapIds)
         {
-            deltas.Add(new KVChangeDelta(KVPath.Combine(collectionPath, itemId), KVChangeDeltaType.Removed));
+            if (!draftSet.Contains(id))
+                deltas.Add(new KVChangeDelta(KVPath.Combine(collectionPath, id), KVChangeDeltaType.Removed));
         }
 
-        // Active items.
+        // Active items — pass isNew so new items short-circuit to Added.
         foreach (var (itemId, itemNode) in _items)
         {
             var itemPath = KVPath.Combine(collectionPath, itemId);
-            var itemDeltas = itemNode.ComputeDeltas(itemPath, isCollectionItem: true);
+            var isNew = !snapSet.Contains(itemId);
+            var itemDeltas = itemNode.ComputeDeltas(itemPath, isCollectionItem: isNew);
             if (itemDeltas.Deltas.Count > 0 || itemDeltas.Children.Count > 0)
                 children.Add(itemDeltas);
         }

@@ -12,9 +12,7 @@ public sealed class IntegrationOverlayDocument
 
     public KVSnapshot Snapshot { get; set; } = new();
 
-    public Dictionary<string, KVValue> AddedOrChanged { get; set; } = new(StringComparer.Ordinal);
-
-    public HashSet<string> Removed { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, KVValue> Changes { get; set; } = new(StringComparer.Ordinal);
 
     public static IntegrationOverlayDocument Create(Guid aggregateId, string user, KVOverlay overlay)
     {
@@ -24,23 +22,20 @@ public sealed class IntegrationOverlayDocument
             AggregateId = aggregateId,
             User = user,
             Snapshot = overlay.Snapshot.Clone(),
-            AddedOrChanged = new Dictionary<string, KVValue>(overlay.AddedOrChanged, StringComparer.Ordinal),
-            Removed = new HashSet<string>(overlay.Removed, StringComparer.Ordinal)
+            Changes = new Dictionary<string, KVValue>(overlay.Changes, StringComparer.Ordinal)
         };
     }
 
     public KVOverlay ToOverlay()
     {
         var overlay = KVOverlay.Create(Snapshot.Clone(), User);
-        overlay.AddedOrChanged = new Dictionary<string, KVValue>(AddedOrChanged, StringComparer.Ordinal);
-        overlay.Removed = new HashSet<string>(Removed, StringComparer.Ordinal);
+        overlay.Changes = new Dictionary<string, KVValue>(Changes, StringComparer.Ordinal);
         return overlay;
     }
 
     public void UpdateFrom(KVOverlay overlay)
     {
         Snapshot = overlay.Snapshot.Clone();
-        AddedOrChanged = new Dictionary<string, KVValue>(overlay.AddedOrChanged, StringComparer.Ordinal);
-        Removed = new HashSet<string>(overlay.Removed, StringComparer.Ordinal);
+        Changes = new Dictionary<string, KVValue>(overlay.Changes, StringComparer.Ordinal);
     }
 }
