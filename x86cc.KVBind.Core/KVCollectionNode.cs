@@ -6,21 +6,48 @@ using x86cc.KVBind.Core.Model;
 
 namespace x86cc.KVBind.Core;
 
-public class KVCollectionNode<TItem> : IEnumerable<TItem>, IKVCollectionNode, IKVCollectionRuntime, IKVNodeCanonicalPath
+// Non-generic base exposes delta computation without requiring the type parameter.
+public abstract class KVCollectionNodeBase : IKVCollectionNode, IKVCollectionRuntime, IKVNodeCanonicalPath
+{
+    string IKVNodeCanonicalPath.GetCanonicalPath() => GetCanonicalPath();
+    internal abstract string GetCanonicalPath();
+    internal abstract KVChangeDeltaGroup ComputeDeltas(string collectionPath);
+    public abstract IReadOnlyList<string> GetActiveItemIds();
+
+    // Concrete settable properties — subclass sets via protected set.
+    public KVModel Model { get; protected set; } = null!;
+    public KVCollectionDefinition Definition { get; protected set; } = null!;
+    public IKVNode? Parent { get; protected set; }
+
+    public abstract void Bind(KVModel model, KVCollectionDefinition definition, IKVNode? parent = null);
+
+    // IKVCollectionNode.GetById is explicitly implemented; subclasses provide GetByIdCore.
+    KVNode? IKVCollectionNode.GetById(string itemId) => GetByIdCore(itemId);
+    protected abstract KVNode? GetByIdCore(string itemId);
+
+    public abstract KVNode Create(Guid itemId, string? typeToken = null);
+    public abstract bool RemoveById(string itemId);
+    public abstract bool MoveById(string itemId, int toIndex);
+
+    // IKVCollectionRuntime
+    void IKVCollectionRuntime.Rebind() => Rebind();
+    protected abstract void Rebind();
+}
+
+public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
     where TItem : KVCollectionItemNode, new()
 {
     private readonly Dictionary<string, TItem> _items = new(StringComparer.Ordinal);
     private readonly List<string> _orderedItemIds = [];
 
-    public IKVNode? Parent { get; private set; }
-    public KVModel Model { get; private set; } = null!;
-    public KVCollectionDefinition Definition { get; private set; } = null!;
+    // Tracks snapshot-backed items removed in the current draft (for delta computation).
+    private readonly HashSet<string> _removedItemIds = new(StringComparer.Ordinal);
 
     protected bool IsBound => Model is not null && Definition is not null;
 
-    string IKVNodeCanonicalPath.GetCanonicalPath() => Model?.DataPath ?? string.Empty;
+    internal override string GetCanonicalPath() => Model?.DataPath ?? string.Empty;
 
-    public void Bind(KVModel model, KVCollectionDefinition definition, IKVNode? parent = null)
+    public override void Bind(KVModel model, KVCollectionDefinition definition, IKVNode? parent = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(definition);
@@ -31,21 +58,14 @@ public class KVCollectionNode<TItem> : IEnumerable<TItem>, IKVCollectionNode, IK
 
         _items.Clear();
         _orderedItemIds.Clear();
+        _removedItemIds.Clear();
 
         foreach (var itemId in model.DirectChildKeys())
         {
-            model.EnsureItemModel(itemId);
-        }
+            var itemDataPath = KVPath.Combine(model.DataPath, itemId);
+            if (model.Overlay.IsRemoved(itemDataPath)) continue;
 
-        foreach (var pair in model.ChildModels)
-        {
-            var itemId = pair.Key;
-            if (string.IsNullOrWhiteSpace(itemId) || model.IsChildRemoved(itemId))
-            {
-                continue;
-            }
-
-            var itemModel = pair.Value;
+            var itemModel = model.CreateChildModel(itemId);
             KVCollectionItemNode.SetItemId(itemModel, itemId);
             var itemDefinition = ResolveItemDefinition(itemModel, itemId);
             var item = (TItem)Activator.CreateInstance(itemDefinition.ModelType)!;
@@ -64,7 +84,7 @@ public class KVCollectionNode<TItem> : IEnumerable<TItem>, IKVCollectionNode, IK
 
     public TSubtype Create<TSubtype>(Guid itemId) where TSubtype : TItem, new() => (TSubtype)CreateCore(Definition.GetItemDefinition(typeof(TSubtype)), NormalizeItemId(itemId));
 
-    public virtual KVNode Create(Guid itemId, string? typeToken = null)
+    public override KVNode Create(Guid itemId, string? typeToken = null)
     {
         var itemDefinition = string.IsNullOrWhiteSpace(typeToken) ? Definition.GetItemDefinition(typeof(TItem)) : Definition.GetItemDefinition(typeToken);
         return CreateCore(itemDefinition, NormalizeItemId(itemId));
@@ -83,7 +103,12 @@ public class KVCollectionNode<TItem> : IEnumerable<TItem>, IKVCollectionNode, IK
         }
 
         var item = (TItem)Activator.CreateInstance(itemDefinition.ModelType)!;
-        var childModel = Model.EnsureItemModel(itemId);
+        // Restore the path in case it was previously removed (re-adding a deleted item).
+        var itemDataPath = KVPath.Combine(Model.DataPath, itemId);
+        Model.Overlay.RestorePath(itemDataPath);
+        _removedItemIds.Remove(itemId);
+
+        var childModel = Model.CreateChildModel(itemId);
         KVCollectionItemNode.SetItemId(childModel, itemId);
         KVCollectionItemNode.SetItemType(childModel, itemDefinition.TypeToken);
 
@@ -122,15 +147,13 @@ public class KVCollectionNode<TItem> : IEnumerable<TItem>, IKVCollectionNode, IK
 
     public TItem? GetById(string itemId)
     {
-        if (string.IsNullOrWhiteSpace(itemId) || Model.IsChildRemoved(itemId))
-        {
-            return null;
-        }
-
+        if (string.IsNullOrWhiteSpace(itemId)) return null;
+        var itemDataPath = KVPath.Combine(Model.DataPath, itemId);
+        if (Model.Overlay.IsRemoved(itemDataPath)) return null;
         return _items.GetValueOrDefault(itemId);
     }
 
-    KVNode? IKVCollectionNode.GetById(string itemId) => GetById(itemId);
+    protected override KVNode? GetByIdCore(string itemId) => GetById(itemId);
 
     public string GetItemId(TItem item)
     {
@@ -147,89 +170,91 @@ public class KVCollectionNode<TItem> : IEnumerable<TItem>, IKVCollectionNode, IK
         throw new InvalidOperationException("Item is not tracked by this collection.");
     }
 
-    public virtual bool RemoveById(string itemId)
+    public override bool RemoveById(string itemId)
     {
-        if (string.IsNullOrWhiteSpace(itemId))
-        {
-            return false;
-        }
+        if (string.IsNullOrWhiteSpace(itemId)) return false;
 
-        var removed = _items.Remove(itemId);
-        if (!removed)
-        {
-            return false;
-        }
+        if (!_items.Remove(itemId, out var item)) return false;
 
         _orderedItemIds.Remove(itemId);
-        Model.MarkChildRemoved(itemId);
+        var itemDataPath = KVPath.Combine(Model.DataPath, itemId);
+        Model.Overlay.Remove(itemDataPath);
+
+        // Track for delta computation only if it was snapshot-backed.
+        if (Model.Overlay.IsSnapshotBacked(itemDataPath))
+        {
+            _removedItemIds.Add(itemId);
+        }
+
         EmitCollectionChange(itemId, oldValue: itemId, newValue: null);
         return true;
     }
 
-    public virtual bool MoveById(string itemId, int toIndex)
+    public override bool MoveById(string itemId, int toIndex)
     {
-        if (!_items.ContainsKey(itemId))
-        {
-            return false;
-        }
+        if (!_items.ContainsKey(itemId)) return false;
 
         if (toIndex < 0 || toIndex >= _orderedItemIds.Count)
-        {
             throw new ArgumentOutOfRangeException(nameof(toIndex));
-        }
 
         var currentIndex = _orderedItemIds.IndexOf(itemId);
-        if (currentIndex < 0 || currentIndex == toIndex)
-        {
-            return currentIndex >= 0;
-        }
+        if (currentIndex < 0 || currentIndex == toIndex) return currentIndex >= 0;
 
         _orderedItemIds.RemoveAt(currentIndex);
         _orderedItemIds.Insert(toIndex, itemId);
         return true;
     }
 
+    public override IReadOnlyList<string> GetActiveItemIds() => _orderedItemIds.AsReadOnly();
+
+    internal override KVChangeDeltaGroup ComputeDeltas(string collectionPath)
+    {
+        var deltas = new List<KVChangeDelta>();
+        var children = new List<KVChangeDeltaGroup>();
+
+        // Removed items (snapshot-backed, deleted in draft).
+        foreach (var itemId in _removedItemIds)
+        {
+            deltas.Add(new KVChangeDelta(KVPath.Combine(collectionPath, itemId), KVChangeDeltaType.Removed));
+        }
+
+        // Active items.
+        foreach (var (itemId, itemNode) in _items)
+        {
+            var itemPath = KVPath.Combine(collectionPath, itemId);
+            var itemDeltas = itemNode.ComputeDeltas(itemPath, isCollectionItem: true);
+            if (itemDeltas.Deltas.Count > 0 || itemDeltas.Children.Count > 0)
+                children.Add(itemDeltas);
+        }
+
+        return new KVChangeDeltaGroup(deltas, children);
+    }
+
     public virtual IEnumerator<TItem> GetEnumerator()
     {
-        if (!IsBound)
-        {
-            yield break;
-        }
+        if (!IsBound) yield break;
 
         foreach (var itemId in _orderedItemIds)
         {
             if (_items.TryGetValue(itemId, out var collectionItem))
-            {
                 yield return collectionItem;
-            }
         }
     }
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
-    void IKVCollectionRuntime.Rebind()
-    {
-        Bind(Model, Definition, Parent);
-    }
+    protected override void Rebind() => Bind(Model, Definition, Parent);
 
     private static string NormalizeItemId(Guid itemId)
     {
         if (itemId == Guid.Empty)
-        {
             throw new ArgumentException("Collection item id cannot be empty.", nameof(itemId));
-        }
-
         return itemId.ToString("D");
     }
 
     private void EmitCollectionChange(string itemId, object? oldValue, object? newValue)
     {
-        if (Parent is not KVNode parentNode)
-        {
-            return;
-        }
-
+        if (Parent is not KVNode parentNode) return;
         parentNode.EmitChange(KVPath.Combine(Model.DataPath, itemId), oldValue, newValue);
     }
-
 }

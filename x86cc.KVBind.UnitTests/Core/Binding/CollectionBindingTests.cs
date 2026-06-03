@@ -204,10 +204,8 @@ public class CollectionBindingTests : KVModelTestBase
     {
         var data = new KVModelRoot();
         const string id = "777";
-        var itemsModel = data.EnsureCollectionModel("Items");
-        var itemModel = itemsModel.EnsureItemModel(id);
-        itemModel.Set("$type", "unknown");
-        itemModel.Set("Field1", "value");
+        data.Set($"Items/{id}/$type", "unknown");
+        data.Set($"Items/{id}/Field1", "value");
 
         var act = () => CreateRoot<PolymorphicCollectionTestModel>(data);
 

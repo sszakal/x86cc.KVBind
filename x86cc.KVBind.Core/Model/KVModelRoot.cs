@@ -9,15 +9,13 @@ public class KVModelRoot : KVModel
     }
 
     public KVModelRoot(KVOverlay overlay)
-        : base(overlay, string.Empty)
+        : base(overlay)
     {
     }
 
     public static KVModelRoot Create(KVOverlay overlay) => new(overlay);
 
     public KVSnapshot Snapshot => Overlay.Snapshot;
-
-    public KVChangeDeltaGroup ComputeDeltas() => ComputeNodeDeltas(string.Empty, isCollectionItem: false);
 
     public string Id { get; set; } = string.Empty;
 

@@ -68,8 +68,8 @@ public class RootBindingTests : KVModelTestBase
         var model = new KVModelRoot();
         var root = CreateRoot<NewRootNode>(model);
 
-        model.ChildModels.Should().ContainKey("Items");
-        root.Items.Model.Should().BeSameAs(model.ChildModels["Items"]);
+        root.Items.Model.Should().NotBeNull();
+        root.Items.Model.DataPath.Should().Be("Items");
     }
 
     [Fact]
@@ -162,10 +162,8 @@ public class RootBindingTests : KVModelTestBase
     {
         var model = new KVModelRoot();
         const string id = "unknown-id";
-        var collectionModel = model.EnsureCollectionModel("Items");
-        var itemModel = collectionModel.EnsureItemModel(id);
-        itemModel.Set("$type", "unknown");
-        itemModel.Set("Items/unknown-id/Value", "V");
+        model.Set($"Items/{id}/$type", "unknown");
+        model.Set($"Items/{id}/Value", "V");
         
         var act = () => CreateRoot<NewRootNode>(model);
 

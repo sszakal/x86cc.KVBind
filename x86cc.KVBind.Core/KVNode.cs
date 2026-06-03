@@ -13,6 +13,10 @@ internal interface IKVNodeCanonicalPath
 public abstract class KVNode: IKVNode, IKVNodeCanonicalPath
 {
     private readonly Dictionary<string, ActiveNestedNode> _activeNestedNodes = new(StringComparer.Ordinal);
+
+    // Cached slot models for nested nodes — created at bind time, reused across accesses.
+    private readonly Dictionary<string, KVModel> _nestedSlotModels = new(StringComparer.Ordinal);
+
     private bool _isDetached;
 
     public IKVNode? Parent { get; private set; }
@@ -38,6 +42,7 @@ public abstract class KVNode: IKVNode, IKVNodeCanonicalPath
         }
 
         DetachActiveNestedNodes();
+        _nestedSlotModels.Clear();
 
         _isDetached = false;
         Parent = parent;
@@ -48,7 +53,7 @@ public abstract class KVNode: IKVNode, IKVNodeCanonicalPath
         {
             var childNode = nodeDefinition.GetChildNode(this)
                             ?? throw new InvalidOperationException($"Node '{nodeDefinition.SubSegmentPath}' resolved to null.");
-            var childModel = model.EnsureChildModel(nodeDefinition.SubSegmentPath);
+            var childModel = model.CreateChildModel(nodeDefinition.SubSegmentPath);
             childNode.Bind(childModel, nodeDefinition, this);
         }
 
@@ -60,7 +65,8 @@ public abstract class KVNode: IKVNode, IKVNodeCanonicalPath
             }
 
             var collectionNode = collectionDefinition.GetCollection(this) ?? throw new InvalidOperationException($"Collection '{collectionDefinition.SubSegmentPath}' resolved to null.");
-            var collectionModel = model.EnsureCollectionModel(collectionDefinition.SubSegmentPath);
+            var collectionModel = model.CreateChildModel(collectionDefinition.SubSegmentPath);
+            collectionModel.Overlay.RestorePath(collectionModel.DataPath); // ensure not marked removed
             collectionNode.Bind(collectionModel, collectionDefinition, this);
         }
 
@@ -71,7 +77,7 @@ public abstract class KVNode: IKVNode, IKVNodeCanonicalPath
                 throw new InvalidOperationException("Nested node definitions must define SubSegmentPath.");
             }
 
-            model.EnsureChildModel(nestedNodeDefinition.SubSegmentPath);
+            _nestedSlotModels[nestedNodeDefinition.SubSegmentPath] = model.CreateChildModel(nestedNodeDefinition.SubSegmentPath);
         }
     }
 
@@ -89,6 +95,7 @@ public abstract class KVNode: IKVNode, IKVNodeCanonicalPath
         }
 
         DetachActiveNestedNodes();
+        _nestedSlotModels.Clear();
         _isDetached = true;
         Parent = null;
         Model = null!;
@@ -183,6 +190,7 @@ public abstract class KVNode: IKVNode, IKVNodeCanonicalPath
                 // Keep unknown tokens in the draft so validation can report allowed_values.
             }
         }
+
         if (Equals(oldValue, storageValue))
         {
             return;
@@ -253,7 +261,15 @@ public abstract class KVNode: IKVNode, IKVNodeCanonicalPath
 
     internal KVModel GetNestedNodeModel(string nestedNodeKey)
     {
-        return Model.EnsureChildModel(nestedNodeKey);
+        if (_nestedSlotModels.TryGetValue(nestedNodeKey, out var slotModel))
+        {
+            return slotModel;
+        }
+
+        // Lazily create if not pre-populated (e.g. accessed before first full bind).
+        slotModel = Model.CreateChildModel(nestedNodeKey);
+        _nestedSlotModels[nestedNodeKey] = slotModel;
+        return slotModel;
     }
 
     private void DetachActiveNestedNode(string nestedNodeKey)
@@ -271,23 +287,33 @@ public abstract class KVNode: IKVNode, IKVNodeCanonicalPath
 
     private static void ClearNestedNodeModel(KVModel nestedModel)
     {
-        var keysToRemove = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var key in nestedModel.DirectValueKeys())
+        var prefix = nestedModel.DataPath;
+        var typeKey = KVPath.Combine(prefix, KVNestedNode.TypeKey);
+        var overlay = nestedModel.Overlay;
+
+        // Remove all draft values under this path except $type.
+        var toRemove = new List<string>();
+        foreach (var key in overlay.AddedOrChanged.Keys)
         {
-            if (!string.Equals(key, KVNestedNode.TypeKey, StringComparison.Ordinal))
+            if (KVPath.IsSameOrDescendant(key, prefix) && !string.Equals(key, typeKey, StringComparison.Ordinal))
             {
-                keysToRemove.Add(key);
+                toRemove.Add(key);
             }
         }
-
-        foreach (var key in keysToRemove)
+        foreach (var key in toRemove)
         {
-            nestedModel.Remove(key);
+            overlay.Remove(key);
         }
 
-        foreach (var childKey in new List<string>(nestedModel.ChildModels.Keys))
+        // For snapshot-backed keys, mark them removed too (so they show as deleted in deltas).
+        foreach (var key in overlay.Snapshot.Data.Keys)
         {
-            nestedModel.MarkChildRemoved(childKey);
+            if (KVPath.IsSameOrDescendant(key, prefix)
+                && !string.Equals(key, typeKey, StringComparison.Ordinal)
+                && !overlay.HasRemovedPath(key))
+            {
+                overlay.Remove(key);
+            }
         }
     }
 
@@ -296,8 +322,6 @@ public abstract class KVNode: IKVNode, IKVNodeCanonicalPath
         ClearNestedNodeModel(nestedModel);
     }
 
-    // Returns the path segment relative to this node's model that corresponds to the given canonical path.
-    // Used by validation to resolve a field/collection key from a potentially absolute canonical path.
     internal string ResolveStoragePath(string fieldKey)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fieldKey);
@@ -310,30 +334,142 @@ public abstract class KVNode: IKVNode, IKVNodeCanonicalPath
         var normalizedPath = KVPath.Normalize(canonicalPath);
         var normalizedCurrentPath = KVPath.Normalize(currentCanonicalPath);
 
-        if (string.IsNullOrWhiteSpace(normalizedPath))
-        {
-            return string.Empty;
-        }
-
-        if (string.IsNullOrWhiteSpace(normalizedCurrentPath))
-        {
-            return normalizedPath;
-        }
-
-        if (string.Equals(normalizedPath, normalizedCurrentPath, StringComparison.Ordinal))
-        {
-            return string.Empty;
-        }
-
+        if (string.IsNullOrWhiteSpace(normalizedPath)) return string.Empty;
+        if (string.IsNullOrWhiteSpace(normalizedCurrentPath)) return normalizedPath;
+        if (string.Equals(normalizedPath, normalizedCurrentPath, StringComparison.Ordinal)) return string.Empty;
         if (KVPath.IsSameOrDescendant(normalizedPath, normalizedCurrentPath))
-        {
             return normalizedPath[(normalizedCurrentPath.Length + 1)..];
-        }
-
         return normalizedPath;
     }
 
     internal string GetCanonicalPath() => Model?.DataPath ?? string.Empty;
+
+    // Compute change deltas for this node and its children.
+    internal KVChangeDeltaGroup ComputeDeltas(string nodePath, bool isCollectionItem)
+    {
+        var deltas = new List<KVChangeDelta>();
+
+        // Nested node type change: emit a single slot-level delta instead of field deltas.
+        if (!isCollectionItem && !string.IsNullOrWhiteSpace(nodePath))
+        {
+            if (TryCreateNestedNodeTypeDelta(Model, nodePath, out var typeDelta))
+                return new KVChangeDeltaGroup([typeDelta], []);
+        }
+
+        // New (draft-only) collection item.
+        if (isCollectionItem && !Model.Overlay.IsSnapshotBacked(Model.DataPath) && HasDraftState())
+            return new KVChangeDeltaGroup([new KVChangeDelta(nodePath, KVChangeDeltaType.Added)], []);
+
+        // Field-level changes.
+        foreach (var field in Definition.Fields)
+        {
+            var absPath = KVPath.Combine(Model.DataPath, field.SubSegmentPath);
+            var canonPath = KVPath.Combine(nodePath, field.SubSegmentPath);
+
+            if (Model.Overlay.HasRemovedPath(absPath))
+            {
+                if (Model.Overlay.TryGetSnapshotValue(absPath, out _))
+                    deltas.Add(new KVChangeDelta(canonPath, KVChangeDeltaType.Removed));
+            }
+            else if (Model.Overlay.TryGetDraftValue(absPath, out var draftVal))
+            {
+                var hasSnap = Model.Overlay.TryGetSnapshotValue(absPath, out var snapVal);
+                if (!hasSnap)
+                    deltas.Add(new KVChangeDelta(canonPath, KVChangeDeltaType.Added));
+                else if (!Equals(snapVal, draftVal))
+                    deltas.Add(new KVChangeDelta(canonPath, KVChangeDeltaType.Updated));
+            }
+        }
+
+        var children = new List<KVChangeDeltaGroup>();
+
+        // Field group children.
+        foreach (var childDef in Definition.Nodes)
+        {
+            var childNode = childDef.GetChildNode(this);
+            if (childNode is null) continue;
+            var childPath = KVPath.Combine(nodePath, childDef.SubSegmentPath);
+            var childDeltas = childNode.ComputeDeltas(childPath, false);
+            if (childDeltas.Deltas.Count > 0 || childDeltas.Children.Count > 0)
+                children.Add(childDeltas);
+        }
+
+        // Collections.
+        foreach (var collDef in Definition.Collections)
+        {
+            var collNode = collDef.GetCollection(this);
+            if (collNode is not KVCollectionNodeBase collBase) continue;
+            var collPath = KVPath.Combine(nodePath, collDef.SubSegmentPath);
+            var collDeltas = collBase.ComputeDeltas(collPath);
+            if (collDeltas.Deltas.Count > 0 || collDeltas.Children.Count > 0)
+                children.Add(collDeltas);
+        }
+
+        // Nested nodes.
+        foreach (var nestedDef in Definition.NestedNodes)
+        {
+            var nestedPath = KVPath.Combine(nodePath, nestedDef.SubSegmentPath);
+            var slotModel = GetNestedNodeModel(nestedDef.SubSegmentPath);
+            var activeNode = GetActiveNestedNode(nestedDef, slotModel);
+
+            if (activeNode is not null)
+            {
+                var nestedDeltas = activeNode.ComputeDeltas(nestedPath, false);
+                if (nestedDeltas.Deltas.Count > 0 || nestedDeltas.Children.Count > 0)
+                    children.Add(nestedDeltas);
+            }
+            else
+            {
+                // No active node — check for removal.
+                var typeAbsPath = KVPath.Combine(slotModel.DataPath, KVNestedNode.TypeKey);
+                if (Model.Overlay.HasRemovedPath(typeAbsPath) && Model.Overlay.TryGetSnapshotValue(typeAbsPath, out _))
+                    deltas.Add(new KVChangeDelta(nestedPath, KVChangeDeltaType.Removed));
+            }
+        }
+
+        return new KVChangeDeltaGroup(deltas, children);
+    }
+
+    private bool HasDraftState()
+    {
+        if (Model.Overlay.HasDraftState(Model.DataPath)) return true;
+        foreach (var childDef in Definition.Nodes)
+        {
+            var childNode = childDef.GetChildNode(this);
+            if (childNode is KVNode kvChild && kvChild.HasDraftState()) return true;
+        }
+        return false;
+    }
+
+    private static bool TryCreateNestedNodeTypeDelta(KVModel model, string nodePath, out KVChangeDelta delta)
+    {
+        delta = default!;
+        var typePath = KVPath.Combine(nodePath, KVNestedNode.TypeKey);
+
+        if (model.Overlay.HasRemovedPath(typePath))
+        {
+            if (!model.Overlay.TryGetSnapshotValue(typePath, out _)) return false;
+            delta = new KVChangeDelta(nodePath, KVChangeDeltaType.Removed);
+            return true;
+        }
+
+        if (!model.Overlay.TryGetDraftValue(typePath, out var overlayValue)) return false;
+
+        var hasSnapshot = model.Overlay.TryGetSnapshotValue(typePath, out var snapshotValue);
+        if (!hasSnapshot)
+        {
+            delta = new KVChangeDelta(nodePath, KVChangeDeltaType.Added);
+            return true;
+        }
+
+        if (!Equals(snapshotValue, overlayValue))
+        {
+            delta = new KVChangeDelta(nodePath, KVChangeDeltaType.Updated);
+            return true;
+        }
+
+        return false;
+    }
 
     internal void EmitChange(string canonicalPath, object? oldValue, object? newValue)
     {

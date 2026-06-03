@@ -4,101 +4,109 @@ using x86cc.KVBind.Core.Model;
 
 namespace x86cc.KVBind.UnitTests.Core;
 
-public class DeltaComputationTests
+public class DeltaComputationTests : KVModelTestBase
 {
+    public DeltaComputationTests()
+    {
+        RegisterModelDefinition<ChangeSetTestModel>(builder =>
+        {
+            builder.Field(x => x.Title);
+            builder.Field(x => x.Status);
+            builder.FieldGroup(x => x.General, g =>
+            {
+                g.Field(x => x.Code);
+                g.Field(x => x.Notes);
+            });
+            builder.Collection(x => x.Items, items =>
+                items.Item<ChangeSetItemNode>(item =>
+                {
+                    item.Field(x => x.Name);
+                    item.Field(x => x.Amount);
+                }));
+        });
+
+        RegisterModelDefinition<NestedNodeRoot>(builder =>
+        {
+            builder.NestedNode(x => x.Animal, nested =>
+                nested.Bind<DogNestedNode>("DOG", dog =>
+                    dog.Field(x => x.DogName, options => options.Required())));
+        });
+    }
+
     [Fact]
     public void DeltaComputation_WhenChildIsRemoved_EmitsSingleSyntheticRemovedDelta()
     {
-        var snapshot = new KVSnapshot();
-        var model = new KVModelRoot(KVOverlay.Create(snapshot, "test"));
-        model.Set("Name", "base");
+        var model = new KVModelRoot();
+        var root = CreateRoot<ChangeSetTestModel>(model);
+        var item = root.Items.Create(Guid.Parse("12300000-0000-0000-0000-000000000000"));
+        item.Amount = 10;
+        CommitSetup(model);
+        root = CreateRoot<ChangeSetTestModel>(model);
 
-        var child = model.EnsureChildModel("Items/123");
-        child.Set("Amount", 10m);
+        root.Items.RemoveById(item.ItemId()!);
 
-        snapshot.Apply(model.Overlay.ToCommit(DateTimeOffset.UtcNow));
-        model.ReplaceOverlay(KVOverlay.Create(snapshot, model.Overlay.User));
-        model.MarkChildRemoved("Items/123");
+        var changes = root.GetAllChanges();
+        changes.Changes.Should().ContainSingle(d => d.Path.EndsWith("/12300000-0000-0000-0000-000000000000") && d.ChangeType == KVChangeDeltaType.Removed);
+        changes.Changes.Should().NotContain(d => d.Path.Contains("Amount", StringComparison.Ordinal));
 
-        var deltas = model.ComputeDeltas().Flatten();
-
-        deltas.Should().ContainSingle(delta => delta.Path == "Items/123" && delta.ChangeType == KVChangeDeltaType.Removed);
-        deltas.Should().NotContain(delta => delta.Path == "Items/123/Amount");
-        
-        model.UnmarkChildRemoved("Items/123");
-
-        deltas = model.ComputeDeltas().Flatten();
-        
-        deltas.Should().BeEmpty();
+        root.Items.GetById(item.ItemId()!).Should().BeNull();
     }
 
     [Fact]
     public void DeltaComputation_WhenFieldIsRemoved_EmitsRemovedDelta()
     {
-        var snapshot = new KVSnapshot();
-        var model = new KVModelRoot(KVOverlay.Create(snapshot, "test"));
-        model.Set("Status", "active");
+        var model = new KVModelRoot();
+        var root = CreateRoot<ChangeSetTestModel>(model);
+        root.Status = 42;
+        CommitSetup(model);
+        root = CreateRoot<ChangeSetTestModel>(model);
 
-        snapshot.Apply(model.Overlay.ToCommit(DateTimeOffset.UtcNow));
-        model.ReplaceOverlay(KVOverlay.Create(snapshot, model.Overlay.User));
-        model.Remove("Status");
+        root.Patch(KVPatchOperation.Unset("/Status"));
 
-        var deltas = model.ComputeDeltas().Flatten();
-
-        deltas.Should().ContainSingle(delta => delta.Path == "Status" && delta.ChangeType == KVChangeDeltaType.Removed);
+        var changes = root.GetAllChanges();
+        changes.Changes.Should().ContainSingle(d => d.Path == "Status" && d.ChangeType == KVChangeDeltaType.Removed);
     }
 
     [Fact]
     public void DeltaComputation_WhenCollectionItemIsAdded_EmitsItemAddedWithoutMetadataPaths()
     {
-        var model = new KVModelRoot();
-        var items = model.EnsureCollectionModel("Items");
+        var root = CreateRoot<ChangeSetTestModel>();
 
-        var item = items.EnsureItemModel("2");
-        item.Set("$id", "2");
-        item.Set("$type", "Line");
-        item.Set("Name", "added");
+        var item = root.Items.Create(Guid.Parse("00000000-0000-0000-0000-000000000002"));
+        item.Name = "added";
 
-        var deltas = model.ComputeDeltas().Flatten();
-
-        deltas.Should().ContainSingle(delta => delta.Path == "Items/2" && delta.ChangeType == KVChangeDeltaType.Added);
-        deltas.Should().NotContain(delta => delta.Path.Contains("$", StringComparison.Ordinal));
+        var changes = root.GetAllChanges();
+        changes.Changes.Should().Contain(d => d.Path.EndsWith("/00000000-0000-0000-0000-000000000002") && d.ChangeType == KVChangeDeltaType.Added);
+        changes.Changes.Should().NotContain(d => d.Path.Contains("$", StringComparison.Ordinal));
     }
 
     [Fact]
     public void DeltaComputation_WhenCollectionItemMetadataChanges_DoesNotExposeMetadataPaths()
     {
-        var snapshot = new KVSnapshot();
-        var model = new KVModelRoot(KVOverlay.Create(snapshot, "test"));
-        var item = model.EnsureCollectionModel("Items").EnsureItemModel("1");
-        item.Set("$id", "1");
-        item.Set("$type", "Line");
-        item.Set("Name", "base");
+        var model = new KVModelRoot();
+        var root = CreateRoot<ChangeSetTestModel>(model);
+        var item = root.Items.Create(Guid.Parse("00000000-0000-0000-0000-000000000001"));
+        item.Name = "base";
+        CommitSetup(model);
+        root = CreateRoot<ChangeSetTestModel>(model);
+        var reloadedItem = root.Items.GetById(item.ItemId()!)!;
 
-        snapshot.Apply(model.Overlay.ToCommit(DateTimeOffset.UtcNow));
-        model.ReplaceOverlay(KVOverlay.Create(snapshot, model.Overlay.User));
-        item.Set("$id", "updated");
-        item.Set("$type", "Other");
-        item.Set("Name", "updated");
+        reloadedItem.Name = "updated";
 
-        var deltas = model.ComputeDeltas().Flatten();
-
-        deltas.Should().ContainSingle(delta => delta.Path == "Items/1/Name" && delta.ChangeType == KVChangeDeltaType.Updated);
-        deltas.Should().NotContain(delta => delta.Path.Contains("$", StringComparison.Ordinal));
-        deltas.Should().NotContain(delta => delta.Path == "Items/1");
+        var changes = root.GetAllChanges();
+        changes.Changes.Should().ContainSingle(d => d.Path.EndsWith("/Name") && d.ChangeType == KVChangeDeltaType.Updated);
+        changes.Changes.Should().NotContain(d => d.Path.Contains("$", StringComparison.Ordinal));
+        changes.Changes.Should().NotContain(d => d.Path == $"Items/{item.ItemId()}");
     }
 
     [Fact]
     public void DeltaComputation_WhenNestedNodeTypeChanges_EmitsSlotDelta()
     {
-        var model = new KVModelRoot();
-        var animal = model.EnsureChildModel("Animal");
+        var root = CreateRoot<NestedNodeRoot>();
 
-        animal.Set("$type", "DOG");
-        animal.Set("Name", "Fido");
+        root.Patch(KVPatchOperation.Init("/Animal", "DOG"));
 
-        var deltas = model.ComputeDeltas().Flatten();
-
-        deltas.Should().ContainSingle(delta => delta.Path == "Animal" && delta.ChangeType == KVChangeDeltaType.Added);
+        var changes = root.GetAllChanges();
+        changes.Changes.Should().ContainSingle(d => d.Path == "Animal" && d.ChangeType == KVChangeDeltaType.Added);
     }
 }

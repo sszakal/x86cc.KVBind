@@ -45,16 +45,13 @@ public abstract class KVRootNode : KVNode
     public void Clear()
     {
         Model.Overlay.Clear();
-        Model.PruneDraftChildren(string.Empty);
         Bind(Model, Definition);
     }
 
     public void Discard(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        var normalizedPath = KVPath.Normalize(path);
-        Model.Overlay.Discard(normalizedPath);
-        Model.PruneDraftChildren(normalizedPath);
+        Model.Overlay.Discard(KVPath.Normalize(path));
         Bind(Model, Definition);
     }
 
@@ -72,20 +69,20 @@ public abstract class KVRootNode : KVNode
     public KVPatchResult Patch(params KVPatchOperation[] operations)
     {
         KVPatchRuntime.Apply(this, operations);
-        var deltas = Model.ComputeNodeDeltas(string.Empty, isCollectionItem: false).Flatten();
+        var deltas = ComputeDeltas(string.Empty, isCollectionItem: false).Flatten();
         return new KVPatchResult(deltas, Validate);
     }
 
     public KVPatchResult Patch(IEnumerable<KVPatchOperation> operations)
     {
         KVPatchRuntime.Apply(this, operations);
-        var deltas = Model.ComputeNodeDeltas(string.Empty, isCollectionItem: false).Flatten();
+        var deltas = ComputeDeltas(string.Empty, isCollectionItem: false).Flatten();
         return new KVPatchResult(deltas, Validate);
     }
 
     public KVDraftChanges GetAllChanges()
     {
-        var deltas = Model.ComputeNodeDeltas(string.Empty, isCollectionItem: false).Flatten();
+        var deltas = ComputeDeltas(string.Empty, isCollectionItem: false).Flatten();
         return new KVDraftChanges(deltas);
     }
 

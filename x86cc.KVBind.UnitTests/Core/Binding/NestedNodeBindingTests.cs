@@ -23,7 +23,6 @@ public class NestedNodeBindingTests : KVModelTestBase
         var root = CreateRoot<NestedNodeRoot>();
 
         root.Animal.Should().BeNull();
-        root.Model.ChildModels.Should().ContainKey("Animal");
     }
 
     [Fact]
@@ -36,7 +35,8 @@ public class NestedNodeBindingTests : KVModelTestBase
 
         var dog = root.Animal.Should().BeOfType<DogNestedNode>().Subject;
         dog.ItemType().Should().Be("DOG");
-        root.Model.ChildModels["Animal"].Get<string?>("$type").Should().Be("DOG");
+        root.Model.Overlay.TryGet("Animal/$type", out var typeVal).Should().BeTrue();
+        typeVal!.Value.Should().Be("DOG");
         root.GetAllChanges().Changes.Should().ContainSingle(change => change.Path == "Animal" && change.ChangeType == KVChangeDeltaType.Added);
     }
 

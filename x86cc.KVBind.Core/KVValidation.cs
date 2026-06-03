@@ -227,8 +227,11 @@ public sealed class KVCollectionRuleBuilder<TModel>
 
     internal void Evaluate(string path, KVNode node, string currentCanonicalPath, List<KVValidationError> errors)
     {
-        var collectionStoragePath = node.ResolveStoragePathForCanonicalPath(path, currentCanonicalPath);
-        var children = GetCollectionChildIds(node.Model, collectionStoragePath);
+        var collectionKey = node.ResolveStoragePathForCanonicalPath(path, currentCanonicalPath);
+        var collectionDef = node.Definition.Collections.Find(c =>
+            string.Equals(c.SubSegmentPath, collectionKey, StringComparison.Ordinal));
+        var collectionNode = collectionDef?.GetCollection(node);
+        var children = collectionNode?.GetActiveItemIds() ?? [];
         var count = children.Count;
 
         if (_notEmpty && count == 0)
@@ -251,17 +254,11 @@ public sealed class KVCollectionRuleBuilder<TModel>
             decimal sum = 0m;
             foreach (var child in children)
             {
-                if (!node.Model.ChildModels.TryGetValue(collectionStoragePath, out var collectionModel)
-                    || !collectionModel.ChildModels.TryGetValue(child, out var childModel))
-                {
-                    continue;
-                }
+                var itemNode = collectionNode?.GetById(child) as KVNode;
+                if (itemNode is null) continue;
 
-                var rawValue = childModel.Get<object?>(aggregateRule.FieldKey);
-                if (rawValue is null)
-                {
-                    continue;
-                }
+                var rawValue = itemNode.Model.Get<object?>(aggregateRule.FieldKey);
+                if (rawValue is null) continue;
 
                 try
                 {
@@ -277,25 +274,6 @@ public sealed class KVCollectionRuleBuilder<TModel>
                 errors.Add(new KVValidationError(path, aggregateRule.ErrorCode, $"'{path}' aggregate sum for '{aggregateRule.FieldKey}' is invalid."));
             }
         }
-    }
-
-    private static IReadOnlyList<string> GetCollectionChildIds(KVModel model, string collectionPath)
-    {
-        if (!model.ChildModels.TryGetValue(collectionPath, out var collectionModel))
-        {
-            return [];
-        }
-
-        var ids = new List<string>();
-        foreach (var childId in collectionModel.ChildModels.Keys)
-        {
-            if (!collectionModel.IsChildRemoved(childId))
-            {
-                ids.Add(childId);
-            }
-        }
-
-        return ids;
     }
 
     private static bool Compare(decimal value, decimal threshold, KVCollectionAggregateComparison comparison)
@@ -549,22 +527,13 @@ public sealed class KVGroupValueAccessor<TNode>
             throw new ArgumentException("Collection path is required.", nameof(collectionPath));
         }
 
-        var collectionStoragePath = ResolveStoragePath(collectionPath);
-        if (!_node.Model.ChildModels.TryGetValue(collectionStoragePath, out var collectionModel))
-        {
-            return [];
-        }
+        var collectionKey = ResolveStoragePath(collectionPath);
+        var collectionDef = _node.Definition.Collections.Find(c =>
+            string.Equals(c.SubSegmentPath, collectionKey, StringComparison.Ordinal));
+        if (collectionDef is null) return [];
 
-        var ids = new List<string>();
-        foreach (var childId in collectionModel.ChildModels.Keys)
-        {
-            if (!collectionModel.IsChildRemoved(childId))
-            {
-                ids.Add(childId);
-            }
-        }
-
-        return ids;
+        var collectionNode = collectionDef.GetCollection(_node);
+        return collectionNode?.GetActiveItemIds() ?? [];
     }
 
     internal string ResolveCanonicalPath(string fieldKey)

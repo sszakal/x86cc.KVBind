@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using x86cc.KVBind.Core.Abstractions;
 using x86cc.KVBind.Core.Model;
 
 namespace x86cc.KVBind.Core;
@@ -86,8 +87,7 @@ internal static class KVValidationRuntime
     {
         var collectionPath = BuildPath(currentCanonicalPath, collection.SubSegmentPath);
         var collectionNode = collection.GetCollection(node);
-        var collectionModel = collectionNode.Model;
-        var children = GetCollectionChildIds(collectionModel);
+        var children = collectionNode.GetActiveItemIds();
         var count = children.Count;
 
         if (collection.NotEmpty && count == 0)
@@ -107,7 +107,7 @@ internal static class KVValidationRuntime
 
         foreach (var aggregateRule in collection.AggregateRules)
         {
-            ValidateAggregateRule(errors, collectionPath, collectionModel, children, aggregateRule);
+            ValidateAggregateRule(errors, collectionPath, collectionNode, children, aggregateRule);
         }
 
         foreach (var rule in collection.ValidationRules)
@@ -128,17 +128,15 @@ internal static class KVValidationRuntime
         }
     }
 
-    private static void ValidateAggregateRule(List<KVValidationError> errors, string collectionPath, KVModel collectionModel, IReadOnlyList<string> children, KVCollectionAggregateRule aggregateRule)
+    private static void ValidateAggregateRule(List<KVValidationError> errors, string collectionPath, IKVCollectionNode collectionNode, IReadOnlyList<string> children, KVCollectionAggregateRule aggregateRule)
     {
         decimal sum = 0m;
         foreach (var child in children)
         {
-            if (!collectionModel.ChildModels.TryGetValue(child, out var childModel))
-            {
-                continue;
-            }
+            var itemNode = collectionNode.GetById(child);
+            if (itemNode is not KVNode kvItem) continue;
 
-            var raw = childModel.Get<object?>(aggregateRule.FieldKey);
+            var raw = kvItem.Model.Get<object?>(aggregateRule.FieldKey);
             if (raw is null)
             {
                 continue;
@@ -174,19 +172,6 @@ internal static class KVValidationRuntime
             : BuildPath(currentCanonicalPath, scope);
     }
 
-    private static IReadOnlyList<string> GetCollectionChildIds(KVModel collectionModel)
-    {
-        var ids = new List<string>();
-        foreach (var childId in collectionModel.ChildModels.Keys)
-        {
-            if (!collectionModel.IsChildRemoved(childId))
-            {
-                ids.Add(childId);
-            }
-        }
-
-        return ids;
-    }
 
     private static bool Compare(decimal value, decimal threshold, KVCollectionAggregateComparison comparison)
     {

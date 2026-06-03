@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using x86cc.KVBind.Core.Model;
 
 namespace x86cc.KVBind.Core.Abstractions;
@@ -21,4 +22,6 @@ public interface IKVCollectionNode
     bool RemoveById(string itemId);
 
     bool MoveById(string itemId, int toIndex);
+
+    IReadOnlyList<string> GetActiveItemIds();
 }
