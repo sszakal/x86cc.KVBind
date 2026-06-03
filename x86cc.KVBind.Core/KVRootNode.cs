@@ -9,8 +9,6 @@ public abstract class KVRootNode : KVNode
 {
     internal KVReactionExecutionState ReactionExecutionState { get; } = new();
 
-    public KVNodeDefinition Definition { get; private set; } = null!;
-
     public KVModelRoot RootModel() => Model as KVModelRoot
                                     ?? throw new InvalidOperationException("KVRootNode is not bound to KVModelRoot.");
 

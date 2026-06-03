@@ -5,12 +5,7 @@ using x86cc.KVBind.Core.Model;
 
 namespace x86cc.KVBind.Core;
 
-internal interface IKVNodeCanonicalPath
-{
-    string GetCanonicalPath();
-}
-
-public abstract class KVNode: IKVNode, IKVNodeCanonicalPath
+public abstract class KVNode: IKVNode
 {
     private readonly Dictionary<string, ActiveNestedNode> _activeNestedNodes = new(StringComparer.Ordinal);
 
@@ -21,11 +16,9 @@ public abstract class KVNode: IKVNode, IKVNodeCanonicalPath
 
     public IKVNode? Parent { get; private set; }
     public KVModel Model { get; private set; } = null!;
-    public KVNodeDefinition Definition { get; private set; } = null!;
+    public KVNodeDefinition Definition { get; protected set; } = null!;
     private bool IsBound => Model is not null && Definition is not null;
-
-    string IKVNodeCanonicalPath.GetCanonicalPath() => GetCanonicalPath();
-
+    
     internal void BindRuntime(KVModel model, KVNodeDefinition definition, IKVNode? parent = null)
     {
         Bind(model, definition, parent);

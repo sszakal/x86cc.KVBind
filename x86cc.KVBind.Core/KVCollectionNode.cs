@@ -7,9 +7,8 @@ using x86cc.KVBind.Core.Model;
 namespace x86cc.KVBind.Core;
 
 // Non-generic base exposes delta computation without requiring the type parameter.
-public abstract class KVCollectionNodeBase : IKVCollectionNode, IKVCollectionRuntime, IKVNodeCanonicalPath
+public abstract class KVCollectionNodeBase : IKVCollectionNode
 {
-    string IKVNodeCanonicalPath.GetCanonicalPath() => GetCanonicalPath();
     internal abstract string GetCanonicalPath();
     internal abstract KVChangeDeltaGroup ComputeDeltas(string collectionPath);
     public abstract IReadOnlyList<string> GetActiveItemIds();
@@ -28,9 +27,6 @@ public abstract class KVCollectionNodeBase : IKVCollectionNode, IKVCollectionRun
     public abstract KVNode Create(Guid itemId, string? typeToken = null);
     public abstract bool RemoveById(string itemId);
     public abstract bool MoveById(string itemId, int toIndex);
-
-    // IKVCollectionRuntime
-    void IKVCollectionRuntime.Rebind() => Rebind();
     protected abstract void Rebind();
 }
 
