@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { ChangeTreeChange, ChangeTreeTableComponent } from './change-tree-table.component';
 import { ClaimApiService, ClaimChangeSetResponse, ClaimSnapshotResponse } from './claim-api.service';
+import { UserService } from '../../core/services/user.service';
 
 @Component({
   selector: 'app-claim-detail',
@@ -16,11 +17,15 @@ export class ClaimDetailComponent implements OnInit {
   changesets: ClaimChangeSetResponse[] = [];
   activeTab: 'snapshot' | 'items' | 'changesets' = 'snapshot';
   selectedChangesetId = '';
-  draftUser = 'adjuster-a';
   loading = false;
   error = '';
 
-  constructor(private readonly api: ClaimApiService, private readonly route: ActivatedRoute, private readonly router: Router) {}
+  constructor(
+    private readonly api: ClaimApiService,
+    private readonly route: ActivatedRoute,
+    private readonly router: Router,
+    private readonly userService: UserService,
+  ) {}
 
   ngOnInit(): void {
     this.claimId = this.route.snapshot.paramMap.get('claimId') ?? '';
@@ -49,7 +54,7 @@ export class ClaimDetailComponent implements OnInit {
   }
 
   openDraft(): void {
-    this.api.openDraft(this.claimId, { user: this.draftUser }).subscribe({
+    this.api.openDraft(this.claimId, { user: this.userService.getUser() ?? 'unknown' }).subscribe({
       next: draft => this.router.navigate(['/claims', this.claimId, 'drafts', draft.draftId]),
       error: error => this.error = `Unable to open draft. ${error.message ?? ''}`,
     });

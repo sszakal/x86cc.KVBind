@@ -94,6 +94,14 @@ public static class ClaimEndpoints
             .WithName("CommitClaimDraft")
             .WithSummary("Commits a persisted draft overlay into the claim snapshot and records a changeset.");
 
+        group.MapGet("/schema", () => Results.Ok(InsuranceClaimAggregateService.GetSchema()))
+            .WithName("GetClaimSchema")
+            .WithSummary("Returns allowed values for all constrained fields.");
+
+        group.MapGet("/definition", () => Results.Ok(InsuranceClaimAggregateService.GetDefinitionSchema()))
+            .WithName("GetClaimDefinition")
+            .WithSummary("Returns the full field definition — drives auto-generated form rendering.");
+
         group.MapGet("/{claimId:guid}/changesets", async (
                 Guid claimId,
                 InsuranceClaimAggregateService service,

@@ -8,12 +8,18 @@ public sealed class InsuranceClaimDefinitionFactory
 
     public KVNodeDefinition Definition => _definition.Value;
 
+    public static readonly IReadOnlyList<string> StatusValues = ["draft", "in_review", "approved", "rejected", "closed"];
+    public static readonly IReadOnlyList<string> PriorityValues = ["low", "medium", "high", "critical"];
+    public static readonly IReadOnlyList<string> CoverageTypeValues = ["comprehensive", "collision", "liability", "medical"];
+    public static readonly IReadOnlyList<string> DamageCategories = ["structural", "electrical", "mechanical", "cosmetic", "water", "fire", "theft", "other"];
+
     private static KVNodeDefinition BuildDefinition()
     {
         var builder = new KVBindBuilder<InsuranceClaim>();
 
         builder.Field(x => x.ClaimNumber);
-        builder.Field(x => x.Status);
+        builder.Field(x => x.Status, f => f.AllowedValues([.. StatusValues]));
+        builder.Field(x => x.Priority, f => f.AllowedValues([.. PriorityValues]));
         builder.Field(x => x.IncidentDate);
         builder.Field(x => x.Description);
         builder.Field(x => x.ClaimedTotal);
@@ -21,7 +27,7 @@ public sealed class InsuranceClaimDefinitionFactory
         builder.FieldGroup(x => x.Policy, policy =>
         {
             policy.Field(x => x.PolicyNumber);
-            policy.Field(x => x.CoverageType);
+            policy.Field(x => x.CoverageType, f => f.AllowedValues([.. CoverageTypeValues]));
         });
 
         builder.Collection(x => x.DamagedItems, damagedItems =>
@@ -29,6 +35,7 @@ public sealed class InsuranceClaimDefinitionFactory
             damagedItems.Item<DamagedItem>(item =>
             {
                 item.Field(x => x.Description);
+                item.Field(x => x.Category, f => f.AllowedValues([.. DamageCategories]));
                 item.Field(x => x.EstimatedAmount);
             });
         });

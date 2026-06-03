@@ -75,6 +75,7 @@ public sealed record ClaimChangeSetResponse(
 public sealed record ClaimDataResponse(
     string? ClaimNumber,
     string? Status,
+    string? Priority,
     string? IncidentDate,
     string? Description,
     decimal ClaimedTotal,
@@ -85,7 +86,53 @@ public sealed record ClaimDataResponse(
 
 public sealed record ClaimPolicyResponse(string? PolicyNumber, string? CoverageType);
 
-public sealed record DamagedItemResponse(string ItemId, string? Description, decimal EstimatedAmount);
+public sealed record DamagedItemResponse(string ItemId, string? Description, string? Category, decimal EstimatedAmount);
+
+public sealed record ClaimSchemaResponse(
+    IReadOnlyList<string> StatusValues,
+    IReadOnlyList<string> PriorityValues,
+    IReadOnlyList<string> CoverageTypeValues,
+    IReadOnlyList<string> DamageCategories);
+
+// Full definition schema — drives auto-generated form rendering on the frontend.
+public sealed record DefinitionSchemaResponse(
+    IReadOnlyList<FieldMeta> Fields,
+    IReadOnlyList<FieldGroupMeta> FieldGroups,
+    IReadOnlyList<CollectionMeta> Collections,
+    IReadOnlyList<NestedNodeMeta> NestedNodes);
+
+public sealed record FieldMeta(
+    string Key,
+    string Label,
+    string DataType,           // string | decimal | int | bool | date
+    string UiHint,             // text | textarea | select | radio | number | date
+    bool IsRequired,
+    IReadOnlyList<string>? AllowedValues);
+
+public sealed record FieldGroupMeta(
+    string Key,
+    string Label,
+    IReadOnlyList<FieldMeta> Fields);
+
+public sealed record CollectionItemTypeMeta(
+    string Token,
+    string Label,
+    IReadOnlyList<FieldMeta> Fields);
+
+public sealed record CollectionMeta(
+    string Key,
+    string Label,
+    IReadOnlyList<CollectionItemTypeMeta> ItemTypes);
+
+public sealed record NestedNodeTypeMeta(
+    string Token,
+    string Label,
+    IReadOnlyList<FieldMeta> Fields);
+
+public sealed record NestedNodeMeta(
+    string Key,
+    string Label,
+    IReadOnlyList<NestedNodeTypeMeta> Types);
 
 public sealed record ClaimNoteResponse(string ItemId, string? Text);
 

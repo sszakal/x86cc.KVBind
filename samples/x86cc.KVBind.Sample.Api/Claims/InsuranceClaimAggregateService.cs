@@ -27,7 +27,7 @@ public sealed class InsuranceClaimAggregateService(
         var root = Bind(overlay);
 
         root.ClaimNumber = request.ClaimNumber;
-        root.Status = "Draft";
+        root.Status = "draft";
         root.IncidentDate = request.IncidentDate;
         root.Description = request.Description;
         root.Policy.PolicyNumber = request.PolicyNumber;
@@ -360,18 +360,67 @@ public sealed class InsuranceClaimAggregateService(
         return new ClaimDataResponse(
             root.ClaimNumber,
             root.Status,
+            root.Priority,
             root.IncidentDate,
             root.Description,
             root.ClaimedTotal,
             new ClaimPolicyResponse(root.Policy.PolicyNumber, root.Policy.CoverageType),
             root.DamagedItems
-                .Select(item => new DamagedItemResponse(root.DamagedItems.GetItemId(item), item.Description, item.EstimatedAmount))
+                .Select(item => new DamagedItemResponse(root.DamagedItems.GetItemId(item), item.Description, item.Category, item.EstimatedAmount))
                 .ToArray(),
             root.Notes
                 .Select(note => new ClaimNoteResponse(root.Notes.GetItemId(note), note.Text))
                 .ToArray(),
             ProjectClaimant(root.Claimant));
     }
+
+    public static ClaimSchemaResponse GetSchema() => new(
+        InsuranceClaimDefinitionFactory.StatusValues,
+        InsuranceClaimDefinitionFactory.PriorityValues,
+        InsuranceClaimDefinitionFactory.CoverageTypeValues,
+        InsuranceClaimDefinitionFactory.DamageCategories);
+
+    public static DefinitionSchemaResponse GetDefinitionSchema() => new(
+        Fields:
+        [
+            new("ClaimNumber",   "Claim Number",   "string",  "text",     false, null),
+            new("Status",        "Status",         "string",  "select",   false, [.. InsuranceClaimDefinitionFactory.StatusValues]),
+            new("Priority",      "Priority",       "string",  "radio",    false, [.. InsuranceClaimDefinitionFactory.PriorityValues]),
+            new("IncidentDate",  "Incident Date",  "date",    "date",     false, null),
+            new("Description",   "Description",    "string",  "textarea", false, null),
+        ],
+        FieldGroups:
+        [
+            new("Policy", "Policy",
+            [
+                new("PolicyNumber",  "Policy Number",  "string", "text",   false, null),
+                new("CoverageType",  "Coverage Type",  "string", "select", false, [.. InsuranceClaimDefinitionFactory.CoverageTypeValues]),
+            ]),
+        ],
+        Collections:
+        [
+            new("DamagedItems", "Damaged Items",
+            [
+                new("DamagedItem", "Damaged Item",
+                [
+                    new("Description",      "Description",      "string",  "text",   false, null),
+                    new("Category",         "Category",         "string",  "select", false, [.. InsuranceClaimDefinitionFactory.DamageCategories]),
+                    new("EstimatedAmount",  "Estimated Amount", "decimal", "number", false, null),
+                ]),
+            ]),
+            new("Notes", "Notes",
+            [
+                new("Note", "Note", [ new("Text", "Note", "string", "text", false, null) ]),
+            ]),
+        ],
+        NestedNodes:
+        [
+            new("Claimant", "Claimant",
+            [
+                new("PERSON",  "Person",  [ new("FullName",    "Full name",    "string", "text", false, null) ]),
+                new("COMPANY", "Company", [ new("CompanyName", "Company name", "string", "text", false, null) ]),
+            ]),
+        ]);
 
     private static ClaimantResponse? ProjectClaimant(Claimant? claimant)
     {

@@ -16,6 +16,9 @@ public partial class InsuranceClaim : KVRootNode
     [KVBind(nameof(Description))]
     public partial string? Description { get; set; }
 
+    [KVBind(nameof(Priority))]
+    public partial string? Priority { get; set; }
+
     [KVBind(nameof(ClaimedTotal))]
     public partial decimal ClaimedTotal { get; set; }
 
@@ -50,6 +53,9 @@ public partial class DamagedItem : KVCollectionItemNode
 {
     [KVBind(nameof(Description))]
     public partial string? Description { get; set; }
+
+    [KVBind(nameof(Category))]
+    public partial string? Category { get; set; }
 
     [KVBind(nameof(EstimatedAmount))]
     public partial decimal EstimatedAmount { get; set; }

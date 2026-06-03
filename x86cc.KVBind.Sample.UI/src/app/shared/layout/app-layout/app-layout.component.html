@@ -1,12 +1,44 @@
 <div class="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-white">
   <header class="border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-    <div class="mx-auto flex max-w-(--breakpoint-2xl) flex-col gap-3 px-4 py-5 md:flex-row md:items-center md:justify-between md:px-6">
-      <div>
-        <p class="text-sm font-medium text-brand-500">KVBind Sample</p>
-        <h1 class="text-xl font-semibold">Insurance Claims</h1>
+    <div class="mx-auto flex max-w-(--breakpoint-2xl) items-center justify-between px-4 py-4 md:px-6">
+      <div class="flex items-center gap-3">
+        <a routerLink="/claims" class="flex items-center gap-2.5 text-sm font-semibold text-gray-900 dark:text-white">
+          <span class="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-brand-500 text-xs font-bold text-white">K</span>
+          KVBind Demo
+        </a>
+        <span class="hidden text-gray-200 dark:text-gray-700 sm:block">/</span>
+        <a routerLink="/claims" class="hidden text-sm text-gray-500 hover:text-gray-900 dark:hover:text-white sm:block">Claims</a>
       </div>
-      <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
-        API: <span class="font-mono">http://localhost:5101/api/claims</span>
+      <div class="flex items-center gap-2">
+        <span class="hidden rounded-md bg-gray-100 px-2.5 py-1 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400 sm:block">
+          Signed in as <span class="font-medium text-gray-700 dark:text-gray-200">{{ userService.getUser() }}</span>
+        </span>
+
+        <!-- Dark / light toggle -->
+        <button
+          class="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-colors hover:bg-gray-100 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+          (click)="theme.toggle()"
+          [title]="theme.isDark() ? 'Switch to light mode' : 'Switch to dark mode'">
+          @if (theme.isDark()) {
+            <!-- Sun icon -->
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M17.657 17.657l-.707-.707M6.343 6.343l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z"/>
+            </svg>
+          } @else {
+            <!-- Moon icon -->
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+            </svg>
+          }
+        </button>
+
+        <button
+          class="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+          (click)="logout()">
+          Sign out
+        </button>
       </div>
     </div>
   </header>

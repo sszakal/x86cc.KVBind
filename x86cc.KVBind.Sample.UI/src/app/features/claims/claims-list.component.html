@@ -39,9 +39,7 @@
             <input class="mt-1 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="form.coverageType" name="coverageType" />
           </label>
         </div>
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">User
-          <input class="mt-1 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="form.user" name="user" required />
-        </label>
+        <!-- user comes from session, no input needed -->
       </div>
       <button class="mt-5 h-11 w-full rounded-lg bg-brand-500 px-4 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50" [disabled]="saving">{{ saving ? 'Creating...' : 'Create claim' }}</button>
     </form>

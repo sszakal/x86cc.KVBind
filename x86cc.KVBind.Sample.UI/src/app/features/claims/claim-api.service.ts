@@ -77,6 +77,7 @@ export interface ClaimChangeSetResponse {
 export interface ClaimDataResponse {
   claimNumber: string | null;
   status: string | null;
+  priority: string | null;
   incidentDate: string | null;
   description: string | null;
   claimedTotal: number;
@@ -94,7 +95,15 @@ export interface ClaimPolicyResponse {
 export interface DamagedItemResponse {
   itemId: string;
   description: string | null;
+  category: string | null;
   estimatedAmount: number;
+}
+
+export interface ClaimSchemaResponse {
+  statusValues: string[];
+  priorityValues: string[];
+  coverageTypeValues: string[];
+  damageCategories: string[];
 }
 
 export interface ClaimNoteResponse {
@@ -120,11 +129,32 @@ export interface ClaimPatchOperationRequest {
   value?: unknown;
 }
 
+export interface FieldMeta { key: string; label: string; dataType: string; uiHint: string; isRequired: boolean; allowedValues: string[] | null; }
+export interface FieldGroupMeta { key: string; label: string; fields: FieldMeta[]; }
+export interface CollectionItemTypeMeta { token: string; label: string; fields: FieldMeta[]; }
+export interface CollectionMeta { key: string; label: string; itemTypes: CollectionItemTypeMeta[]; }
+export interface NestedNodeTypeMeta { token: string; label: string; fields: FieldMeta[]; }
+export interface NestedNodeMeta { key: string; label: string; types: NestedNodeTypeMeta[]; }
+export interface DefinitionSchemaResponse {
+  fields: FieldMeta[];
+  fieldGroups: FieldGroupMeta[];
+  collections: CollectionMeta[];
+  nestedNodes: NestedNodeMeta[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class ClaimApiService {
   readonly apiBaseUrl = 'http://localhost:5101/api/claims';
 
   constructor(private readonly http: HttpClient) {}
+
+  getSchema(): Observable<ClaimSchemaResponse> {
+    return this.http.get<ClaimSchemaResponse>(`${this.apiBaseUrl}/schema`);
+  }
+
+  getDefinition(): Observable<DefinitionSchemaResponse> {
+    return this.http.get<DefinitionSchemaResponse>(`${this.apiBaseUrl}/definition`);
+  }
 
   listClaims(): Observable<ClaimSummaryResponse[]> {
     return this.http.get<ClaimSummaryResponse[]>(this.apiBaseUrl);

@@ -3,6 +3,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
 import { ClaimApiService, ClaimSummaryResponse, CreateClaimRequest } from './claim-api.service';
+import { UserService } from '../../core/services/user.service';
 
 @Component({
   selector: 'app-claims-list',
@@ -15,16 +16,19 @@ export class ClaimsListComponent implements OnInit {
   saving = false;
   error = '';
 
-  form: CreateClaimRequest = {
+  form: Omit<CreateClaimRequest, 'user'> = {
     claimNumber: `CLM-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000 + 1000)}`,
     incidentDate: new Date().toISOString().slice(0, 10),
     description: 'Initial insurance claim draft',
     policyNumber: 'POL-10001',
-    coverageType: 'Auto',
-    user: 'adjuster-a',
+    coverageType: 'comprehensive',
   };
 
-  constructor(private readonly api: ClaimApiService, private readonly router: Router) {}
+  constructor(
+    private readonly api: ClaimApiService,
+    private readonly router: Router,
+    private readonly userService: UserService,
+  ) {}
 
   ngOnInit(): void {
     this.loadClaims();
@@ -48,7 +52,7 @@ export class ClaimsListComponent implements OnInit {
   createClaim(): void {
     this.saving = true;
     this.error = '';
-    this.api.createClaim(this.form).subscribe({
+    this.api.createClaim({ ...this.form, user: this.userService.getUser() ?? 'unknown' }).subscribe({
       next: response => {
         this.saving = false;
         this.router.navigate(['/claims', response.claimId]);
