@@ -1,4 +1,5 @@
 using System;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -7,6 +8,16 @@ namespace x86cc.KVBind.Core.Model;
 public sealed class KVValueJsonConverter : JsonConverter<KVValue>
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    // Strips ", Version=X, Culture=neutral, PublicKeyToken=X" from assembly-qualified type names.
+    // Works for generic types too since the same pattern repeats for each type argument.
+    // "System.String, System.Private.CoreLib" is sufficient for Type.GetType() to resolve correctly.
+    private static readonly Regex VersionSuffix = new(
+        @", Version=[^,\[\]]+, Culture=[^,\[\]]+, PublicKeyToken=[^,\[\]]+",
+        RegexOptions.Compiled);
+
+    private static string ShortTypeName(Type type) =>
+        VersionSuffix.Replace(type.AssemblyQualifiedName!, string.Empty);
 
     public override KVValue Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
@@ -27,7 +38,7 @@ public sealed class KVValueJsonConverter : JsonConverter<KVValue>
 
         var valueType = GetValueType(value);
         writer.WriteStartObject();
-        writer.WriteString("$type", valueType.AssemblyQualifiedName);
+        writer.WriteString("$type", ShortTypeName(valueType));
         writer.WritePropertyName("value");
         if (value.Value is null)
             writer.WriteNullValue();

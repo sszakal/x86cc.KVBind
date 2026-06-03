@@ -25,8 +25,6 @@ public sealed class KVSnapshot
 
     public Dictionary<string, KVValue> Data { get; set; } = new(StringComparer.Ordinal);
 
-    public IReadOnlyCollection<string> Keys => Data.Keys;
-
     public KVSnapshot Clone()
     {
         return new KVSnapshot

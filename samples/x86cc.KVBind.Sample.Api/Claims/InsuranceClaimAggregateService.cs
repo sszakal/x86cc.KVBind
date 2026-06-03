@@ -1,6 +1,7 @@
 using Marten;
 using System.Text.Json;
 using x86cc.KVBind.Core;
+using x86cc.KVBind.Core.Definitions;
 using x86cc.KVBind.Core.Model;
 using x86cc.KVBind.Sample.Api.Persistence;
 
@@ -8,7 +9,7 @@ namespace x86cc.KVBind.Sample.Api.Claims;
 
 public sealed class InsuranceClaimAggregateService(
     IDocumentSession session,
-    InsuranceClaimDefinitionFactory definitionFactory)
+    IKVDefinitionRegistry registry)
 {
     private static readonly JsonSerializerOptions PatchJsonOptions = new(JsonSerializerDefaults.Web);
     private const string StructureValue = "{...}";
@@ -221,7 +222,7 @@ public sealed class InsuranceClaimAggregateService(
 
     private InsuranceClaim Bind(KVOverlay overlay)
     {
-        return KVRootNode.Create<InsuranceClaim>(overlay, definitionFactory.Definition);
+        return KVRootNode.Create<InsuranceClaim>(overlay, registry.Get<InsuranceClaim>());
     }
 
     private static bool IsDraftBasedOnLatestSnapshot(ClaimOverlayDocument draft, KVSnapshot latestSnapshot)
@@ -340,7 +341,7 @@ public sealed class InsuranceClaimAggregateService(
         return overlay.TryGet(path, out var value) && value is not null
             ? value.Value
             : (overlay.Changes.Keys.Any(key => KVPathIsSameOrDescendant(key, path))
-               || overlay.Snapshot.Keys.Any(key => KVPathIsSameOrDescendant(key, path)))
+               || overlay.Snapshot.Data.Keys.Any(key => KVPathIsSameOrDescendant(key, path)))
               ? StructureValue : null;
     }
 
@@ -375,17 +376,17 @@ public sealed class InsuranceClaimAggregateService(
     }
 
     public static ClaimSchemaResponse GetSchema() => new(
-        InsuranceClaimDefinitionFactory.StatusValues,
-        InsuranceClaimDefinitionFactory.PriorityValues,
-        InsuranceClaimDefinitionFactory.CoverageTypeValues,
-        InsuranceClaimDefinitionFactory.DamageCategories);
+        InsuranceClaimDefinitionBuilder.StatusValues,
+        InsuranceClaimDefinitionBuilder.PriorityValues,
+        InsuranceClaimDefinitionBuilder.CoverageTypeValues,
+        InsuranceClaimDefinitionBuilder.DamageCategories);
 
     public static DefinitionSchemaResponse GetDefinitionSchema() => new(
         Fields:
         [
             new("ClaimNumber",   "Claim Number",   "string",  "text",     false, null),
-            new("Status",        "Status",         "string",  "select",   false, [.. InsuranceClaimDefinitionFactory.StatusValues]),
-            new("Priority",      "Priority",       "string",  "radio",    false, [.. InsuranceClaimDefinitionFactory.PriorityValues]),
+            new("Status",        "Status",         "string",  "select",   false, [.. InsuranceClaimDefinitionBuilder.StatusValues]),
+            new("Priority",      "Priority",       "string",  "radio",    false, [.. InsuranceClaimDefinitionBuilder.PriorityValues]),
             new("IncidentDate",  "Incident Date",  "date",    "date",     false, null),
             new("Description",   "Description",    "string",  "textarea", false, null),
         ],
@@ -394,7 +395,7 @@ public sealed class InsuranceClaimAggregateService(
             new("Policy", "Policy",
             [
                 new("PolicyNumber",  "Policy Number",  "string", "text",   false, null),
-                new("CoverageType",  "Coverage Type",  "string", "select", false, [.. InsuranceClaimDefinitionFactory.CoverageTypeValues]),
+                new("CoverageType",  "Coverage Type",  "string", "select", false, [.. InsuranceClaimDefinitionBuilder.CoverageTypeValues]),
             ]),
         ],
         Collections:
@@ -404,7 +405,7 @@ public sealed class InsuranceClaimAggregateService(
                 new("DamagedItem", "Damaged Item",
                 [
                     new("Description",      "Description",      "string",  "text",   false, null),
-                    new("Category",         "Category",         "string",  "select", false, [.. InsuranceClaimDefinitionFactory.DamageCategories]),
+                    new("Category",         "Category",         "string",  "select", false, [.. InsuranceClaimDefinitionBuilder.DamageCategories]),
                     new("EstimatedAmount",  "Estimated Amount", "decimal", "number", false, null),
                 ]),
             ]),

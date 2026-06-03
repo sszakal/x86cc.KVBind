@@ -1,5 +1,6 @@
 using Marten;
 using Weasel.Core;
+using x86cc.KVBind.Core.Definitions;
 using x86cc.KVBind.Sample.Api.Claims;
 using x86cc.KVBind.Sample.Api.Persistence;
 
@@ -27,7 +28,13 @@ builder.Services.AddMarten(options =>
     options.Schema.For<ClaimChangeSetDocument>().Identity(x => x.Id);
 });
 
-builder.Services.AddSingleton<InsuranceClaimDefinitionFactory>();
+// Register each model's definition builder — add more here as new models are introduced.
+builder.Services.AddSingleton<IKVModelDefinitionBuilder, InsuranceClaimDefinitionBuilder>();
+
+// The registry collects all registered builders and assembles itself.
+builder.Services.AddSingleton<IKVDefinitionRegistry>(sp =>
+    new KVDefinitionRegistry(sp.GetServices<IKVModelDefinitionBuilder>().ToArray()));
+
 builder.Services.AddScoped<InsuranceClaimAggregateService>();
 
 builder.Services.AddEndpointsApiExplorer();

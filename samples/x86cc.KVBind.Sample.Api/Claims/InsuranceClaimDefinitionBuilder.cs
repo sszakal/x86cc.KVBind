@@ -1,24 +1,23 @@
 using x86cc.KVBind.Core;
+using x86cc.KVBind.Core.Definitions;
 
 namespace x86cc.KVBind.Sample.Api.Claims;
 
-public sealed class InsuranceClaimDefinitionFactory
+public sealed class InsuranceClaimDefinitionBuilder : IKVModelDefinitionBuilder
 {
-    private readonly Lazy<KVNodeDefinition> _definition = new(BuildDefinition);
+    public Type ModelType => typeof(InsuranceClaim);
 
-    public KVNodeDefinition Definition => _definition.Value;
+    public static readonly IReadOnlyList<string> StatusValues        = ["draft", "in_review", "approved", "rejected", "closed"];
+    public static readonly IReadOnlyList<string> PriorityValues      = ["low", "medium", "high", "critical"];
+    public static readonly IReadOnlyList<string> CoverageTypeValues  = ["comprehensive", "collision", "liability", "medical"];
+    public static readonly IReadOnlyList<string> DamageCategories    = ["structural", "electrical", "mechanical", "cosmetic", "water", "fire", "theft", "other"];
 
-    public static readonly IReadOnlyList<string> StatusValues = ["draft", "in_review", "approved", "rejected", "closed"];
-    public static readonly IReadOnlyList<string> PriorityValues = ["low", "medium", "high", "critical"];
-    public static readonly IReadOnlyList<string> CoverageTypeValues = ["comprehensive", "collision", "liability", "medical"];
-    public static readonly IReadOnlyList<string> DamageCategories = ["structural", "electrical", "mechanical", "cosmetic", "water", "fire", "theft", "other"];
-
-    private static KVNodeDefinition BuildDefinition()
+    public KVNodeDefinition Build()
     {
         var builder = new KVBindBuilder<InsuranceClaim>();
 
         builder.Field(x => x.ClaimNumber);
-        builder.Field(x => x.Status, f => f.AllowedValues([.. StatusValues]));
+        builder.Field(x => x.Status,   f => f.AllowedValues([.. StatusValues]));
         builder.Field(x => x.Priority, f => f.AllowedValues([.. PriorityValues]));
         builder.Field(x => x.IncidentDate);
         builder.Field(x => x.Description);
@@ -30,9 +29,9 @@ public sealed class InsuranceClaimDefinitionFactory
             policy.Field(x => x.CoverageType, f => f.AllowedValues([.. CoverageTypeValues]));
         });
 
-        builder.Collection(x => x.DamagedItems, damagedItems =>
+        builder.Collection(x => x.DamagedItems, items =>
         {
-            damagedItems.Item<DamagedItem>(item =>
+            items.Item<DamagedItem>(item =>
             {
                 item.Field(x => x.Description);
                 item.Field(x => x.Category, f => f.AllowedValues([.. DamageCategories]));
@@ -47,11 +46,11 @@ public sealed class InsuranceClaimDefinitionFactory
 
         builder.NestedNode(x => x.Claimant, claimant =>
         {
-            claimant.Bind<PersonClaimant>("PERSON", person => person.Field(x => x.FullName));
+            claimant.Bind<PersonClaimant>("PERSON",  person  => person.Field(x => x.FullName));
             claimant.Bind<CompanyClaimant>("COMPANY", company => company.Field(x => x.CompanyName));
         });
 
-        builder.OnChange(path => path.Collection(x => x.DamagedItems).Any(), x => x.RecalculateClaimedTotal);
+        builder.OnChange(path => path.Collection(x => x.DamagedItems).Any(),                                 x => x.RecalculateClaimedTotal);
         builder.OnChange(path => path.Collection(x => x.DamagedItems).Field(x => x.EstimatedAmount), x => x.RecalculateClaimedTotal);
 
         return builder.Build();
