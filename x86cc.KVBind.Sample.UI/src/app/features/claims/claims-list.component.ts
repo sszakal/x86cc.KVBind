@@ -14,7 +14,6 @@ export class ClaimsListComponent implements OnInit {
   loading = false;
   saving = false;
   error = '';
-  apiBaseUrl = '';
 
   form: CreateClaimRequest = {
     claimNumber: `CLM-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000 + 1000)}`,
@@ -28,13 +27,6 @@ export class ClaimsListComponent implements OnInit {
   constructor(private readonly api: ClaimApiService, private readonly router: Router) {}
 
   ngOnInit(): void {
-    this.apiBaseUrl = this.api.apiBaseUrl;
-    this.loadClaims();
-  }
-
-  updateApiBaseUrl(): void {
-    this.api.setApiBaseUrl(this.apiBaseUrl);
-    this.apiBaseUrl = this.api.apiBaseUrl;
     this.loadClaims();
   }
 

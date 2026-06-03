@@ -69,7 +69,8 @@ public sealed record ClaimChangeSetResponse(
     string User,
     DateTimeOffset Timestamp,
     IReadOnlyList<string> AddedOrChangedPaths,
-    IReadOnlyList<string> RemovedPaths);
+    IReadOnlyList<string> RemovedPaths,
+    IReadOnlyList<ClaimChangeResponse> Changes);
 
 public sealed record ClaimDataResponse(
     string? ClaimNumber,
@@ -90,4 +91,4 @@ public sealed record ClaimNoteResponse(string ItemId, string? Text);
 
 public sealed record ClaimantResponse(string Type, string? DisplayName);
 
-public sealed record ClaimChangeResponse(string Path, string ChangeType);
+public sealed record ClaimChangeResponse(string Path, string ChangeType, object? OldValue = null, object? NewValue = null);

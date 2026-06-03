@@ -1,12 +1,12 @@
 using x86cc.KVBind.Core.Model;
 
-namespace x86cc.KVBind.Sample.Api.Persistence;
+namespace x86cc.KVBind.IntegrationTests.Persistence;
 
-public sealed class ClaimOverlayDocument
+public sealed class IntegrationOverlayDocument
 {
     public Guid Id { get; set; }
 
-    public Guid ClaimId { get; set; }
+    public Guid AggregateId { get; set; }
 
     public string User { get; set; } = string.Empty;
 
@@ -16,23 +16,16 @@ public sealed class ClaimOverlayDocument
 
     public HashSet<string> Removed { get; set; } = new(StringComparer.Ordinal);
 
-    public DateTimeOffset UpdatedAt { get; set; }
-
-    public Guid BaseSnapshotVersion => Snapshot.Version;
-
-    public Guid? BaseCommitId => Snapshot.LastCommitId;
-
-    public static ClaimOverlayDocument Create(Guid claimId, string user, KVOverlay overlay)
+    public static IntegrationOverlayDocument Create(Guid aggregateId, string user, KVOverlay overlay)
     {
-        return new ClaimOverlayDocument
+        return new IntegrationOverlayDocument
         {
             Id = Guid.NewGuid(),
-            ClaimId = claimId,
+            AggregateId = aggregateId,
             User = user,
             Snapshot = overlay.Snapshot.Clone(),
             AddedOrChanged = new Dictionary<string, KVValue>(overlay.AddedOrChanged, StringComparer.Ordinal),
-            Removed = new HashSet<string>(overlay.Removed, StringComparer.Ordinal),
-            UpdatedAt = DateTimeOffset.UtcNow
+            Removed = new HashSet<string>(overlay.Removed, StringComparer.Ordinal)
         };
     }
 
@@ -49,6 +42,5 @@ public sealed class ClaimOverlayDocument
         Snapshot = overlay.Snapshot.Clone();
         AddedOrChanged = new Dictionary<string, KVValue>(overlay.AddedOrChanged, StringComparer.Ordinal);
         Removed = new HashSet<string>(overlay.Removed, StringComparer.Ordinal);
-        UpdatedAt = DateTimeOffset.UtcNow;
     }
 }

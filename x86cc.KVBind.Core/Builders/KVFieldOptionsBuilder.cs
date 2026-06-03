@@ -94,6 +94,69 @@ public class KVFieldOptionsBuilder<TValue>
         return this;
     }
 
+    public KVFieldOptionsBuilder<TValue> AllowedElementValues<TElement, TToken>(
+        IEnumerable<TElement> values,
+        Func<TElement, TToken> tokenSelector,
+        Func<TElement, string>? labelSelector = null)
+        where TToken : notnull
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        ArgumentNullException.ThrowIfNull(tokenSelector);
+
+        AllowedValuesDefinition = KVAllowedValuesDefinition.CreateForElements(values.ToArray(), tokenSelector, labelSelector);
+        return this;
+    }
+
+    public KVFieldOptionsBuilder<TValue> AllowedElementValue<TElement>(TElement value, string id, string label)
+    {
+        if (value is null)
+        {
+            throw new ArgumentNullException(nameof(value));
+        }
+
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            throw new ArgumentException("Allowed value id is required.", nameof(id));
+        }
+
+        if (string.IsNullOrWhiteSpace(label))
+        {
+            throw new ArgumentException("Allowed value label is required.", nameof(label));
+        }
+
+        AddExplicitAllowedElementValue<TElement>(new KVExplicitAllowedValue(id, label, value, Template: null, Placeholders: null));
+        return this;
+    }
+
+    public KVFieldOptionsBuilder<TValue> AllowedElementValueComponent<TElement>(
+        TElement value,
+        string id,
+        string label,
+        Action<KVAllowedValueComponentBuilder> configure)
+    {
+        if (value is null)
+        {
+            throw new ArgumentNullException(nameof(value));
+        }
+
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            throw new ArgumentException("Allowed value id is required.", nameof(id));
+        }
+
+        if (string.IsNullOrWhiteSpace(label))
+        {
+            throw new ArgumentException("Allowed value label is required.", nameof(label));
+        }
+
+        ArgumentNullException.ThrowIfNull(configure);
+
+        var component = new KVAllowedValueComponentBuilder();
+        configure(component);
+        AddExplicitAllowedElementValue<TElement>(new KVExplicitAllowedValue(id, label, value, component.TemplateValue, component.BuildPlaceholders()));
+        return this;
+    }
+
     public KVFieldOptionsBuilder<TValue> Validation(Action<KVFieldValidationProfileBuilder<TValue>> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
@@ -134,5 +197,16 @@ public class KVFieldOptionsBuilder<TValue>
 
         _explicitAllowedValues.Add(value);
         AllowedValuesDefinition = KVAllowedValuesDefinition.CreateExplicit(_explicitAllowedValues.ToArray());
+    }
+
+    private void AddExplicitAllowedElementValue<TElement>(KVExplicitAllowedValue value)
+    {
+        if (_explicitAllowedValues.Any(existing => string.Equals(existing.Id, value.Id, StringComparison.Ordinal)))
+        {
+            return;
+        }
+
+        _explicitAllowedValues.Add(value);
+        AllowedValuesDefinition = KVAllowedValuesDefinition.CreateExplicitForElements<TElement>(_explicitAllowedValues.ToArray());
     }
 }

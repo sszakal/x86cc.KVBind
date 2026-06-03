@@ -71,6 +71,7 @@ export interface ClaimChangeSetResponse {
   timestamp: string;
   addedOrChangedPaths: string[];
   removedPaths: string[];
+  changes: ClaimChangeResponse[];
 }
 
 export interface ClaimDataResponse {
@@ -109,6 +110,8 @@ export interface ClaimantResponse {
 export interface ClaimChangeResponse {
   path: string;
   changeType: string;
+  oldValue: unknown;
+  newValue: unknown;
 }
 
 export interface ClaimPatchOperationRequest {
@@ -119,23 +122,9 @@ export interface ClaimPatchOperationRequest {
 
 @Injectable({ providedIn: 'root' })
 export class ClaimApiService {
-  private readonly defaultBaseUrl = 'http://localhost:5101/api/claims';
+  readonly apiBaseUrl = 'http://localhost:5101/api/claims';
 
   constructor(private readonly http: HttpClient) {}
-
-  get apiBaseUrl(): string {
-    return localStorage.getItem('kvbind.apiBaseUrl') ?? this.defaultBaseUrl;
-  }
-
-  setApiBaseUrl(value: string): void {
-    const trimmed = value.trim().replace(/\/$/, '');
-    if (trimmed.length === 0) {
-      localStorage.removeItem('kvbind.apiBaseUrl');
-      return;
-    }
-
-    localStorage.setItem('kvbind.apiBaseUrl', trimmed);
-  }
 
   listClaims(): Observable<ClaimSummaryResponse[]> {
     return this.http.get<ClaimSummaryResponse[]>(this.apiBaseUrl);

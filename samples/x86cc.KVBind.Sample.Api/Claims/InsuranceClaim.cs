@@ -30,6 +30,11 @@ public partial class InsuranceClaim : KVRootNode
 
     [KVBind(nameof(Claimant))]
     public partial Claimant? Claimant { get; private set; }
+
+    public void RecalculateClaimedTotal(KVChangeContext<InsuranceClaim> context)
+    {
+        ClaimedTotal = DamagedItems.Sum(item => item.EstimatedAmount);
+    }
 }
 
 public partial class ClaimPolicy : KVFieldGroupNode

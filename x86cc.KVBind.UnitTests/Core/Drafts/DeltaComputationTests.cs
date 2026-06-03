@@ -10,7 +10,7 @@ public class DeltaComputationTests
     public void DeltaComputation_WhenChildIsRemoved_EmitsSingleSyntheticRemovedDelta()
     {
         var snapshot = new KVSnapshot();
-        var model = new KVModelRoot(KVOverlay.Create(snapshot, "test"), new KVNodeDefinition { SubSegmentPath = string.Empty });
+        var model = new KVModelRoot(KVOverlay.Create(snapshot, "test"));
         model.Set("Name", "base");
 
         var child = model.EnsureChildModel("Items/123");
@@ -36,7 +36,7 @@ public class DeltaComputationTests
     public void DeltaComputation_WhenFieldIsRemoved_EmitsRemovedDelta()
     {
         var snapshot = new KVSnapshot();
-        var model = new KVModelRoot(KVOverlay.Create(snapshot, "test"), new KVNodeDefinition { SubSegmentPath = string.Empty });
+        var model = new KVModelRoot(KVOverlay.Create(snapshot, "test"));
         model.Set("Status", "active");
 
         snapshot.Apply(model.Overlay.ToCommit(DateTimeOffset.UtcNow));
@@ -69,7 +69,7 @@ public class DeltaComputationTests
     public void DeltaComputation_WhenCollectionItemMetadataChanges_DoesNotExposeMetadataPaths()
     {
         var snapshot = new KVSnapshot();
-        var model = new KVModelRoot(KVOverlay.Create(snapshot, "test"), new KVNodeDefinition { SubSegmentPath = string.Empty });
+        var model = new KVModelRoot(KVOverlay.Create(snapshot, "test"));
         var item = model.EnsureCollectionModel("Items").EnsureItemModel("1");
         item.Set("$id", "1");
         item.Set("$type", "Line");

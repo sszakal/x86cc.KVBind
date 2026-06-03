@@ -11,10 +11,7 @@
       </button>
     </div>
 
-    <div class="mt-5 grid gap-3 lg:grid-cols-[1fr_auto]">
-      <input class="h-11 rounded-lg border border-gray-300 px-4 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="apiBaseUrl" placeholder="API base URL" />
-      <button class="h-11 rounded-lg bg-gray-900 px-4 text-sm font-medium text-white dark:bg-white dark:text-gray-900" (click)="updateApiBaseUrl()">Use API URL</button>
-    </div>
+    <p class="mt-5 text-xs text-gray-500 dark:text-gray-400">Using sample API <span class="font-mono">http://localhost:5101/api/claims</span>.</p>
   </div>
 
   @if (error) {

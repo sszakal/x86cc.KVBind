@@ -8,7 +8,8 @@
       <File Path="AGENTS.md" />
       <File Path="README.md" />
    </Folder>
-   <Project Path="x86cc.KVBind.Core/x86cc.KVBind.Core.csproj" />
+    <Project Path="x86cc.KVBind.Core/x86cc.KVBind.Core.csproj" />
+    <Project Path="x86cc.KVBind.IntegrationTests/x86cc.KVBind.IntegrationTests.csproj" />
     <Project Path="x86cc.KVBind.SourceGenerator/x86cc.KVBind.SourceGenerator.csproj" />
     <Project Path="x86cc.KVBind.UnitTests/x86cc.KVBind.UnitTests.csproj" />
 </Solution>

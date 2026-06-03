@@ -137,7 +137,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
         var commit = rootNode.CreateCommit(DateTimeOffset.UtcNow);
         model.Snapshot.Apply(commit);
         
-        InlineSnapshot.Validate(model.Snapshot.Data, """
+        InlineSnapshot.Validate(model.Snapshot.Data.ToDictionary(pair => pair.Key, pair => pair.Value.Value), """
                                                 Title: applied
                                                 Status: 13
                                                 General/Code: APPLIED

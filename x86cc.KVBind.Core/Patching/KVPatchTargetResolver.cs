@@ -41,8 +41,7 @@ internal static class KVPatchTargetResolver
                 Node = node,
                 Definition = fieldDefinition,
                 FieldKey = segment,
-                CanonicalPath = canonicalPath,
-                StoragePath = node.ResolveStoragePath(segment)
+                CanonicalPath = canonicalPath
             };
         }
 

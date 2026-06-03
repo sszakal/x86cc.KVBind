@@ -15,65 +15,99 @@
   }
 
   @if (draft) {
-    <div class="grid gap-6 xl:grid-cols-[1fr_360px]">
-      <section class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
-        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Patch fields</h2>
-        <div class="mt-5 space-y-4">
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Description
-            <textarea class="mt-1 min-h-28 w-full rounded-lg border border-gray-300 px-4 py-3 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="form.description"></textarea>
-          </label>
-          <div class="grid gap-4 md:grid-cols-3">
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Incident date
-              <input class="mt-1 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="form.incidentDate" />
-            </label>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Policy number
-              <input class="mt-1 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="form.policyNumber" />
-            </label>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Coverage type
-              <input class="mt-1 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="form.coverageType" />
-            </label>
-          </div>
-          <button class="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50" [disabled]="saving" (click)="saveFields()">{{ saving ? 'Saving...' : 'Patch draft fields' }}</button>
-        </div>
+    <section class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+      <div class="flex flex-wrap gap-2 border-b border-gray-100 pb-4 dark:border-gray-800">
+        <button class="rounded-lg px-4 py-2 text-sm font-medium" [ngClass]="activeTab === 'edit' ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-900 dark:text-gray-300'" (click)="activeTab = 'edit'">Draft edit</button>
+        <button class="rounded-lg px-4 py-2 text-sm font-medium" [ngClass]="activeTab === 'overlay' ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-900 dark:text-gray-300'" (click)="activeTab = 'overlay'">Overlay changes</button>
+      </div>
 
-        <div class="mt-8 grid gap-4 lg:grid-cols-2">
-          <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
-            <h3 class="font-semibold text-gray-900 dark:text-white">Add damaged item</h3>
-            <input class="mt-3 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="itemDescription" />
-            <input type="number" class="mt-3 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="itemAmount" />
-            <button class="mt-3 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800" (click)="addDamagedItem()">Add item</button>
-          </div>
-          <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
-            <h3 class="font-semibold text-gray-900 dark:text-white">Set claimant</h3>
-            <select class="mt-3 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="claimantType"><option value="PERSON">Person</option><option value="COMPANY">Company</option></select>
-            <input class="mt-3 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="claimantName" />
-            <button class="mt-3 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800" (click)="setClaimant()">Set claimant</button>
-          </div>
-        </div>
-      </section>
+      @if (activeTab === 'edit') {
+        <div class="mt-6 grid gap-6 xl:grid-cols-[1fr_360px]">
+          <div>
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Patch fields</h2>
+            <div class="mt-5 space-y-4">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Description
+                <textarea class="mt-1 min-h-28 w-full rounded-lg border border-gray-300 px-4 py-3 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="form.description"></textarea>
+              </label>
+              <div class="grid gap-4 md:grid-cols-3">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Incident date
+                  <input class="mt-1 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="form.incidentDate" />
+                </label>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Policy number
+                  <input class="mt-1 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="form.policyNumber" />
+                </label>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Coverage type
+                  <input class="mt-1 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="form.coverageType" />
+                </label>
+              </div>
+              <button class="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50" [disabled]="saving" (click)="saveFields()">{{ saving ? 'Saving...' : 'Patch draft fields' }}</button>
+            </div>
 
-      <aside class="space-y-6">
-        <div class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
-          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Current draft</h2>
-          <p class="mt-3 text-sm text-gray-500">{{ draft.claim.description || 'No description' }}</p>
-          <p class="mt-3 text-sm text-gray-700 dark:text-gray-300">Total: <span class="font-semibold">{{ draft.claim.claimedTotal | currency }}</span></p>
-          <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">Items: {{ draft.claim.damagedItems.length }}</p>
-          <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">Claimant: {{ draft.claim.claimant?.displayName || 'not set' }}</p>
-          <label class="mt-5 block text-sm font-medium text-gray-700 dark:text-gray-300">Commit user
-            <input class="mt-1 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="form.user" />
-          </label>
-          <button class="mt-4 h-11 w-full rounded-lg bg-gray-900 px-4 text-sm font-medium text-white dark:bg-white dark:text-gray-900 disabled:opacity-50" [disabled]="committing" (click)="commit()">{{ committing ? 'Committing...' : 'Commit draft' }}</button>
-        </div>
+            <div class="mt-8 grid gap-4 lg:grid-cols-2">
+              <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                <h3 class="font-semibold text-gray-900 dark:text-white">Add damaged item</h3>
+                <input class="mt-3 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="itemDescription" />
+                <input type="number" class="mt-3 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="itemAmount" />
+                <button class="mt-3 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800" [disabled]="saving" (click)="addDamagedItem()">Add item</button>
+              </div>
+              <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                <h3 class="font-semibold text-gray-900 dark:text-white">Set claimant</h3>
+                <select class="mt-3 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="claimantType"><option value="PERSON">Person</option><option value="COMPANY">Company</option></select>
+                <input class="mt-3 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="claimantName" />
+                <button class="mt-3 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800" (click)="setClaimant()">Set claimant</button>
+              </div>
+            </div>
 
-        <div class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+            <div class="mt-8">
+              <div class="mb-3 flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Draft damaged items</h2>
+                <span class="text-sm text-gray-500 dark:text-gray-400">{{ draft.claim.damagedItems.length }} item{{ draft.claim.damagedItems.length === 1 ? '' : 's' }}</span>
+              </div>
+              <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+                <table class="w-full min-w-[640px] text-left text-sm">
+                  <thead class="border-b border-gray-100 bg-gray-50 text-xs uppercase text-gray-500 dark:border-gray-800 dark:bg-gray-900/60">
+                    <tr><th class="px-4 py-3 font-medium">Description</th><th class="px-4 py-3 font-medium">Estimated amount</th><th class="px-4 py-3 font-medium">Item id</th><th class="px-4 py-3 text-right font-medium">Actions</th></tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                    @for (item of draft.claim.damagedItems; track item.itemId) {
+                      <tr class="text-gray-700 dark:text-gray-300">
+                        <td class="px-4 py-3 font-medium text-gray-900 dark:text-white">{{ item.description || 'No description' }}</td>
+                        <td class="px-4 py-3">{{ item.estimatedAmount | currency }}</td>
+                        <td class="px-4 py-3 font-mono text-xs text-gray-500">{{ item.itemId }}</td>
+                        <td class="px-4 py-3 text-right"><button class="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/30" [disabled]="saving" (click)="removeDamagedItem(item.itemId)">Remove</button></td>
+                      </tr>
+                    } @empty {
+                      <tr><td class="px-4 py-8 text-center text-gray-500" colspan="4">No damaged items in this draft.</td></tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <aside class="rounded-2xl border border-gray-200 p-6 dark:border-gray-800">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Current draft</h2>
+            <p class="mt-3 text-sm text-gray-500">{{ draft.claim.description || 'No description' }}</p>
+            <p class="mt-3 text-sm text-gray-700 dark:text-gray-300">Total: <span class="font-semibold">{{ draft.claim.claimedTotal | currency }}</span></p>
+            <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">Items: {{ draft.claim.damagedItems.length }}</p>
+            <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">Claimant: {{ draft.claim.claimant?.displayName || 'not set' }}</p>
+            <label class="mt-5 block text-sm font-medium text-gray-700 dark:text-gray-300">Commit user
+              <input class="mt-1 h-11 w-full rounded-lg border border-gray-300 px-4 dark:border-gray-700 dark:bg-gray-900 dark:text-white" [(ngModel)]="form.user" />
+            </label>
+            <button class="mt-4 h-11 w-full rounded-lg bg-gray-900 px-4 text-sm font-medium text-white dark:bg-white dark:text-gray-900 disabled:opacity-50" [disabled]="committing" (click)="commit()">{{ committing ? 'Committing...' : 'Commit draft' }}</button>
+          </aside>
+        </div>
+      }
+
+      @if (activeTab === 'overlay') {
+        <div class="mt-6">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Overlay changes</h2>
-          <div class="mt-4 space-y-2">
-            @for (change of draft.changes; track change.path) {
-              <div class="rounded-lg bg-gray-50 px-3 py-2 text-sm dark:bg-gray-900"><span class="font-medium text-gray-900 dark:text-white">{{ change.changeType }}</span> <span class="font-mono text-xs text-gray-500">{{ change.path }}</span></div>
-            } @empty { <p class="text-sm text-gray-500">No draft changes.</p> }
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Old values are red/struck out. New values are green/bold.</p>
+          <div class="mt-4">
+            <app-change-tree-table [changes]="draft.changes"></app-change-tree-table>
           </div>
         </div>
-      </aside>
-    </div>
+      }
+    </section>
   }
 </div>

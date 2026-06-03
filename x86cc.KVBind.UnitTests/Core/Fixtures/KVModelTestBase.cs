@@ -25,7 +25,7 @@ public abstract class KVModelTestBase
     {
         var registry = CreateRegistry();
         var definition = registry.Get<TKVRootNode>();
-        return KVRootNode.Create<TKVRootNode>(model ?? KVModelRoot.Create(KVOverlay.Create(new KVSnapshot(), TestUser), definition), definition);
+        return KVRootNode.Create<TKVRootNode>(model ?? new KVModelRoot(KVOverlay.Create(new KVSnapshot(), TestUser)), definition);
     }
 
     protected void CommitSetup(KVModelRoot model)
@@ -40,7 +40,6 @@ public abstract class KVModelTestBase
     {
         var registry = CreateRegistry();
         var definition = registry.Get<TKVRootNode>();
-        model.AttachDefinition(definition);
         root.BindRuntime(model, definition);
         return root;
     }

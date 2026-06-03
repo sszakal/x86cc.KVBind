@@ -18,8 +18,7 @@ internal static class KVPatchRuntime
         var registry = KVPatchOperationRegistry.CreateDefault();
         var context = new KVPatchExecutionContext
         {
-            Root = root,
-            RootModel = root.RootModel()
+            Root = root
         };
 
         foreach (var operation in operations)
@@ -43,7 +42,6 @@ internal sealed class KVFieldPatchTarget : KVPatchTarget
     public required KVNode Node { get; init; }
     public required KVFieldDefinition Definition { get; init; }
     public required string FieldKey { get; init; }
-    public required string StoragePath { get; init; }
 }
 
 internal sealed class KVCollectionPatchTarget : KVPatchTarget
@@ -72,7 +70,6 @@ internal sealed class KVNestedNodePatchTarget : KVPatchTarget
 internal sealed class KVPatchExecutionContext
 {
     public required KVRootNode Root { get; init; }
-    public required KVModelRoot RootModel { get; init; }
 }
 
 internal enum KVPatchTargetKind

@@ -6,21 +6,21 @@ using x86cc.KVBind.Core.Model;
 
 namespace x86cc.KVBind.Core;
 
-public class KVCollectionNode<TItem> : IEnumerable<TItem>, IKVCollectionNode, IKVCollectionRuntime
+public class KVCollectionNode<TItem> : IEnumerable<TItem>, IKVCollectionNode, IKVCollectionRuntime, IKVNodeCanonicalPath
     where TItem : KVCollectionItemNode, new()
 {
     private readonly Dictionary<string, TItem> _items = new(StringComparer.Ordinal);
     private readonly List<string> _orderedItemIds = [];
 
-    internal string StoragePath { get; private set; } = string.Empty;
-
     public IKVNode? Parent { get; private set; }
-    public KVCollectionModel Model { get; private set; } = null!;
+    public KVModel Model { get; private set; } = null!;
     public KVCollectionDefinition Definition { get; private set; } = null!;
 
     protected bool IsBound => Model is not null && Definition is not null;
 
-    public void Bind(KVCollectionModel model, KVCollectionDefinition definition, IKVNode? parent = null)
+    string IKVNodeCanonicalPath.GetCanonicalPath() => Model?.DataPath ?? string.Empty;
+
+    public void Bind(KVModel model, KVCollectionDefinition definition, IKVNode? parent = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(definition);
@@ -28,10 +28,14 @@ public class KVCollectionNode<TItem> : IEnumerable<TItem>, IKVCollectionNode, IK
         Parent = parent;
         Model = model;
         Definition = definition;
-        StoragePath = parent is KVNode parentNode ? KVPath.Combine(parentNode.StoragePath, definition.SubSegmentPath) : definition.SubSegmentPath;
 
         _items.Clear();
         _orderedItemIds.Clear();
+
+        foreach (var itemId in model.DirectChildKeys())
+        {
+            model.EnsureItemModel(itemId);
+        }
 
         foreach (var pair in model.ChildModels)
         {
@@ -45,7 +49,7 @@ public class KVCollectionNode<TItem> : IEnumerable<TItem>, IKVCollectionNode, IK
             KVCollectionItemNode.SetItemId(itemModel, itemId);
             var itemDefinition = ResolveItemDefinition(itemModel, itemId);
             var item = (TItem)Activator.CreateInstance(itemDefinition.ModelType)!;
-            item.BindRuntime(itemModel, itemDefinition.NodeDefinition, this, itemId, storagePathOverride: string.Empty);
+            item.BindRuntime(itemModel, itemDefinition.NodeDefinition, this);
 
             _items[itemId] = item;
             _orderedItemIds.Add(itemId);
@@ -83,7 +87,7 @@ public class KVCollectionNode<TItem> : IEnumerable<TItem>, IKVCollectionNode, IK
         KVCollectionItemNode.SetItemId(childModel, itemId);
         KVCollectionItemNode.SetItemType(childModel, itemDefinition.TypeToken);
 
-        item.BindRuntime(childModel, itemDefinition.NodeDefinition, this, itemId, storagePathOverride: string.Empty);
+        item.BindRuntime(childModel, itemDefinition.NodeDefinition, this);
 
         _items[itemId] = item;
         _orderedItemIds.Add(itemId);
@@ -225,8 +229,7 @@ public class KVCollectionNode<TItem> : IEnumerable<TItem>, IKVCollectionNode, IK
             return;
         }
 
-        var collectionPath = KVPath.Combine(parentNode.GetCanonicalPath(), Definition.SubSegmentPath);
-        parentNode.EmitChange(KVPath.Combine(collectionPath, itemId), oldValue, newValue);
+        parentNode.EmitChange(KVPath.Combine(Model.DataPath, itemId), oldValue, newValue);
     }
 
 }

@@ -23,7 +23,7 @@ public sealed class KVSnapshot
 
     public Guid Version { get; set; } = Guid.NewGuid();
 
-    public Dictionary<string, object?> Data { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, KVValue> Data { get; set; } = new(StringComparer.Ordinal);
 
     public IReadOnlyCollection<string> Keys => Data.Keys;
 
@@ -40,11 +40,11 @@ public sealed class KVSnapshot
             Modified = Modified,
             ModifiedBy = ModifiedBy,
             Version = Version,
-            Data = new Dictionary<string, object?>(Data, StringComparer.Ordinal)
+            Data = new Dictionary<string, KVValue>(Data, StringComparer.Ordinal)
         };
     }
 
-    public bool TryGet(string path, out object? value)
+    public bool TryGet(string path, out KVValue? value)
     {
         return Data.TryGetValue(path, out value);
     }
@@ -114,7 +114,7 @@ public sealed class KVSnapshot
         }
     }
 
-    private static void RemovePathOrPrefix(Dictionary<string, object?> data, string path)
+    private static void RemovePathOrPrefix(Dictionary<string, KVValue> data, string path)
     {
         if (data.Remove(path))
         {

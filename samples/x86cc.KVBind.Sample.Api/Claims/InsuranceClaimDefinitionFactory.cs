@@ -44,6 +44,9 @@ public sealed class InsuranceClaimDefinitionFactory
             claimant.Bind<CompanyClaimant>("COMPANY", company => company.Field(x => x.CompanyName));
         });
 
+        builder.OnChange(path => path.Collection(x => x.DamagedItems).Any(), x => x.RecalculateClaimedTotal);
+        builder.OnChange(path => path.Collection(x => x.DamagedItems).Field(x => x.EstimatedAmount), x => x.RecalculateClaimedTotal);
+
         return builder.Build();
     }
 }

@@ -29,7 +29,7 @@ public sealed class KVOverlay
 
     public KVSnapshot Snapshot { get; }
 
-    public Dictionary<string, object?> AddedOrChanged { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, KVValue> AddedOrChanged { get; set; } = new(StringComparer.Ordinal);
 
     public HashSet<string> Removed { get; set; } = new(StringComparer.Ordinal);
 
@@ -46,7 +46,7 @@ public sealed class KVOverlay
 
     public static KVOverlay Create(KVSnapshot snapshot, string user) => new(snapshot, user);
 
-    public bool TryGet(string path, out object? value)
+    public bool TryGet(string path, out KVValue? value)
     {
         if (IsRemoved(path))
         {
@@ -62,12 +62,12 @@ public sealed class KVOverlay
         return Snapshot.TryGet(path, out value);
     }
 
-    public bool TryGetSnapshotValue(string path, out object? value)
+    public bool TryGetSnapshotValue(string path, out KVValue? value)
     {
         return Snapshot.TryGet(path, out value);
     }
 
-    public bool TryGetDraftValue(string path, out object? value)
+    public bool TryGetDraftValue(string path, out KVValue? value)
     {
         return AddedOrChanged.TryGetValue(path, out value);
     }
@@ -88,7 +88,7 @@ public sealed class KVOverlay
         {
             if (KVPath.TryGetDirectSegment(pair.Key, parentPath, excludeSegment, out var segment))
             {
-                yield return new KeyValuePair<string, object?>(segment, pair.Value);
+                yield return new KeyValuePair<string, object?>(segment, pair.Value.Value);
             }
         }
     }
@@ -115,7 +115,7 @@ public sealed class KVOverlay
         }
     }
 
-    public void Set(string path, object? value)
+    public void Set(string path, KVValue value)
     {
         RemoveDescendantRemovalMarkers(path);
         Removed.Remove(path);
@@ -187,7 +187,7 @@ public sealed class KVOverlay
             PreviousCommitId = BaseCommitId,
             User = User,
             Timestamp = timestamp,
-            AddedOrChanged = new Dictionary<string, object?>(AddedOrChanged, StringComparer.Ordinal),
+            AddedOrChanged = new Dictionary<string, KVValue>(AddedOrChanged, StringComparer.Ordinal),
             Removed = new HashSet<string>(Removed, StringComparer.Ordinal)
         };
     }

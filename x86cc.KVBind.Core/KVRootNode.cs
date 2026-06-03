@@ -9,6 +9,8 @@ public abstract class KVRootNode : KVNode
 {
     internal KVReactionExecutionState ReactionExecutionState { get; } = new();
 
+    public KVNodeDefinition Definition { get; private set; } = null!;
+
     public KVModelRoot RootModel() => Model as KVModelRoot
                                     ?? throw new InvalidOperationException("KVRootNode is not bound to KVModelRoot.");
 
@@ -16,54 +18,44 @@ public abstract class KVRootNode : KVNode
 
     public string Version { get => RootModel().Version; set => RootModel().Version = value; }
 
-    protected override void Bind(
-        KVModel model,
-        KVNodeDefinition definition,
-        IKVNode? parent = null,
-        string? subSegmentOverride = null,
-        string? storagePathOverride = null)
+    protected override void Bind(KVModel model, KVNodeDefinition definition, IKVNode? parent = null)
     {
         if (parent is not null)
             throw new InvalidOperationException("KVRootNode cannot be bound as a child node.");
 
-        if (model is not KVModelRoot rootModel)
+        if (model is not KVModelRoot)
             throw new InvalidOperationException("KVRootNode must be bound to KVModelRoot.");
 
-        base.Bind(rootModel, definition, parent, subSegmentOverride, storagePathOverride);
+        Definition = definition;
+        base.Bind(model, definition, parent);
     }
 
-    private void Bind(KVModelRoot rootModel)
-    {
-        var definition = rootModel.Definition ?? throw new InvalidOperationException("KVModelRoot is not attached to a definition.");
-        Bind((KVModel)rootModel, definition);
-    }
-
-    public static TSelf Create<TSelf>(KVModelRoot model) where TSelf: KVRootNode, new()
+    public static TSelf Create<TSelf>(KVModelRoot model, KVNodeDefinition definition) where TSelf : KVRootNode, new()
     {
         var node = new TSelf();
-        node.Bind(model);
+        node.Bind(model, definition);
         return node;
     }
 
-    public static TSelf Create<TSelf>(KVModelRoot model, KVNodeDefinition definition) where TSelf: KVRootNode, new()
+    public static TSelf Create<TSelf>(KVOverlay overlay, KVNodeDefinition definition) where TSelf : KVRootNode, new()
     {
-        model.AttachDefinition(definition);
-        return Create<TSelf>(model);
+        return Create<TSelf>(new KVModelRoot(overlay), definition);
     }
-    
+
     public void Clear()
     {
-        var rootModel = RootModel();
-        rootModel.ClearDraft();
-        Bind(rootModel);
+        Model.Overlay.Clear();
+        Model.PruneDraftChildren(string.Empty);
+        Bind(Model, Definition);
     }
 
     public void Discard(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        var rootModel = RootModel();
-        rootModel.DiscardDraftPath(path);
-        Bind(rootModel);
+        var normalizedPath = KVPath.Normalize(path);
+        Model.Overlay.Discard(normalizedPath);
+        Model.PruneDraftChildren(normalizedPath);
+        Bind(Model, Definition);
     }
 
     public KVCommit CreateCommit(DateTimeOffset timestamp)
@@ -74,34 +66,33 @@ public abstract class KVRootNode : KVNode
             throw new KVChangeSetValidationException(validation.Errors);
         }
 
-        return RootModel().CreateCommit(timestamp);
+        return Model.Overlay.ToCommit(timestamp);
     }
 
     public KVPatchResult Patch(params KVPatchOperation[] operations)
     {
         KVPatchRuntime.Apply(this, operations);
-        var deltas = RootModel().ComputeDeltas().Flatten();
+        var deltas = Model.ComputeNodeDeltas(string.Empty, isCollectionItem: false).Flatten();
         return new KVPatchResult(deltas, Validate);
     }
 
     public KVPatchResult Patch(IEnumerable<KVPatchOperation> operations)
     {
         KVPatchRuntime.Apply(this, operations);
-        var deltas = RootModel().ComputeDeltas().Flatten();
+        var deltas = Model.ComputeNodeDeltas(string.Empty, isCollectionItem: false).Flatten();
         return new KVPatchResult(deltas, Validate);
     }
-    
+
     public KVDraftChanges GetAllChanges()
     {
-        var deltas = RootModel().ComputeDeltas().Flatten();
+        var deltas = Model.ComputeNodeDeltas(string.Empty, isCollectionItem: false).Flatten();
         return new KVDraftChanges(deltas);
     }
-    
+
     public KVValidationResult Validate()
     {
         return KVValidationRuntime.Validate(this, GetValidationProfile());
     }
 
     protected virtual KVValidationProfile GetValidationProfile() => KVDefaultValidationProfile.Instance;
-
 }

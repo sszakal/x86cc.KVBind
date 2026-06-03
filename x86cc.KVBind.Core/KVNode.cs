@@ -1,11 +1,16 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using x86cc.KVBind.Core.Abstractions;
 using x86cc.KVBind.Core.Model;
 
 namespace x86cc.KVBind.Core;
 
-public abstract class KVNode: IKVNode
+internal interface IKVNodeCanonicalPath
+{
+    string GetCanonicalPath();
+}
+
+public abstract class KVNode: IKVNode, IKVNodeCanonicalPath
 {
     private readonly Dictionary<string, ActiveNestedNode> _activeNestedNodes = new(StringComparer.Ordinal);
     private bool _isDetached;
@@ -13,58 +18,40 @@ public abstract class KVNode: IKVNode
     public IKVNode? Parent { get; private set; }
     public KVModel Model { get; private set; } = null!;
     public KVNodeDefinition Definition { get; private set; } = null!;
-    internal string StoragePath { get; private set; } = string.Empty;
-    private string? _boundSubSegmentPath;
     private bool IsBound => Model is not null && Definition is not null;
-    
-    
-    internal void BindRuntime(
-        KVModel model,
-        KVNodeDefinition definition,
-        IKVNode? parent = null,
-        string? subSegmentOverride = null,
-        string? storagePathOverride = null)
+
+    string IKVNodeCanonicalPath.GetCanonicalPath() => GetCanonicalPath();
+
+    internal void BindRuntime(KVModel model, KVNodeDefinition definition, IKVNode? parent = null)
     {
-        Bind(model, definition, parent, subSegmentOverride, storagePathOverride);
+        Bind(model, definition, parent);
     }
 
-    protected virtual void Bind(
-        KVModel model,
-        KVNodeDefinition definition,
-        IKVNode? parent = null,
-        string? subSegmentOverride = null,
-        string? storagePathOverride = null)
+    protected virtual void Bind(KVModel model, KVNodeDefinition definition, IKVNode? parent = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(definition);
-        
-        var pathSegment = subSegmentOverride ?? definition.SubSegmentPath;
-        if (parent is not null && string.IsNullOrWhiteSpace(pathSegment))
-        {
-            throw new InvalidOperationException("Non-root node definitions must define SubSegmentPath.");
-        }
-        
+
         if (!_isDetached && IsBound && (!ReferenceEquals(Parent, parent) || !ReferenceEquals(Definition, definition)))
         {
             throw new InvalidOperationException("KVNode is already bound to a different context.");
         }
 
         DetachActiveNestedNodes();
-        
+
         _isDetached = false;
         Parent = parent;
         Model = model;
         Definition = definition;
-        _boundSubSegmentPath = pathSegment;
-        StoragePath = storagePathOverride ?? ResolveChildStoragePath(parent, pathSegment);
-        
+
         foreach (var nodeDefinition in definition.Nodes)
         {
             var childNode = nodeDefinition.GetChildNode(this)
                             ?? throw new InvalidOperationException($"Node '{nodeDefinition.SubSegmentPath}' resolved to null.");
-            childNode.Bind(model, nodeDefinition, this, nodeDefinition.SubSegmentPath);
+            var childModel = model.EnsureChildModel(nodeDefinition.SubSegmentPath);
+            childNode.Bind(childModel, nodeDefinition, this);
         }
-        
+
         foreach (var collectionDefinition in definition.Collections)
         {
             if (string.IsNullOrWhiteSpace(collectionDefinition.SubSegmentPath))
@@ -73,8 +60,7 @@ public abstract class KVNode: IKVNode
             }
 
             var collectionNode = collectionDefinition.GetCollection(this) ?? throw new InvalidOperationException($"Collection '{collectionDefinition.SubSegmentPath}' resolved to null.");
-            var collectionPath = CombineStoragePath(StoragePath, collectionDefinition.SubSegmentPath);
-            var collectionModel = model.EnsureCollectionModel(collectionPath);
+            var collectionModel = model.EnsureCollectionModel(collectionDefinition.SubSegmentPath);
             collectionNode.Bind(collectionModel, collectionDefinition, this);
         }
 
@@ -85,11 +71,10 @@ public abstract class KVNode: IKVNode
                 throw new InvalidOperationException("Nested node definitions must define SubSegmentPath.");
             }
 
-            var nestedPath = CombineStoragePath(StoragePath, nestedNodeDefinition.SubSegmentPath);
-            model.EnsureChildModel(nestedPath);
+            model.EnsureChildModel(nestedNodeDefinition.SubSegmentPath);
         }
     }
-    
+
     private void EnsureBound()
     {
         if (_isDetached || !IsBound)
@@ -108,8 +93,6 @@ public abstract class KVNode: IKVNode
         Parent = null;
         Model = null!;
         Definition = null!;
-        _boundSubSegmentPath = null;
-        StoragePath = string.Empty;
     }
 
     private void DetachActiveNestedNodes()
@@ -121,39 +104,37 @@ public abstract class KVNode: IKVNode
 
         _activeNestedNodes.Clear();
     }
-    
+
+    private KVFieldDefinition GetFieldDefinition(string subSegmentPath)
+    {
+        return Definition.Fields.Find(f => string.Equals(f.SubSegmentPath, subSegmentPath, StringComparison.Ordinal))
+               ?? throw new InvalidOperationException($"Field '{subSegmentPath}' is not declared under '{Definition.SubSegmentPath}'.");
+    }
+
     private void EnsureFieldDefined(string subSegmentPath)
     {
-        var exists = Definition.Fields.Exists(f => string.Equals(f.SubSegmentPath, subSegmentPath, StringComparison.Ordinal));
-        if (exists) return;
-        throw new InvalidOperationException($"Field '{subSegmentPath}' is not declared under '{Definition.SubSegmentPath}'.");
+        _ = GetFieldDefinition(subSegmentPath);
     }
 
-    private static string CombineStoragePath(string prefix, string segment)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(segment);
-        return KVPath.Combine(prefix, segment);
-    }
-
-    private static string ResolveChildStoragePath(IKVNode? parent, string pathSegment)
-    {
-        if (parent is null)
-        {
-            return string.Empty;
-        }
-
-        return parent is KVNode parentNode
-            ? CombineStoragePath(parentNode.StoragePath, pathSegment)
-            : string.Empty;
-    }
-    
     protected TValue GetField<TValue>(string fieldKey)
     {
         EnsureBound();
         ArgumentNullException.ThrowIfNull(fieldKey);
-        EnsureFieldDefined(fieldKey);
-        var resolvedPath = ResolveStoragePath(fieldKey);
-        return Model.Get<TValue>(resolvedPath);
+        var fieldDefinition = GetFieldDefinition(fieldKey);
+        if (fieldDefinition.AllowedValues is not null && Model.TryGetValue(fieldKey, out var storedValue) && storedValue is not null)
+        {
+            var storedObject = storedValue.Value;
+            try
+            {
+                return (TValue)fieldDefinition.AllowedValues.DenormalizeFromStorage(storedObject, typeof(TValue))!;
+            }
+            catch (InvalidOperationException) when (storedObject is TValue typed)
+            {
+                return typed;
+            }
+        }
+
+        return Model.Get<TValue>(fieldKey);
     }
 
     protected void SetField<TValue>(string fieldKey, TValue value)
@@ -162,7 +143,6 @@ public abstract class KVNode: IKVNode
         ArgumentNullException.ThrowIfNull(fieldKey);
         EnsureFieldDefined(fieldKey);
         SetFieldCore(fieldKey, value);
-
     }
 
     internal void SetFieldForPatch(string fieldKey, object? value)
@@ -178,27 +158,38 @@ public abstract class KVNode: IKVNode
         EnsureBound();
         ArgumentNullException.ThrowIfNull(fieldKey);
         EnsureFieldDefined(fieldKey);
-        var resolvedPath = ResolveStoragePath(fieldKey);
-        var oldValue = Model.Get<object?>(resolvedPath);
-        if (!Model.Remove(resolvedPath))
+        var oldValue = Model.Get<object?>(fieldKey);
+        if (!Model.Remove(fieldKey))
         {
             return;
         }
 
-        EmitChange(BuildPath(GetCanonicalPath(), fieldKey), oldValue, newValue: null);
+        EmitChange(KVPath.Combine(GetCanonicalPath(), fieldKey), oldValue, newValue: null);
     }
 
     private void SetFieldCore(string fieldKey, object? value)
     {
-        var resolvedPath = ResolveStoragePath(fieldKey);
-        var oldValue = Model.Get<object?>(resolvedPath);
-        if (Equals(oldValue, value))
+        var fieldDefinition = GetFieldDefinition(fieldKey);
+        var oldValue = Model.Get<object?>(fieldKey);
+        var storageValue = value;
+        if (fieldDefinition.AllowedValues is not null)
+        {
+            try
+            {
+                storageValue = fieldDefinition.AllowedValues.NormalizeForStorage(value);
+            }
+            catch (InvalidOperationException) when (value is string)
+            {
+                // Keep unknown tokens in the draft so validation can report allowed_values.
+            }
+        }
+        if (Equals(oldValue, storageValue))
         {
             return;
         }
 
-        Model.Set(resolvedPath, value);
-        EmitChange(BuildPath(GetCanonicalPath(), fieldKey), oldValue, value);
+        Model.SetValue(fieldKey, KVValue.FromObject(storageValue));
+        EmitChange(KVPath.Combine(GetCanonicalPath(), fieldKey), oldValue, storageValue);
     }
 
     protected TBase? GetNestedNode<TBase>(string nestedNodeKey)
@@ -226,7 +217,7 @@ public abstract class KVNode: IKVNode
         DetachActiveNestedNode(nestedNodeKey);
         var typeDefinition = definition.GetTypeDefinition(typeToken);
         var node = (KVNestedNode)Activator.CreateInstance(typeDefinition.ModelType)!;
-        node.BindRuntime(nestedModel, typeDefinition.NodeDefinition, this, nestedNodeKey, storagePathOverride: string.Empty);
+        node.BindRuntime(nestedModel, typeDefinition.NodeDefinition, this);
         _activeNestedNodes[nestedNodeKey] = new ActiveNestedNode(node, typeToken, nestedModel);
         return (TBase)node;
     }
@@ -250,7 +241,7 @@ public abstract class KVNode: IKVNode
 
         var typeDefinition = definition.GetTypeDefinition(value.GetType());
         KVNestedNode.SetItemType(nestedModel, typeDefinition.TypeToken);
-        value.BindRuntime(nestedModel, typeDefinition.NodeDefinition, this, nestedNodeKey, storagePathOverride: string.Empty);
+        value.BindRuntime(nestedModel, typeDefinition.NodeDefinition, this);
         _activeNestedNodes[nestedNodeKey] = new ActiveNestedNode(value, typeDefinition.TypeToken, nestedModel);
     }
 
@@ -262,8 +253,7 @@ public abstract class KVNode: IKVNode
 
     internal KVModel GetNestedNodeModel(string nestedNodeKey)
     {
-        var storagePath = ResolveStoragePath(nestedNodeKey);
-        return Model.EnsureChildModel(storagePath);
+        return Model.EnsureChildModel(nestedNodeKey);
     }
 
     private void DetachActiveNestedNode(string nestedNodeKey)
@@ -306,10 +296,12 @@ public abstract class KVNode: IKVNode
         ClearNestedNodeModel(nestedModel);
     }
 
+    // Returns the path segment relative to this node's model that corresponds to the given canonical path.
+    // Used by validation to resolve a field/collection key from a potentially absolute canonical path.
     internal string ResolveStoragePath(string fieldKey)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fieldKey);
-        return CombineStoragePath(StoragePath, KVPath.NormalizeRelative(fieldKey));
+        return KVPath.NormalizeRelative(fieldKey);
     }
 
     internal string ResolveStoragePathForCanonicalPath(string canonicalPath, string currentCanonicalPath)
@@ -320,48 +312,28 @@ public abstract class KVNode: IKVNode
 
         if (string.IsNullOrWhiteSpace(normalizedPath))
         {
-            return StoragePath;
+            return string.Empty;
         }
 
         if (string.IsNullOrWhiteSpace(normalizedCurrentPath))
         {
-            return CombineStoragePath(StoragePath, normalizedPath);
+            return normalizedPath;
         }
 
         if (string.Equals(normalizedPath, normalizedCurrentPath, StringComparison.Ordinal))
         {
-            return StoragePath;
+            return string.Empty;
         }
 
         if (KVPath.IsSameOrDescendant(normalizedPath, normalizedCurrentPath))
         {
-            var relativePath = normalizedPath[(normalizedCurrentPath.Length + 1)..];
-            return CombineStoragePath(StoragePath, relativePath);
+            return normalizedPath[(normalizedCurrentPath.Length + 1)..];
         }
 
-        return CombineStoragePath(StoragePath, normalizedPath);
+        return normalizedPath;
     }
 
-    internal string GetCanonicalPath()
-    {
-        if (Parent is null)
-        {
-            return string.Empty;
-        }
-
-        if (Parent is KVNode parentNode)
-        {
-            return BuildPath(parentNode.GetCanonicalPath(), _boundSubSegmentPath ?? Definition.SubSegmentPath);
-        }
-
-        if (Parent is IKVCollectionNode collectionNode && collectionNode.Parent is KVNode collectionParent)
-        {
-            var collectionPath = BuildPath(collectionParent.GetCanonicalPath(), collectionNode.Definition.SubSegmentPath);
-            return BuildPath(collectionPath, _boundSubSegmentPath ?? string.Empty);
-        }
-
-        return _boundSubSegmentPath ?? Definition.SubSegmentPath;
-    }
+    internal string GetCanonicalPath() => Model?.DataPath ?? string.Empty;
 
     internal void EmitChange(string canonicalPath, object? oldValue, object? newValue)
     {
@@ -370,12 +342,7 @@ public abstract class KVNode: IKVNode
 
     internal void RebindCurrentContextForPatch()
     {
-        Bind(Model, Definition, Parent, _boundSubSegmentPath, StoragePath);
-    }
-
-    private static string BuildPath(string prefix, string segment)
-    {
-        return KVPath.Combine(prefix, segment);
+        Bind(Model, Definition, Parent);
     }
 
     internal KVNestedNode? GetActiveNestedNode(KVNestedNodeDefinition definition, KVModel nestedModel)
@@ -397,7 +364,7 @@ public abstract class KVNode: IKVNode
         DetachActiveNestedNode(definition.SubSegmentPath);
         var typeDefinition = definition.GetTypeDefinition(typeToken);
         var node = (KVNestedNode)Activator.CreateInstance(typeDefinition.ModelType)!;
-        node.BindRuntime(nestedModel, typeDefinition.NodeDefinition, this, definition.SubSegmentPath, storagePathOverride: string.Empty);
+        node.BindRuntime(nestedModel, typeDefinition.NodeDefinition, this);
         _activeNestedNodes[definition.SubSegmentPath] = new ActiveNestedNode(node, typeToken, nestedModel);
         return node;
     }

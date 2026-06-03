@@ -10,6 +10,9 @@ public sealed class InsuranceClaimAggregateService(
     IDocumentSession session,
     InsuranceClaimDefinitionFactory definitionFactory)
 {
+    private static readonly JsonSerializerOptions PatchJsonOptions = new(JsonSerializerDefaults.Web);
+    private const string StructureValue = "{...}";
+
     public async Task<ClaimSnapshotResponse> CreateClaimAsync(CreateClaimRequest request, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(request.ClaimNumber);
@@ -31,6 +34,7 @@ public sealed class InsuranceClaimAggregateService(
         root.Policy.CoverageType = request.CoverageType;
 
         var commit = root.CreateCommit(DateTimeOffset.UtcNow);
+        var changes = ProjectCommitChanges(snapshot.Clone(), commit);
         snapshot.Apply(commit);
 
         session.Store(new ClaimSnapshotDocument
@@ -42,7 +46,8 @@ public sealed class InsuranceClaimAggregateService(
         {
             Id = commit.CommitId,
             ClaimId = snapshot.AggregateId,
-            Commit = commit
+            Commit = commit,
+            Changes = changes
         });
         await session.SaveChangesAsync(cancellationToken);
 
@@ -166,6 +171,7 @@ public sealed class InsuranceClaimAggregateService(
         NormalizeOverlay(overlay);
         var root = Bind(overlay);
         var commit = root.CreateCommit(DateTimeOffset.UtcNow);
+        var changes = ProjectCommitChanges(snapshotDocument.Snapshot.Clone(), commit);
 
         snapshotDocument.Snapshot.Apply(commit);
         if (!string.IsNullOrWhiteSpace(request.User))
@@ -179,7 +185,8 @@ public sealed class InsuranceClaimAggregateService(
         {
             Id = commit.CommitId,
             ClaimId = claimId,
-            Commit = commit
+            Commit = commit,
+            Changes = changes
         });
         session.Delete<ClaimOverlayDocument>(draftId);
         await session.SaveChangesAsync(cancellationToken);
@@ -198,21 +205,23 @@ public sealed class InsuranceClaimAggregateService(
             .ToListAsync(cancellationToken);
 
         return documents
-            .OrderBy(document => document.Commit.Timestamp)
+            .OrderByDescending(document => document.Commit.Timestamp)
             .Select(document => new ClaimChangeSetResponse(
                 document.Commit.CommitId,
                 document.Commit.PreviousCommitId,
                 document.Commit.User,
                 document.Commit.Timestamp,
                 document.Commit.AddedOrChanged.Keys.Order(StringComparer.Ordinal).ToArray(),
-                document.Commit.Removed.Order(StringComparer.Ordinal).ToArray()))
+                document.Commit.Removed.Order(StringComparer.Ordinal).ToArray(),
+                document.Changes.Count > 0
+                    ? document.Changes
+                    : ProjectCommitChanges(null, document.Commit)))
             .ToArray();
     }
 
     private InsuranceClaim Bind(KVOverlay overlay)
     {
-        var model = KVModelRoot.Create(overlay, definitionFactory.Definition);
-        return KVRootNode.Create<InsuranceClaim>(model, definitionFactory.Definition);
+        return KVRootNode.Create<InsuranceClaim>(overlay, definitionFactory.Definition);
     }
 
     private static bool IsDraftBasedOnLatestSnapshot(ClaimOverlayDocument draft, KVSnapshot latestSnapshot)
@@ -245,9 +254,101 @@ public sealed class InsuranceClaimAggregateService(
             ProjectClaim(root),
             overlay.BaseSnapshotVersion,
             overlay.BaseCommitId,
-            root.GetAllChanges().Changes
-                .Select(change => new ClaimChangeResponse(change.Path, change.ChangeType.ToString()))
-                .ToArray());
+            ProjectOverlayChanges(overlay, root.GetAllChanges().Changes));
+    }
+
+    private static IReadOnlyList<ClaimChangeResponse> ProjectOverlayChanges(KVOverlay overlay, IEnumerable<KVChangeDelta> changes)
+    {
+        return changes
+            .Select(change => new ClaimChangeResponse(
+                NormalizeDisplayPath(change.Path),
+                change.ChangeType.ToString(),
+                ProjectPathValue(overlay.Snapshot, change.Path),
+                ProjectPathValue(overlay, change.Path)))
+            .GroupBy(change => change.Path, StringComparer.Ordinal)
+            .Select(group => MergeChanges(group))
+            .OrderBy(change => change.Path, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<ClaimChangeResponse> ProjectCommitChanges(KVSnapshot? beforeSnapshot, KVCommit commit)
+    {
+        var changes = new List<ClaimChangeResponse>();
+        foreach (var pair in commit.AddedOrChanged.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            changes.Add(new ClaimChangeResponse(
+                NormalizeDisplayPath(pair.Key),
+                beforeSnapshot is not null && beforeSnapshot.TryGet(pair.Key, out _) ? "Updated" : "Added",
+                ProjectPathValue(beforeSnapshot, pair.Key),
+                pair.Value.Value));
+        }
+
+        foreach (var removed in commit.Removed.Order(StringComparer.Ordinal))
+        {
+            changes.Add(new ClaimChangeResponse(
+                NormalizeDisplayPath(removed),
+                "Removed",
+                ProjectPathValue(beforeSnapshot, removed),
+                null));
+        }
+
+        return changes
+            .GroupBy(change => change.Path, StringComparer.Ordinal)
+            .Select(group => MergeChanges(group))
+            .OrderBy(change => change.Path, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static ClaimChangeResponse MergeChanges(IEnumerable<ClaimChangeResponse> changes)
+    {
+        var ordered = changes.ToArray();
+        var selected = ordered.FirstOrDefault(change => change.ChangeType == "Removed")
+                       ?? ordered.FirstOrDefault(change => change.ChangeType == "Updated")
+                       ?? ordered.First();
+
+        return selected with
+        {
+            OldValue = ordered.FirstOrDefault(change => change.OldValue is not null)?.OldValue,
+            NewValue = ordered.LastOrDefault(change => change.NewValue is not null)?.NewValue
+        };
+    }
+
+    private static string NormalizeDisplayPath(string path)
+    {
+        var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Where(segment => segment is not "$type" and not "$id")
+            .ToArray();
+        return string.Join('/', segments);
+    }
+
+    private static object? ProjectPathValue(KVSnapshot? snapshot, string path)
+    {
+        if (snapshot is null)
+        {
+            return null;
+        }
+
+        return snapshot.TryGet(path, out var value) && value is not null
+            ? value.Value
+            : snapshot.ContainsPathOrDescendant(path) ? StructureValue : null;
+    }
+
+    private static object? ProjectPathValue(KVOverlay overlay, string path)
+    {
+        return overlay.TryGet(path, out var value) && value is not null
+            ? value.Value
+            : overlay.Keys.Any(key => KVPathIsSameOrDescendant(key, path)) ? StructureValue : null;
+    }
+
+    private static bool KVPathIsSameOrDescendant(string path, string ancestorPath)
+    {
+        if (string.IsNullOrWhiteSpace(ancestorPath))
+        {
+            return true;
+        }
+
+        return string.Equals(path, ancestorPath, StringComparison.Ordinal)
+               || path.StartsWith(ancestorPath + "/", StringComparison.Ordinal);
     }
 
     private static ClaimDataResponse ProjectClaim(InsuranceClaim root)
@@ -297,7 +398,7 @@ public sealed class InsuranceClaimAggregateService(
 
     private static KVAddPatchPayload ToAddPayload(JsonElement? value)
     {
-        return value?.Deserialize<KVAddPatchPayload>()
+        return value?.Deserialize<KVAddPatchPayload>(PatchJsonOptions)
                ?? throw new InvalidOperationException("ADD patch operations require a KVAddPatchPayload value.");
     }
 
@@ -310,7 +411,7 @@ public sealed class InsuranceClaimAggregateService(
 
         return value.Value.ValueKind == JsonValueKind.Number
             ? value.Value.GetInt32()
-            : value.Value.Deserialize<KVMovePatchPayload>()!;
+            : value.Value.Deserialize<KVMovePatchPayload>(PatchJsonOptions)!;
     }
 
     private static string ToRequiredString(JsonElement? value, string operation)
@@ -334,16 +435,11 @@ public sealed class InsuranceClaimAggregateService(
     private static void NormalizeOverlay(KVOverlay overlay)
     {
         NormalizeSnapshot(overlay.Snapshot);
-        overlay.AddedOrChanged = new Dictionary<string, object?>(
-            overlay.AddedOrChanged.Select(pair => new KeyValuePair<string, object?>(pair.Key, NormalizeValue(pair.Value))),
-            StringComparer.Ordinal);
     }
 
     private static void NormalizeSnapshot(KVSnapshot snapshot)
     {
-        snapshot.Data = new Dictionary<string, object?>(
-            snapshot.Data.Select(pair => new KeyValuePair<string, object?>(pair.Key, NormalizeValue(pair.Value))),
-            StringComparer.Ordinal);
+        snapshot.Data = new Dictionary<string, KVValue>(snapshot.Data, StringComparer.Ordinal);
     }
 
     private static object? NormalizeValue(object? value)

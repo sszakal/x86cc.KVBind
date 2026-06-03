@@ -3,17 +3,19 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { ChangeTreeTableComponent } from './change-tree-table.component';
 import { ClaimApiService, ClaimDraftResponse, ClaimPatchOperationRequest, StaleDraftResponse } from './claim-api.service';
 
 @Component({
   selector: 'app-claim-draft',
-  imports: [CommonModule, FormsModule, RouterModule],
+  imports: [CommonModule, FormsModule, RouterModule, ChangeTreeTableComponent],
   templateUrl: './claim-draft.component.html',
 })
 export class ClaimDraftComponent implements OnInit {
   claimId = '';
   draftId = '';
   draft: ClaimDraftResponse | null = null;
+  activeTab: 'edit' | 'overlay' = 'edit';
   error = '';
   staleDraft: StaleDraftResponse | null = null;
   saving = false;
@@ -62,6 +64,12 @@ export class ClaimDraftComponent implements OnInit {
       { operationCode: 'ADD', path: '/DamagedItems', value: { itemId } },
       { operationCode: 'SET', path: `/DamagedItems/${itemId}/Description`, value: this.itemDescription },
       { operationCode: 'SET', path: `/DamagedItems/${itemId}/EstimatedAmount`, value: this.itemAmount },
+    ]);
+  }
+
+  removeDamagedItem(itemId: string): void {
+    this.patch([
+      { operationCode: 'REMOVE', path: `/DamagedItems/${itemId}` },
     ]);
   }
 

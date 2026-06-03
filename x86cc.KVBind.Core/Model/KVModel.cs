@@ -10,7 +10,7 @@ public class KVModel
 
     public Dictionary<string, KVModel> ChildModels { get; } = new(StringComparer.Ordinal);
 
-    private readonly HashSet<string> _removedChildModels = new(StringComparer.Ordinal);
+    internal bool IsCollection { get; private set; }
 
     public KVOverlay Overlay { get; private set; }
 
@@ -26,24 +26,42 @@ public class KVModel
     {
     }
 
-    internal KVModel(KVOverlay overlay, string dataPath)
+    internal KVModel(KVOverlay overlay, string dataPath, bool isCollection = false)
     {
         Overlay = overlay ?? throw new ArgumentNullException(nameof(overlay));
         DataPath = KVPath.Normalize(dataPath);
+        IsCollection = isCollection;
     }
 
     public TValue Get<TValue>(string segment)
     {
         if (ChildModels.ContainsKey(segment)) throw new InvalidOperationException("Child store access");
 
-        Overlay.TryGet(ResolveDataPath(segment), out var value);
-        return (TValue)value!;
+        if (!Overlay.TryGet(ResolveDataPath(segment), out var value) || value?.Value is null)
+        {
+            return default!;
+        }
+
+        return value.Value is TValue typed
+            ? typed
+            : throw new InvalidCastException($"Stored value '{ResolveDataPath(segment)}' is '{value.Value.GetType().FullName}', not '{typeof(TValue).FullName}'.");
+    }
+
+    internal bool TryGetValue(string segment, out KVValue? value)
+    {
+        if (ChildModels.ContainsKey(segment)) throw new InvalidOperationException("Child store access");
+        return Overlay.TryGet(ResolveDataPath(segment), out value);
     }
 
     public void Set<TValue>(string segment, TValue value)
     {
         if (ChildModels.ContainsKey(segment)) throw new InvalidOperationException("Child store access");
+        Overlay.Set(ResolveDataPath(segment), new KVValue<TValue>(value));
+    }
 
+    internal void SetValue(string segment, KVValue value)
+    {
+        if (ChildModels.ContainsKey(segment)) throw new InvalidOperationException("Child store access");
         Overlay.Set(ResolveDataPath(segment), value);
     }
 
@@ -63,26 +81,35 @@ public class KVModel
             ChildModels[key] = child;
         }
 
-        _removedChildModels.Remove(key);
         return child;
     }
 
-    public KVCollectionModel EnsureCollectionModel(string key)
+    public KVModel EnsureCollectionModel(string key)
     {
         ArgumentNullException.ThrowIfNullOrWhiteSpace(key);
 
         if (!ChildModels.TryGetValue(key, out var child))
         {
-            var collection = new KVCollectionModel(Overlay, ResolveDataPath(key));
-            ChildModels[key] = collection;
-            _removedChildModels.Remove(key);
-            return collection;
+            child = new KVModel(Overlay, ResolveDataPath(key), isCollection: true);
+            ChildModels[key] = child;
         }
 
-        _removedChildModels.Remove(key);
+        return child;
+    }
 
-        return child as KVCollectionModel
-               ?? throw new InvalidOperationException($"Child model '{key}' is not a collection model.");
+    public KVModel EnsureItemModel(string key)
+    {
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(key);
+
+        if (!ChildModels.TryGetValue(key, out var child))
+        {
+            child = new KVModel(Overlay, ResolveDataPath(key));
+            ChildModels[key] = child;
+        }
+
+        // Un-remove the path so re-adding a previously deleted item works correctly.
+        Overlay.RestorePath(ResolveDataPath(key));
+        return child;
     }
 
     public void MarkChildRemoved(string key)
@@ -99,28 +126,18 @@ public class KVModel
         if (!child.IsSnapshotBacked())
         {
             ChildModels.Remove(key);
-            _removedChildModels.Remove(key);
-            return;
         }
-
-        _removedChildModels.Add(key);
     }
 
     public void UnmarkChildRemoved(string key)
     {
         ArgumentNullException.ThrowIfNullOrWhiteSpace(key);
-        _removedChildModels.Remove(key);
         Overlay.RestorePath(ResolveDataPath(key));
     }
 
     public bool IsChildRemoved(string key)
     {
         ArgumentNullException.ThrowIfNullOrWhiteSpace(key);
-        if (_removedChildModels.Contains(key))
-        {
-            return true;
-        }
-
         return Overlay.IsRemoved(ResolveDataPath(key));
     }
 
@@ -144,12 +161,30 @@ public class KVModel
         return keys;
     }
 
+    internal IReadOnlyList<string> DirectChildKeys()
+    {
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var path in Overlay.Keys)
+        {
+            var relative = KVPath.RelativeTo(path, DataPath);
+            if (string.IsNullOrWhiteSpace(relative))
+            {
+                continue;
+            }
+
+            var firstSlash = relative.IndexOf('/');
+            keys.Add(firstSlash < 0 ? relative : relative[..firstSlash]);
+        }
+
+        return new List<string>(keys);
+    }
+
     internal void PruneDraftChildren(string discardedPath)
     {
         foreach (var child in new List<KeyValuePair<string, KVModel>>(ChildModels))
         {
             child.Value.PruneDraftChildren(discardedPath);
-            if (this is KVCollectionModel
+            if (IsCollection
                 && KVPath.IsSameOrDescendant(child.Value.DataPath, discardedPath)
                 && !child.Value.IsSnapshotBacked())
             {
@@ -158,101 +193,65 @@ public class KVModel
         }
     }
 
-    internal void ClearRemovedChildMarks(string discardedPath)
-    {
-        foreach (var removedChild in new List<string>(_removedChildModels))
-        {
-            var childPath = KVPath.Combine(DataPath, removedChild);
-            if (KVPath.IsSameOrDescendant(childPath, discardedPath))
-            {
-                _removedChildModels.Remove(removedChild);
-            }
-        }
-
-        foreach (var child in ChildModels.Values)
-        {
-            child.ClearRemovedChildMarks(discardedPath);
-        }
-    }
-
     internal KVChangeDeltaGroup ComputeNodeDeltas(string nodePath, bool isCollectionItem)
     {
         var deltas = new List<KVChangeDelta>();
-        if (true)
+
+        if (!isCollectionItem && !string.IsNullOrWhiteSpace(nodePath) && TryCreateNestedNodeTypeDelta(nodePath, Overlay, out var nestedNodeTypeDelta))
         {
-            if (!isCollectionItem && !string.IsNullOrWhiteSpace(nodePath) && TryCreateNestedNodeTypeDelta(nodePath, Overlay, out var nestedNodeTypeDelta))
+            return new KVChangeDeltaGroup([nestedNodeTypeDelta], []);
+        }
+
+        if (isCollectionItem && !IsSnapshotBacked() && HasDraftState())
+        {
+            return new KVChangeDeltaGroup([new KVChangeDelta(nodePath, KVChangeDeltaType.Added)], []);
+        }
+
+        foreach (var pair in Overlay.DirectDraftValues(DataPath, ChildModels.ContainsKey))
+        {
+            var key = pair.Key;
+            if (IsInternalMetadataKey(key)) continue;
+
+            var dataPath = ResolveDataPath(key);
+            var hasSnapshot = Overlay.TryGetSnapshotValue(dataPath, out var snapshotValue);
+            if (!hasSnapshot)
             {
-                return new KVChangeDeltaGroup([nestedNodeTypeDelta], []);
+                deltas.Add(new KVChangeDelta(KVPath.Combine(nodePath, key), KVChangeDeltaType.Added));
+                continue;
             }
 
-            if (isCollectionItem && !IsSnapshotBacked() && HasDraftState())
+            if (!Equals(snapshotValue, pair.Value))
             {
-                return new KVChangeDeltaGroup([new KVChangeDelta(nodePath, KVChangeDeltaType.Added)], []);
+                deltas.Add(new KVChangeDelta(KVPath.Combine(nodePath, key), KVChangeDeltaType.Updated));
             }
+        }
 
-            foreach (var pair in Overlay.DirectDraftValues(DataPath, ChildModels.ContainsKey))
+        foreach (var removed in Overlay.DirectRemovedValues(DataPath, ChildModels.ContainsKey))
+        {
+            if (IsInternalMetadataKey(removed)) continue;
+            if (Overlay.IsSnapshotBacked(ResolveDataPath(removed)))
             {
-                var key = pair.Key;
-                if (IsInternalMetadataKey(key))
-                {
-                    continue;
-                }
-
-                var dataPath = ResolveDataPath(key);
-                var hasSnapshot = Overlay.TryGetSnapshotValue(dataPath, out var snapshotValue);
-                if (!hasSnapshot)
-                {
-                    deltas.Add(new KVChangeDelta(KVPath.Combine(nodePath, key), KVChangeDeltaType.Added));
-                    continue;
-                }
-
-                if (!Equals(snapshotValue, pair.Value))
-                {
-                    deltas.Add(new KVChangeDelta(KVPath.Combine(nodePath, key), KVChangeDeltaType.Updated));
-                }
-            }
-
-            foreach (var removed in Overlay.DirectRemovedValues(DataPath, ChildModels.ContainsKey))
-            {
-                if (IsInternalMetadataKey(removed))
-                {
-                    continue;
-                }
-
-                var dataPath = ResolveDataPath(removed);
-                if (Overlay.IsSnapshotBacked(dataPath))
-                {
-                    deltas.Add(new KVChangeDelta(KVPath.Combine(nodePath, removed), KVChangeDeltaType.Removed));
-                }
+                deltas.Add(new KVChangeDelta(KVPath.Combine(nodePath, removed), KVChangeDeltaType.Removed));
             }
         }
 
         var children = new List<KVChangeDeltaGroup>();
 
-        foreach (var childKey in _removedChildModels)
+        foreach (var (childKey, childModel) in ChildModels)
         {
-            if (!ChildModels.TryGetValue(childKey, out var childModel) || !childModel.IsSnapshotBacked())
+            var childPath = KVPath.Combine(nodePath, childKey);
+
+            if (Overlay.IsRemoved(childModel.DataPath))
             {
+                if (childModel.IsSnapshotBacked())
+                {
+                    deltas.Add(new KVChangeDelta(childPath, KVChangeDeltaType.Removed));
+                }
                 continue;
             }
 
-            deltas.Add(new KVChangeDelta(KVPath.Combine(nodePath, childKey), KVChangeDeltaType.Removed));
-        }
-
-        foreach (var child in ChildModels)
-        {
-            if (_removedChildModels.Contains(child.Key))
-            {
-                continue;
-            }
-
-            var childPath = KVPath.Combine(nodePath, child.Key);
-            var childDeltas = child.Value.ComputeNodeDeltas(childPath, this is KVCollectionModel);
-            if (childDeltas.Deltas.Count == 0 && childDeltas.Children.Count == 0)
-            {
-                continue;
-            }
-
+            var childDeltas = childModel.ComputeNodeDeltas(childPath, IsCollection);
+            if (childDeltas.Deltas.Count == 0 && childDeltas.Children.Count == 0) continue;
             children.Add(childDeltas);
         }
 
@@ -265,26 +264,15 @@ public class KVModel
         return KVPath.Combine(DataPath, KVPath.Normalize(segment));
     }
 
-    private bool IsSnapshotBacked()
-    {
-        return Overlay.IsSnapshotBacked(DataPath);
-    }
+    private bool IsSnapshotBacked() => Overlay.IsSnapshotBacked(DataPath);
 
     private bool HasDraftState()
     {
-        if (Overlay.HasDraftState(DataPath))
-        {
-            return true;
-        }
-
+        if (Overlay.HasDraftState(DataPath)) return true;
         foreach (var child in ChildModels.Values)
         {
-            if (child.HasDraftState())
-            {
-                return true;
-            }
+            if (child.HasDraftState()) return true;
         }
-
         return false;
     }
 
@@ -294,19 +282,12 @@ public class KVModel
         var typePath = KVPath.Combine(nodePath, InternalTypeKey);
         if (overlay.HasRemovedPath(typePath))
         {
-            if (!overlay.TryGetSnapshotValue(typePath, out _))
-            {
-                return false;
-            }
-
+            if (!overlay.TryGetSnapshotValue(typePath, out _)) return false;
             delta = new KVChangeDelta(nodePath, KVChangeDeltaType.Removed);
             return true;
         }
 
-        if (!overlay.TryGetDraftValue(typePath, out var overlayValue))
-        {
-            return false;
-        }
+        if (!overlay.TryGetDraftValue(typePath, out var overlayValue)) return false;
 
         var hasSnapshot = overlay.TryGetSnapshotValue(typePath, out var snapshotValue);
         if (!hasSnapshot)
@@ -329,5 +310,4 @@ public class KVModel
         return string.Equals(key, InternalIdKey, StringComparison.Ordinal)
                || string.Equals(key, InternalTypeKey, StringComparison.Ordinal);
     }
-
 }

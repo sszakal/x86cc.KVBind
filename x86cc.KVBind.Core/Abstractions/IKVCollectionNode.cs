@@ -6,13 +6,13 @@ namespace x86cc.KVBind.Core.Abstractions;
 public interface IKVCollectionNode
     : IKVNode
 {
-    KVCollectionModel Model { get; }
+    KVModel Model { get; }
 
     KVCollectionDefinition Definition { get; }
 
     IKVNode? Parent { get; }
 
-    void Bind(KVCollectionModel model, KVCollectionDefinition definition, IKVNode? parent = null);
+    void Bind(KVModel model, KVCollectionDefinition definition, IKVNode? parent = null);
 
     KVNode? GetById(string itemId);
 

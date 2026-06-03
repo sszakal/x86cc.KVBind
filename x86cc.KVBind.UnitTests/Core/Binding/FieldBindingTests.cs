@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Meziantou.Framework.InlineSnapshotTesting;
+using System.Text.Json;
 using x86cc.KVBind.Core;
 using x86cc.KVBind.Core.Model;
 
@@ -79,7 +80,7 @@ public class FieldBindingTests : KVModelTestBase
         model.Overlay.AddedOrChanged.Should().ContainKey("BooleanField").WhoseValue.Should().Be(true);
         model.Overlay.AddedOrChanged.Should().ContainKey("StringField").WhoseValue.Should().Be("notes");
         model.Overlay.AddedOrChanged.Should().ContainKey("StructField").WhoseValue.Should().Be(structValue);
-        model.Overlay.AddedOrChanged.Should().ContainKey("ArrayOfSmartEnums").WhoseValue.Should().BeEquivalentTo(arrayOfSmartEnums);
+        model.Overlay.AddedOrChanged.Should().ContainKey("ArrayOfSmartEnums").WhoseValue.Value.Should().BeEquivalentTo(arrayOfSmartEnums);
     }
 
     [Fact]
@@ -171,6 +172,67 @@ public class FieldBindingTests : KVModelTestBase
     }
 
     [Fact]
+    public void FieldBinding_WhenValueIsMissing_ReadsClrDefaultValue()
+    {
+        var rootNode = CreateRoot<FieldTestModel>();
+
+        rootNode.BooleanField.Should().BeFalse();
+        rootNode.IntField.Should().Be(0);
+        rootNode.DecimalField.Should().Be(0m);
+        rootNode.GuidField.Should().Be(Guid.Empty);
+        rootNode.StringField.Should().BeNull();
+    }
+
+    [Fact]
+    public void FieldBinding_WhenValueIsStoredAsNull_ReadsClrDefaultValue()
+    {
+        var model = new KVModelRoot();
+        var rootNode = CreateRoot<FieldTestModel>(model);
+        model.Set<object?>(nameof(FieldTestModel.DecimalField), null);
+        model.Set<string?>(nameof(FieldTestModel.StringField), null);
+
+        rootNode.DecimalField.Should().Be(0m);
+        rootNode.StringField.Should().BeNull();
+    }
+
+    [Fact]
+    public void FieldBinding_WhenSnapshotRoundTripsThroughJson_PreservesDateLookingStringAndDateTime()
+    {
+        var model = new KVModelRoot();
+        var rootNode = CreateRoot<FieldTestModel>(model);
+        var dateTimeValue = new DateTime(2027, 1, 1, 7, 15, 0, DateTimeKind.Utc);
+        rootNode.StringField = "2027-01-01";
+        rootNode.DateTimeField = dateTimeValue;
+        CommitSetup(model);
+
+        var restoredSnapshot = JsonSerializer.Deserialize<KVSnapshot>(JsonSerializer.Serialize(model.Snapshot))!;
+        var definition = CreateRegistry().Get<FieldTestModel>();
+        var restoredModel = new KVModelRoot(KVOverlay.Create(restoredSnapshot, TestUser));
+        var restoredRoot = CreateRoot<FieldTestModel>(restoredModel);
+
+        restoredRoot.StringField.Should().Be("2027-01-01");
+        restoredRoot.DateTimeField.Should().Be(dateTimeValue);
+    }
+
+    [Fact]
+    public void FieldBinding_WhenLegacyRawSnapshotJsonIsLoaded_ReadsStringFieldsCorrectly()
+    {
+        var restoredSnapshot = JsonSerializer.Deserialize<KVSnapshot>(
+            """
+            {
+              "Data": {
+                "StringField": "2027-01-01"
+              }
+            }
+            """)!;
+        var definition = CreateRegistry().Get<FieldTestModel>();
+        var restoredModel = new KVModelRoot(KVOverlay.Create(restoredSnapshot, TestUser));
+        var restoredRoot = CreateRoot<FieldTestModel>(restoredModel);
+
+        restoredRoot.StringField.Should().Be("2027-01-01");
+    }
+
+    [Fact]
     public void FieldBinding_WhenEnumValueIsOutsideAllowedSet_StoresRawValueForValidation()
     {
         var rootNode = CreateRoot<FieldTestModel>();
@@ -189,7 +251,7 @@ public class FieldBindingTests : KVModelTestBase
 
         var act = () => _ = rootNode.SmartEnumField;
 
-        act.Should().Throw<InvalidCastException>();
+        act.Should().Throw<InvalidOperationException>();
     }
 }
 
