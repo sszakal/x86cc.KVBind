@@ -220,6 +220,53 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         finalRoot.CompensationType.Should().Be(IntegrationCompensationType.Assistant);
     }
 
+    [Fact]
+    public async Task CollectionOrder_AfterMoveAndCommit_IsPreservedThroughDatabase()
+    {
+        // Three orders created in a specific order, then one is moved.
+        var orderId1 = Guid.Parse("aaaa0001-0000-0000-0000-000000000000");
+        var orderId2 = Guid.Parse("aaaa0002-0000-0000-0000-000000000000");
+        var orderId3 = Guid.Parse("aaaa0003-0000-0000-0000-000000000000");
+
+        var snapshot = new KVSnapshot { AggregateId = Guid.NewGuid(), CreatedBy = "test", ModifiedBy = "test" };
+        var overlay = KVOverlay.Create(snapshot, "test");
+        var root = Bind(overlay);
+        var o1 = root.Orders.Create(orderId1); o1.OrderNumber = "ORD-1";
+        var o2 = root.Orders.Create(orderId2); o2.OrderNumber = "ORD-2";
+        var o3 = root.Orders.Create(orderId3); o3.OrderNumber = "ORD-3";
+
+        // Move third order to front: [orderId3, orderId1, orderId2]
+        root.Orders.MoveById(orderId3.ToString("D"), 0);
+
+        var commit = root.CreateCommit(DateTimeOffset.UtcNow);
+        commit.User = "test";
+        snapshot.Apply(commit);
+
+        // Persist and reload from Postgres
+        await using (var session = Store.LightweightSession())
+        {
+            session.Store(new IntegrationSnapshotDocument { Id = snapshot.AggregateId, Snapshot = snapshot });
+            await session.SaveChangesAsync();
+        }
+
+        IntegrationSnapshotDocument? reloaded;
+        await using (var session = Store.QuerySession())
+        {
+            reloaded = await session.LoadAsync<IntegrationSnapshotDocument>(snapshot.AggregateId);
+        }
+
+        reloaded.Should().NotBeNull();
+        var reloadedRoot = Bind(KVOverlay.Create(reloaded!.Snapshot, "reader"));
+
+        var ids = reloadedRoot.Orders.GetActiveItemIds();
+        ids.Should().BeEquivalentTo(
+            new[] { orderId3.ToString("D"), orderId1.ToString("D"), orderId2.ToString("D") },
+            options => options.WithStrictOrdering());
+        reloadedRoot.Orders.ElementAt(0).OrderNumber.Should().Be("ORD-3");
+        reloadedRoot.Orders.ElementAt(1).OrderNumber.Should().Be("ORD-1");
+        reloadedRoot.Orders.ElementAt(2).OrderNumber.Should().Be("ORD-2");
+    }
+
     private async Task<KVSnapshot> PersistSnapshotAsync(KVSnapshot snapshot)
     {
         await using var session = Store.LightweightSession();

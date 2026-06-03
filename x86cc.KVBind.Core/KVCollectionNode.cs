@@ -8,18 +8,17 @@ using x86cc.KVBind.Core.Model;
 namespace x86cc.KVBind.Core;
 
 // Non-generic base exposes delta computation without requiring the type parameter.
-public abstract class KVCollectionNodeBase : IKVCollectionNode
+public abstract class KVCollectionNodeBase : KVNodeBase, IKVCollectionNode
 {
-    internal abstract string GetCanonicalPath();
     internal abstract KVChangeDeltaGroup ComputeDeltas(string collectionPath);
     public abstract IReadOnlyList<string> GetActiveItemIds();
 
     // Concrete settable properties — subclass sets via protected set.
     public KVModel Model { get; protected set; } = null!;
     public KVCollectionDefinition Definition { get; protected set; } = null!;
-    public IKVNode? Parent { get; protected set; }
+    public KVNodeBase? Parent { get; protected set; }
 
-    public abstract void Bind(KVModel model, KVCollectionDefinition definition, IKVNode? parent = null);
+    public abstract void Bind(KVModel model, KVCollectionDefinition definition, KVNodeBase? parent = null);
 
     // IKVCollectionNode.GetById is explicitly implemented; subclasses provide GetByIdCore.
     KVNode? IKVCollectionNode.GetById(string itemId) => GetByIdCore(itemId);
@@ -45,7 +44,7 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
 
     private string ItemsPath => KVPath.Combine(Model.DataPath, ItemsKey);
 
-    public override void Bind(KVModel model, KVCollectionDefinition definition, IKVNode? parent = null)
+    public override void Bind(KVModel model, KVCollectionDefinition definition, KVNodeBase? parent = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(definition);

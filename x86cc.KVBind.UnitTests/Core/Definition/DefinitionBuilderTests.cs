@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Meziantou.Framework.HumanReadable;
 using Meziantou.Framework.InlineSnapshotTesting;
 using x86cc.KVBind.Core;
+using x86cc.KVBind.Core.Model;
 
 namespace x86cc.KVBind.UnitTests.Core;
 
@@ -208,6 +209,50 @@ public class DefinitionBuilderTests
             }).ToArray(),
             ValidationRules = definition.ValidationRules.Count
         };
+    }
+
+    [Fact]
+    public void DefinitionBuilder_WhenCanonicalKeyDiffersFromPropertyName_UsesCanonicalKeyAsSubSegmentPath()
+    {
+        // Previously ResolveSelectorKey always used Member.Name (the C# property name),
+        // so [KVBind("canonical_key")] on a property named "PropertyName" would mismatch
+        // against the source-generated GetField<T>("canonical_key") call at runtime.
+        var builder = new KVBindBuilder<CanonicalKeyTestModel>();
+        builder.Field(x => x.ClaimNumber);
+
+        var definition = builder.Build();
+
+        // SubSegmentPath must match what the source generator passes to GetField/SetField.
+        definition.Fields.Should().ContainSingle(f => f.SubSegmentPath == "claim_number");
+        definition.Fields.Should().NotContain(f => f.SubSegmentPath == "ClaimNumber");
+    }
+
+    [Fact]
+    public void DefinitionBuilder_WhenCanonicalKeyDiffersFromPropertyName_FieldAccessRoundTrips()
+    {
+        var builder = new KVBindBuilder<CanonicalKeyTestModel>();
+        builder.Field(x => x.ClaimNumber);
+        var definition = builder.Build();
+
+        var model = new KVModelRoot();
+        var root = KVRootNode.Create<CanonicalKeyTestModel>(model, definition);
+
+        root.ClaimNumber = "CLM-001";
+
+        root.ClaimNumber.Should().Be("CLM-001");
+        // Value stored under canonical key, not the C# property name
+        model.Overlay.Changes.Should().ContainKey("claim_number");
+        model.Overlay.Changes.Should().NotContainKey("ClaimNumber");
+    }
+
+    private sealed class CanonicalKeyTestModel : KVRootNode
+    {
+        [KVBind("claim_number")]
+        public string? ClaimNumber
+        {
+            get => GetField<string?>("claim_number");
+            set => SetField("claim_number", value);
+        }
     }
 
     private sealed class BuilderRootNode : KVRootNode

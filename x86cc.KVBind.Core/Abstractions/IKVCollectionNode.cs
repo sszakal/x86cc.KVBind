@@ -5,11 +5,10 @@ using x86cc.KVBind.Core.Model;
 namespace x86cc.KVBind.Core.Abstractions;
 
 public interface IKVCollectionNode
-    : IKVNode
 {
-    IKVNode? Parent { get; }
+    KVNodeBase? Parent { get; }
 
-    void Bind(KVModel model, KVCollectionDefinition definition, IKVNode? parent = null);
+    void Bind(KVModel model, KVCollectionDefinition definition, KVNodeBase? parent = null);
 
     KVNode? GetById(string itemId);
 

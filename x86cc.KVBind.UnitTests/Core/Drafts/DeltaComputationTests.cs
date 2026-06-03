@@ -28,8 +28,10 @@ public class DeltaComputationTests : KVModelTestBase
         RegisterModelDefinition<NestedNodeRoot>(builder =>
         {
             builder.NestedNode(x => x.Animal, nested =>
-                nested.Bind<DogNestedNode>("DOG", dog =>
-                    dog.Field(x => x.DogName, options => options.Required())));
+            {
+                nested.Bind<DogNestedNode>("DOG", dog => dog.Field(x => x.DogName, options => options.Required()));
+                nested.Bind<CatNestedNode>("CAT", cat => cat.Field(x => x.CatName));
+            });
         });
     }
 
@@ -108,5 +110,50 @@ public class DeltaComputationTests : KVModelTestBase
 
         var changes = root.GetAllChanges();
         changes.Changes.Should().ContainSingle(d => d.Path == "Animal" && d.ChangeType == KVChangeDeltaType.Added);
+    }
+
+    [Fact]
+    public void DeltaComputation_WhenFieldValueIsUpdated_EmitsUpdatedDelta()
+    {
+        var model = new KVModelRoot();
+        var root = CreateRoot<ChangeSetTestModel>(model);
+        root.Status = 42;
+        CommitSetup(model);
+        root = CreateRoot<ChangeSetTestModel>(model);
+
+        root.Status = 99;
+
+        var changes = root.GetAllChanges();
+        changes.Changes.Should().ContainSingle(d => d.Path == "Status" && d.ChangeType == KVChangeDeltaType.Updated);
+    }
+
+    [Fact]
+    public void DeltaComputation_WhenFieldGroupFieldIsUpdated_EmitsCanonicalPath()
+    {
+        var model = new KVModelRoot();
+        var root = CreateRoot<ChangeSetTestModel>(model);
+        root.General.Code = "OLD";
+        CommitSetup(model);
+        root = CreateRoot<ChangeSetTestModel>(model);
+
+        root.General.Code = "NEW";
+
+        var changes = root.GetAllChanges();
+        changes.Changes.Should().ContainSingle(d => d.Path == "General/Code" && d.ChangeType == KVChangeDeltaType.Updated);
+    }
+
+    [Fact]
+    public void DeltaComputation_WhenNestedNodeTypeIsReplaced_EmitsUpdatedSlotDelta()
+    {
+        var model = new KVModelRoot();
+        var root = CreateRoot<NestedNodeRoot>(model);
+        root.Patch(KVPatchOperation.Init("/Animal", "DOG"));
+        CommitSetup(model);
+        root = CreateRoot<NestedNodeRoot>(model);
+
+        root.Patch(KVPatchOperation.Init("/Animal", "CAT")); // replace type
+
+        var changes = root.GetAllChanges();
+        changes.Changes.Should().ContainSingle(d => d.Path == "Animal" && d.ChangeType == KVChangeDeltaType.Updated);
     }
 }

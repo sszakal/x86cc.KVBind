@@ -16,7 +16,7 @@ public abstract class KVRootNode : KVNode
 
     public string Version { get => RootModel().Version; set => RootModel().Version = value; }
 
-    protected override void Bind(KVModel model, KVNodeDefinition definition, IKVNode? parent = null)
+    protected override void Bind(KVModel model, KVNodeDefinition definition, KVNodeBase? parent = null)
     {
         if (parent is not null)
             throw new InvalidOperationException("KVRootNode cannot be bound as a child node.");

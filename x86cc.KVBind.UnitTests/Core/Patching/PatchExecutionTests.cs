@@ -73,6 +73,13 @@ public class PatchExecutionTests : KVModelTestBase
                 collection.Item<ChangeSetPatchItemNode>(item => item.Field(x => x.Name));
             });
         });
+
+        RegisterModelDefinition<NestedNodeRoot>(builder =>
+        {
+            builder.NestedNode(x => x.Animal, nested =>
+                nested.Bind<DogNestedNode>("DOG", dog =>
+                    dog.Field(x => x.DogName, options => options.Required())));
+        });
     }
 
     [Fact]
@@ -317,6 +324,59 @@ public class PatchExecutionTests : KVModelTestBase
         Action act = () => CreateRoot<BuiltInOverridePatchModel>();
 
         act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void PatchExecution_WhenUnsetTargetsCommittedField_RemovesFieldAndEmitsRemovedDelta()
+    {
+        var model = new KVModelRoot();
+        var root = CreateRoot<ChangeSetPatchModel>(model);
+        root.Title = "original";
+        CommitSetup(model);
+        root = CreateRoot<ChangeSetPatchModel>(model);
+
+        var result = root.Patch(KVPatchOperation.Unset("/Title"));
+
+        root.Title.Should().BeNull();
+        result.Changes.Should().Contain(c => c.Path == "Title" && c.ChangeType == KVChangeDeltaType.Removed);
+    }
+
+    [Fact]
+    public void PatchExecution_WhenUnsetTargetsDraftOnlyField_ProducesNoDelta()
+    {
+        var root = CreateRoot<ChangeSetPatchModel>();
+        root.Title = "draft-only";
+
+        var result = root.Patch(KVPatchOperation.Unset("/Title"));
+
+        root.Title.Should().BeNull();
+        result.Changes.Should().NotContain(c => c.Path == "Title");
+    }
+
+    [Fact]
+    public void PatchExecution_WhenDropTargetsInitializedNestedNode_ClearsSlotAndEmitsRemovedDelta()
+    {
+        var model = new KVModelRoot();
+        var root = CreateRoot<NestedNodeRoot>(model);
+        root.Patch(KVPatchOperation.Init("/Animal", "DOG"));
+        CommitSetup(model);
+        root = CreateRoot<NestedNodeRoot>(model);
+
+        var result = root.Patch(KVPatchOperation.Drop("/Animal"));
+
+        root.Animal.Should().BeNull();
+        result.Changes.Should().Contain(c => c.Path == "Animal" && c.ChangeType == KVChangeDeltaType.Removed);
+    }
+
+    [Fact]
+    public void PatchExecution_WhenDropTargetsUninitializedNestedNode_IsNoOp()
+    {
+        var root = CreateRoot<NestedNodeRoot>();
+
+        var result = root.Patch(KVPatchOperation.Drop("/Animal"));
+
+        root.Animal.Should().BeNull();
+        result.Changes.Should().BeEmpty();
     }
 }
 

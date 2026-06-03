@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace x86cc.KVBind.Core;
 
@@ -284,7 +285,10 @@ public sealed class KVBindBuilder<TEntity>
             throw new ArgumentException("Selector must target a property.", nameof(selector));
         }
 
-        return memberExpression.Member.Name;
+        // Prefer the canonical key declared in [KVBind("key")] over the C# property name.
+        // This is the same key the source generator uses for GetField/SetField calls.
+        var kvBind = memberExpression.Member.GetCustomAttribute<KVBindAttribute>();
+        return kvBind?.CanonicalKey ?? memberExpression.Member.Name;
     }
 
 }
