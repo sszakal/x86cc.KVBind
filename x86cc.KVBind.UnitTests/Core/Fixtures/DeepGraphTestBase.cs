@@ -87,25 +87,25 @@ public abstract class DeepGraphTestBase : KVModelTestBase
 public partial class DeepNestedCollectionRoot : KVRootNode
 {
     [KVBind(nameof(Level1Collection))]
-    public KVCollectionNode<DeepLevel1Item> Level1Collection { get; set; } = new();
+    public KVCollectionNode<DeepLevel1Item> Level1Collection { get; } = new();
 }
 
 public partial class DeepLevel1Item : KVCollectionItemNode
 {
     [KVBind(nameof(Level2Collection))]
-    public KVCollectionNode<DeepLevel2Item> Level2Collection { get; set; } = new();
+    public KVCollectionNode<DeepLevel2Item> Level2Collection { get; } = new();
 }
 
 public partial class DeepLevel2Item : KVCollectionItemNode
 {
     [KVBind(nameof(Level3Collection))]
-    public KVCollectionNode<DeepLevel3Item> Level3Collection { get; set; } = new();
+    public KVCollectionNode<DeepLevel3Item> Level3Collection { get; } = new();
 }
 
 public partial class DeepLevel3Item : KVCollectionItemNode
 {
     [KVBind(nameof(Level4Collection))]
-    public KVCollectionNode<DeepLevel4Item> Level4Collection { get; set; } = new();
+    public KVCollectionNode<DeepLevel4Item> Level4Collection { get; } = new();
 }
 
 public partial class DeepLevel4Item : KVCollectionItemNode

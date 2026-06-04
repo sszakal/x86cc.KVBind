@@ -96,27 +96,18 @@ public class FieldGroupBindingTests : KVModelTestBase
             Version:
             """);
     }
-
-    [Fact]
-    public void FieldGroupBinding_WhenFieldGroupInstanceIsNull_ThrowsOnBind()
-    {
-        var model = new FieldGroupTestModel { FirstFieldGroup = null };
-        var act = () => BindRoot(model, new KVModelRoot());
-
-        act.Should().Throw<InvalidOperationException>();
-    }
 }
 
 public partial class FieldGroupTestModel : KVRootNode
 {
     [KVBind(nameof(FirstFieldGroup))]
-    public FieldGroupTestNode? FirstFieldGroup { get; set; } = new(); 
+    public FieldGroupTestNode? FirstFieldGroup { get; } = new(); 
     
     [KVBind(nameof(SecondFieldGroup))]
-    public FieldGroupTestNode? SecondFieldGroup { get; set; } = new();
+    public FieldGroupTestNode? SecondFieldGroup { get; } = new();
     
     [KVBind(nameof(NestedFieldGroups))]
-    public AnotherNestedFieldGroupNode? NestedFieldGroups { get; set; } = new();
+    public AnotherNestedFieldGroupNode? NestedFieldGroups { get; } = new();
 
     [KVBind(nameof(RootName))]
     public partial string RootName { get; set; }
@@ -134,9 +125,9 @@ public partial class FieldGroupTestNode : KVFieldGroupNode
 public partial class AnotherNestedFieldGroupNode : KVFieldGroupNode
 {
     [KVBind("FirstFieldGroup")]
-    public FieldGroupTestNode? FirstFieldGroup { get; set; } = new(); 
+    public FieldGroupTestNode? FirstFieldGroup { get; } = new(); 
     
     [KVBind("SecondFieldGroup")]
-    public FieldGroupTestNode? SecondFieldGroup { get; set; } = new();
+    public FieldGroupTestNode? SecondFieldGroup { get; } = new();
 
 }

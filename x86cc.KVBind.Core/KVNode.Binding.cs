@@ -16,7 +16,9 @@ public abstract partial class KVNode
         ArgumentNullException.ThrowIfNull(definition);
 
         if (!_isDetached && IsBound && (!ReferenceEquals(Parent, parent) || !ReferenceEquals(Definition, definition)))
-            throw new InvalidOperationException("KVNode is already bound to a different context.");
+            throw new InvalidOperationException(
+                $"'{GetType().Name}' is already bound to a different context. " +
+                "Each KVNode instance is tied to exactly one parent context.");
 
         DetachActiveNestedNodes();
         _nestedSlotModels.Clear();
@@ -57,8 +59,16 @@ public abstract partial class KVNode
 
     private void EnsureBound()
     {
-        if (_isDetached || !IsBound)
-            throw new InvalidOperationException("KVNode is not bound.");
+        if (_isDetached)
+            throw new InvalidOperationException(
+                $"'{GetType().Name}' has been detached because its parent was rebound " +
+                "(e.g., after Clear() or Discard()). " +
+                "Re-read this node from its parent property to get the current bound instance.");
+        if (!IsBound)
+            throw new InvalidOperationException(
+                $"'{GetType().Name}' is not bound. " +
+                "Do not instantiate KVNode subclasses directly with 'new'. " +
+                "Use KVRootNode.Create<T>() for root nodes or collection.Create() for items.");
     }
 
     private void DetachRuntime()

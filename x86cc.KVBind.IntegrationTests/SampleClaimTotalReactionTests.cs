@@ -10,7 +10,7 @@ public sealed class SampleClaimTotalReactionTests
     [Fact]
     public void DamagedItemChanges_RecalculateClaimedTotal()
     {
-        var definition = new InsuranceClaimDefinitionFactory().Definition;
+        var definition = new InsuranceClaimDefinitionBuilder().Build();
         var snapshot = new KVSnapshot();
         var overlay = KVOverlay.Create(snapshot, "adjuster-a");
         var claim = Bind(overlay, definition);

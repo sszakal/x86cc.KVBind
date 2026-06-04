@@ -386,10 +386,10 @@ public partial class ChangeSetPatchModel : KVRootNode
     public partial string Title { get; set; }
 
     [KVBind("General")]
-    public ChangeSetPatchGeneralNode General { get; set; } = new();
+    public ChangeSetPatchGeneralNode General { get; } = new();
 
     [KVBind("Items")]
-    public KVCollectionNode<ChangeSetPatchItemNode> Items { get; set; } = new();
+    public KVCollectionNode<ChangeSetPatchItemNode> Items { get; } = new();
 }
 
 public partial class ChangeSetPatchGeneralNode : KVFieldGroupNode
@@ -410,7 +410,7 @@ public partial class ChangeSetPatchItemNode : KVCollectionItemNode
 public partial class CustomOperationPatchModel : KVRootNode
 {
     [KVBind("Items")]
-    public KVCollectionNode<ChangeSetPatchItemNode> Items { get; set; } = new();
+    public KVCollectionNode<ChangeSetPatchItemNode> Items { get; } = new();
 
     public int GroupInvocations { get; private set; }
 
@@ -424,7 +424,7 @@ public partial class CustomOperationPatchModel : KVRootNode
 public partial class ConventionCustomOperationPatchModel : KVRootNode
 {
     [KVBind("Items")]
-    public KVCollectionNode<ChangeSetPatchItemNode> Items { get; set; } = new();
+    public KVCollectionNode<ChangeSetPatchItemNode> Items { get; } = new();
 
     public void GroupItems(ItemsToGroup argument)
     {
@@ -435,7 +435,7 @@ public partial class ConventionCustomOperationPatchModel : KVRootNode
 public partial class BuiltInOverridePatchModel : KVRootNode
 {
     [KVBind("Items")]
-    public KVCollectionNode<ChangeSetPatchItemNode> Items { get; set; } = new();
+    public KVCollectionNode<ChangeSetPatchItemNode> Items { get; } = new();
 
     public void GroupItems(ItemsToGroup argument)
     {
@@ -447,7 +447,7 @@ public sealed record ItemsToGroup(Guid ItemId);
 public partial class PolymorphicPatchModel : KVRootNode
 {
     [KVBind("Items")]
-    public KVCollectionNode<ChangeSetPatchItemNode> Items { get; set; } = new();
+    public KVCollectionNode<ChangeSetPatchItemNode> Items { get; } = new();
 }
 
 public partial class SpecialChangeSetPatchItemNode : ChangeSetPatchItemNode
@@ -459,13 +459,13 @@ public partial class SpecialChangeSetPatchItemNode : ChangeSetPatchItemNode
 public partial class NestedPatchModel : KVRootNode
 {
     [KVBind("OuterItems")]
-    public KVCollectionNode<NestedPatchOuterItemNode> OuterItems { get; set; } = new();
+    public KVCollectionNode<NestedPatchOuterItemNode> OuterItems { get; } = new();
 }
 
 public partial class NestedPatchOuterItemNode : KVCollectionItemNode
 {
     [KVBind("InnerItems")]
-    public KVCollectionNode<NestedPatchInnerItemNode> InnerItems { get; set; } = new();
+    public KVCollectionNode<NestedPatchInnerItemNode> InnerItems { get; } = new();
 }
 
 public partial class NestedPatchInnerItemNode : KVCollectionItemNode

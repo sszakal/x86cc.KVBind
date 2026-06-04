@@ -253,10 +253,10 @@ public partial class ChangeSetTestModel : KVRootNode
     public partial int Status { get; set; }
 
     [KVBind("General")]
-    public ChangeSetGeneralGroup General { get; set; } = new();
+    public ChangeSetGeneralGroup General { get; } = new();
 
     [KVBind("Items")]
-    public KVCollectionNode<ChangeSetItemNode> Items { get; set; } = new();
+    public KVCollectionNode<ChangeSetItemNode> Items { get; } = new();
 
 }
 

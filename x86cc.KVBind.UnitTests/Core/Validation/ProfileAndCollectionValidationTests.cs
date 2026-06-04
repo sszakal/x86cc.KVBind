@@ -143,7 +143,7 @@ public partial class CollectionAdvancedValidationModel : KVRootNode
     public partial ValidationMode Mode { get; set; }
 
     [KVBind("Items")]
-    public KVCollectionNode<CollectionAdvancedValidationItem> Items { get; set; } = new();
+    public KVCollectionNode<CollectionAdvancedValidationItem> Items { get; } = new();
 
     protected override KVValidationProfile GetValidationProfile()
     {
@@ -163,7 +163,7 @@ public partial class CollectionBadAggregateValidationModel : KVRootNode
     public partial ValidationMode Mode { get; set; }
 
     [KVBind("Items")]
-    public KVCollectionNode<CollectionBadAggregateValidationItem> Items { get; set; } = new();
+    public KVCollectionNode<CollectionBadAggregateValidationItem> Items { get; } = new();
 
     protected override KVValidationProfile GetValidationProfile()
     {

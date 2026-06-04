@@ -311,22 +311,22 @@ public class CollectionBindingTests : KVModelTestBase
 public partial class CollectionTestModel : KVRootNode
 {
     [KVBind("CollectionKey1")]
-    public KVCollectionNode<FieldGroupNode> CollectionKey1 { get; set; } = new();
+    public KVCollectionNode<FieldGroupNode> CollectionKey1 { get; } = new();
 
     [KVBind("CollectionKey2")]
-    public KVCollectionNode<FieldGroupNode> CollectionKey2 { get; set; } = new();
+    public KVCollectionNode<FieldGroupNode> CollectionKey2 { get; } = new();
 }
 
 public partial class PolymorphicCollectionTestModel : KVRootNode
 {
     [KVBind("Items")]
-    public KVCollectionNode<FieldGroupNode> Items { get; set; } = new();
+    public KVCollectionNode<FieldGroupNode> Items { get; } = new();
 }
 
 public partial class InvalidPolymorphicCollectionTestModel : KVRootNode
 {
     [KVBind("Items")]
-    public KVCollectionNode<FieldGroupNode> Items { get; set; } = new();
+    public KVCollectionNode<FieldGroupNode> Items { get; } = new();
 }
 
 public partial class FieldGroupNode : KVCollectionItemNode
@@ -353,23 +353,23 @@ public partial class AnotherSpecialFieldGroupNode : FieldGroupNode
 public partial class MissingCollectionDeclarationModel : KVRootNode
 {
     [KVBind("Items")]
-    public KVCollectionNode<FieldGroupNode> Items { get; set; } = new();
+    public KVCollectionNode<FieldGroupNode> Items { get; } = new();
 }
 
 public partial class DefaultItemIdCollectionTestModel : KVRootNode
 {
     [KVBind("Items")]
-    public KVCollectionNode<FieldGroupNode> Items { get; set; } = new();
+    public KVCollectionNode<FieldGroupNode> Items { get; } = new();
 }
 
 public partial class NestedCollectionTestModel : KVRootNode
 {
     [KVBind(nameof(Level1Collection))]
-    public KVCollectionNode<NodeItemWithCollection> Level1Collection { get; set; } = new();
+    public KVCollectionNode<NodeItemWithCollection> Level1Collection { get; } = new();
 }
 
 public partial class NodeItemWithCollection : KVCollectionItemNode
 {
     [KVBind(nameof(Level2Collection))]
-    public KVCollectionNode<FieldGroupNode> Level2Collection { get; set; } = new();
+    public KVCollectionNode<FieldGroupNode> Level2Collection { get; } = new();
 }

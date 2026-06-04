@@ -94,7 +94,7 @@ public partial class GroupValidationRootModel : KVRootNode
     public partial string Title { get; set; }
 
     [KVBind("Details")]
-    public GroupValidationDetailsNode Details { get; set; } = new();
+    public GroupValidationDetailsNode Details { get; } = new();
 
     protected override KVValidationProfile GetValidationProfile()
     {

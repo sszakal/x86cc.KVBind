@@ -140,10 +140,10 @@ public partial class ValidationChangeSetModel : KVRootNode
     public partial string Name { get; set; }
 
     [KVBind("General")]
-    public ValidationChangeSetGeneralNode General { get; set; } = new();
+    public ValidationChangeSetGeneralNode General { get; } = new();
 
     [KVBind("Items")]
-    public KVCollectionNode<ValidationChangeSetItemNode> Items { get; set; } = new();
+    public KVCollectionNode<ValidationChangeSetItemNode> Items { get; } = new();
 }
 
 public partial class ValidationChangeSetGeneralNode : KVFieldGroupNode
