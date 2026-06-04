@@ -28,6 +28,11 @@ public sealed class KVBindBuilder<TEntity>
 
     private bool _isBuilt;
 
+    // Forward reference to the definition being built — use for self-referential or
+    // mutually-recursive nested node declarations. Call Build() after all declarations
+    // are complete; SelfReference exposes the same object without locking the builder.
+    public KVNodeDefinition SelfReference => _definition;
+
     public KVNodeDefinition Build()
     {
         if (_isBuilt)
