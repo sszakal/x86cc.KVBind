@@ -1,89 +1,118 @@
-<div class="space-y-6">
-  <div class="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03] lg:flex-row lg:items-center lg:justify-between">
-    <div>
-      <a routerLink="/claims" class="text-sm font-medium text-brand-500">Insurance Claims</a>
-      <h1 class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">Claim snapshot</h1>
-      <p class="mt-1 font-mono text-xs text-gray-500">{{ claimId }}</p>
-    </div>
-    <button class="h-11 rounded-lg bg-brand-500 px-5 text-sm font-medium text-white hover:bg-brand-600" (click)="openDraft()">Open draft</button>
+<!-- Header bar -->
+<div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+  <div>
+    <a routerLink="/claims" class="text-sm font-medium text-brand-500 hover:text-brand-600">← Insurance Claims</a>
+    <h1 class="mt-0.5 text-xl font-bold text-gray-900 dark:text-white">Claim <span class="font-mono text-lg font-semibold">{{ claimId }}</span></h1>
+  </div>
+  <button class="h-9 rounded-lg bg-brand-500 px-4 text-sm font-semibold text-white hover:bg-brand-600" (click)="openDraft()">Edit</button>
+</div>
+
+@if (error) {
+  <div class="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">{{ error }}</div>
+}
+
+@if (snapshot) {
+  <!-- Tabs -->
+  <div class="mb-5 flex gap-1 border-b border-gray-200 dark:border-gray-800">
+    <button
+      class="rounded-t-lg px-4 py-2 text-sm font-medium transition-colors"
+      [ngClass]="activeTab === 'claim' ? 'border-b-2 border-brand-500 text-brand-600 dark:text-brand-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+      (click)="activeTab = 'claim'">Claim</button>
+    <button
+      class="rounded-t-lg px-4 py-2 text-sm font-medium transition-colors"
+      [ngClass]="activeTab === 'audit' ? 'border-b-2 border-brand-500 text-brand-600 dark:text-brand-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+      (click)="activeTab = 'audit'">Audit</button>
   </div>
 
-  @if (error) { <div class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">{{ error }}</div> }
+  @if (activeTab === 'claim') {
+    <div class="space-y-5">
+      <!-- Core stats -->
+      <section class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+        <h2 class="mb-4 text-base font-semibold text-gray-900 dark:text-white">Claim details</h2>
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div><p class="text-xs uppercase tracking-wide text-gray-500">Claim number</p><p class="mt-1 font-semibold text-gray-900 dark:text-white">{{ snapshot.claim.claimNumber }}</p></div>
+          <div><p class="text-xs uppercase tracking-wide text-gray-500">Status</p><p class="mt-1 font-semibold text-gray-900 dark:text-white">{{ snapshot.claim.status }}</p></div>
+          <div><p class="text-xs uppercase tracking-wide text-gray-500">Incident date</p><p class="mt-1 font-semibold text-gray-900 dark:text-white">{{ snapshot.claim.incidentDate || 'Not set' }}</p></div>
+          <div><p class="text-xs uppercase tracking-wide text-gray-500">Claimed total</p><p class="mt-1 font-semibold text-gray-900 dark:text-white">{{ snapshot.claim.claimedTotal | currency }}</p></div>
+        </div>
+        <div class="mt-5 rounded-xl bg-gray-50 p-4 text-sm text-gray-700 dark:bg-gray-900 dark:text-gray-300">{{ snapshot.claim.description || 'No description' }}</div>
+        <div class="mt-5 grid gap-4 lg:grid-cols-2">
+          <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+            <p class="text-xs uppercase tracking-wide text-gray-500">Policy</p>
+            <p class="mt-2 font-medium text-gray-900 dark:text-white">{{ snapshot.claim.policy.policyNumber || 'No policy' }}</p>
+            <p class="text-sm text-gray-500">{{ snapshot.claim.policy.coverageType || 'No coverage type' }}</p>
+          </div>
+          <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+            <p class="text-xs uppercase tracking-wide text-gray-500">Claimant</p>
+            <p class="mt-2 font-medium text-gray-900 dark:text-white">{{ snapshot.claim.claimant?.displayName || 'Not initialized' }}</p>
+            <p class="text-sm text-gray-500">{{ snapshot.claim.claimant?.type || '' }}</p>
+          </div>
+        </div>
+      </section>
 
-  @if (snapshot) {
-    <section class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
-      <div class="flex flex-wrap gap-2 border-b border-gray-100 pb-4 dark:border-gray-800">
-        <button class="rounded-lg px-4 py-2 text-sm font-medium" [ngClass]="activeTab === 'snapshot' ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-900 dark:text-gray-300'" (click)="activeTab = 'snapshot'">Snapshot</button>
-        <button class="rounded-lg px-4 py-2 text-sm font-medium" [ngClass]="activeTab === 'items' ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-900 dark:text-gray-300'" (click)="activeTab = 'items'">Damaged items</button>
-        <button class="rounded-lg px-4 py-2 text-sm font-medium" [ngClass]="activeTab === 'changesets' ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-900 dark:text-gray-300'" (click)="activeTab = 'changesets'">Changesets</button>
+      <!-- Damaged items -->
+      <section class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="text-base font-semibold text-gray-900 dark:text-white">Damaged items</h2>
+          <span class="text-sm text-gray-500">{{ snapshot.claim.damagedItems.length }} item{{ snapshot.claim.damagedItems.length === 1 ? '' : 's' }}</span>
+        </div>
+        <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+          <table class="w-full min-w-[560px] text-left text-sm">
+            <thead class="border-b border-gray-100 bg-gray-50 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:bg-gray-900/60">
+              <tr><th class="px-4 py-3">Description</th><th class="px-4 py-3 text-right">Estimated amount</th><th class="px-4 py-3">Item ID</th></tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+              @for (item of snapshot.claim.damagedItems; track item.itemId) {
+                <tr>
+                  <td class="px-4 py-3 text-gray-900 dark:text-white">{{ item.description }}</td>
+                  <td class="px-4 py-3 text-right text-gray-700 dark:text-gray-300">{{ item.estimatedAmount | currency }}</td>
+                  <td class="px-4 py-3 font-mono text-xs text-gray-500">{{ item.itemId }}</td>
+                </tr>
+              } @empty {
+                <tr><td class="px-4 py-8 text-center text-gray-500" colspan="3">No damaged items committed.</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  }
+
+  @if (activeTab === 'audit') {
+    <div class="grid gap-6 xl:grid-cols-[420px_1fr]">
+      <div>
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white">Audit</h2>
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Most recent first. Select an entry to inspect its diffs.</p>
+        <div class="mt-4 space-y-3">
+          @for (changeset of changesets; track changeset.commitId) {
+            <button class="block w-full rounded-xl border p-4 text-left transition-colors"
+              [ngClass]="selectedChangesetId === changeset.commitId
+                ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/20'
+                : 'border-gray-200 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900'"
+              (click)="selectedChangesetId = changeset.commitId">
+              <p class="font-mono text-xs text-gray-500">{{ changeset.commitId }}</p>
+              <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ changeset.user }} · {{ changeset.timestamp | date:'medium' }}</p>
+              <p class="mt-2 line-clamp-2 text-xs text-gray-500">{{ changeSummary(changeset) }}</p>
+            </button>
+          } @empty {
+            <p class="text-sm text-gray-500">No changesets found.</p>
+          }
+        </div>
       </div>
 
-      @if (activeTab === 'snapshot') {
-        <div class="mt-6">
-          <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div><p class="text-xs uppercase text-gray-500">Claim number</p><p class="mt-1 font-semibold text-gray-900 dark:text-white">{{ snapshot.claim.claimNumber }}</p></div>
-            <div><p class="text-xs uppercase text-gray-500">Status</p><p class="mt-1 font-semibold text-gray-900 dark:text-white">{{ snapshot.claim.status }}</p></div>
-            <div><p class="text-xs uppercase text-gray-500">Incident date</p><p class="mt-1 font-semibold text-gray-900 dark:text-white">{{ snapshot.claim.incidentDate || 'Not set' }}</p></div>
-            <div><p class="text-xs uppercase text-gray-500">Claimed total</p><p class="mt-1 font-semibold text-gray-900 dark:text-white">{{ snapshot.claim.claimedTotal | currency }}</p></div>
+      <div>
+        @if (selectedChangeset(); as changeset) {
+          <h3 class="text-base font-semibold text-gray-900 dark:text-white">Changeset diffs</h3>
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Old values are red/struck out. New values are green/bold.</p>
+          <div class="mt-4">
+            <app-change-tree-table [changes]="changesetChanges(changeset)"></app-change-tree-table>
           </div>
-          <div class="mt-6 rounded-xl bg-gray-50 p-4 text-sm text-gray-700 dark:bg-gray-900 dark:text-gray-300">{{ snapshot.claim.description || 'No description' }}</div>
-          <div class="mt-6 grid gap-4 lg:grid-cols-2">
-            <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800"><p class="text-xs uppercase text-gray-500">Policy</p><p class="mt-2 text-gray-900 dark:text-white">{{ snapshot.claim.policy.policyNumber || 'No policy' }}</p><p class="text-sm text-gray-500">{{ snapshot.claim.policy.coverageType || 'No coverage type' }}</p></div>
-            <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800"><p class="text-xs uppercase text-gray-500">Claimant</p><p class="mt-2 text-gray-900 dark:text-white">{{ snapshot.claim.claimant?.displayName || 'Not initialized' }}</p><p class="text-sm text-gray-500">{{ snapshot.claim.claimant?.type || '' }}</p></div>
-          </div>
-        </div>
-      }
-
-      @if (activeTab === 'items') {
-        <div class="mt-6">
-          <div class="mb-3 flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Damaged items</h2>
-            <span class="text-sm text-gray-500">{{ snapshot.claim.damagedItems.length }} item{{ snapshot.claim.damagedItems.length === 1 ? '' : 's' }}</span>
-          </div>
-          <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
-            <table class="w-full min-w-[560px] text-left text-sm">
-              <thead class="border-b border-gray-100 bg-gray-50 text-xs uppercase text-gray-500 dark:border-gray-800 dark:bg-gray-900/60"><tr><th class="px-4 py-3">Description</th><th class="px-4 py-3 text-right">Estimated amount</th><th class="px-4 py-3">Item id</th></tr></thead>
-              <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-                @for (item of snapshot.claim.damagedItems; track item.itemId) {
-                  <tr><td class="px-4 py-3 text-gray-900 dark:text-white">{{ item.description }}</td><td class="px-4 py-3 text-right text-gray-700 dark:text-gray-300">{{ item.estimatedAmount | currency }}</td><td class="px-4 py-3 font-mono text-xs text-gray-500">{{ item.itemId }}</td></tr>
-                } @empty { <tr><td class="px-4 py-8 text-center text-gray-500" colspan="3">No damaged items committed.</td></tr> }
-              </tbody>
-            </table>
-          </div>
-        </div>
-      }
-
-      @if (activeTab === 'changesets') {
-        <div class="mt-6 grid gap-6 xl:grid-cols-[420px_1fr]">
-          <div>
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Changesets</h2>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Most recent first. Select a changeset to inspect its diffs.</p>
-            <div class="mt-4 space-y-3">
-              @for (changeset of changesets; track changeset.commitId) {
-                <button class="block w-full rounded-xl border p-4 text-left" [ngClass]="selectedChangesetId === changeset.commitId ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/20' : 'border-gray-200 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900'" (click)="selectedChangesetId = changeset.commitId">
-                  <p class="font-mono text-xs text-gray-500">{{ changeset.commitId }}</p>
-                  <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ changeset.user }} · {{ changeset.timestamp | date:'medium' }}</p>
-                  <p class="mt-2 line-clamp-2 text-xs text-gray-500">{{ changeSummary(changeset) }}</p>
-                </button>
-              } @empty { <p class="text-sm text-gray-500">No changesets found.</p> }
-            </div>
-          </div>
-
-          <div>
-            @if (selectedChangeset(); as changeset) {
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Changeset diffs</h3>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Old values are red/struck out. New values are green/bold.</p>
-              <div class="mt-4">
-                <app-change-tree-table [changes]="changesetChanges(changeset)"></app-change-tree-table>
-              </div>
-            } @else {
-              <div class="rounded-xl border border-gray-200 p-8 text-center text-sm text-gray-500 dark:border-gray-800">Select a changeset.</div>
-            }
-          </div>
-        </div>
-      }
-    </section>
-  } @else if (loading) {
-    <div class="rounded-2xl border border-gray-200 bg-white p-8 text-gray-500 dark:border-gray-800 dark:bg-white/[0.03]">Loading snapshot...</div>
+        } @else {
+          <div class="rounded-xl border border-gray-200 p-8 text-center text-sm text-gray-500 dark:border-gray-800">Select a changeset.</div>
+        }
+      </div>
+    </div>
   }
-</div>
+} @else if (loading) {
+  <div class="rounded-2xl border border-gray-200 bg-white p-8 text-gray-500 dark:border-gray-800 dark:bg-white/[0.03]">Loading…</div>
+}

@@ -4,10 +4,6 @@ import { Observable } from 'rxjs';
 
 export interface CreateClaimRequest {
   claimNumber: string;
-  incidentDate: string | null;
-  description: string | null;
-  policyNumber: string | null;
-  coverageType: string | null;
   user: string;
 }
 
@@ -23,10 +19,12 @@ export interface ClaimSummaryResponse {
   claimId: string;
   claimNumber: string | null;
   status: string | null;
+  priority: string | null;
   description: string | null;
   claimedTotal: number;
   snapshotVersion: string;
   lastCommitId: string | null;
+  modified: string;
 }
 
 export interface ClaimSnapshotResponse {
@@ -45,6 +43,34 @@ export interface ClaimDraftResponse {
   baseSnapshotVersion: string;
   baseCommitId: string | null;
   changes: ClaimChangeResponse[];
+  isRebasing: boolean;
+  isStale: boolean;
+  latestSnapshotVersion: string;
+  rebaseTargetVersion: string | null;
+  conflicts: RebaseConflictResponse[];
+}
+
+export interface RebaseConflictResponse {
+  path: string;
+  kind: 'Value' | 'DeleteEdit' | 'Structural';
+  resolution: 'Unresolved' | 'Ours' | 'Theirs' | 'Custom';
+  baseValue: unknown;
+  mainValue: unknown;
+  oursValue: unknown;
+}
+
+export interface RebaseResultResponse {
+  claimId: string;
+  draftId: string;
+  outcome: 'AlreadyCurrent' | 'Merged' | 'ConflictsPending';
+  targetSnapshotVersion: string;
+  conflicts: RebaseConflictResponse[];
+}
+
+export interface ResolveRebaseConflictRequest {
+  path: string;
+  resolution: 'Ours' | 'Theirs' | 'Custom';
+  value?: unknown;
 }
 
 export interface ClaimCommitResponse {
@@ -212,5 +238,31 @@ export class ClaimApiService {
 
   listChangeSets(claimId: string): Observable<ClaimChangeSetResponse[]> {
     return this.http.get<ClaimChangeSetResponse[]>(`${this.apiBaseUrl}/${claimId}/changesets`);
+  }
+
+  // ── Rebase ──
+  beginRebase(claimId: string, draftId: string): Observable<RebaseResultResponse> {
+    return this.http.post<RebaseResultResponse>(
+      `${this.apiBaseUrl}/${claimId}/drafts/${draftId}/rebase`, {});
+  }
+
+  resolveRebaseConflict(claimId: string, draftId: string, request: ResolveRebaseConflictRequest): Observable<RebaseResultResponse> {
+    return this.http.post<RebaseResultResponse>(
+      `${this.apiBaseUrl}/${claimId}/drafts/${draftId}/rebase/resolve`, request);
+  }
+
+  finishRebase(claimId: string, draftId: string): Observable<ClaimDraftResponse> {
+    return this.http.post<ClaimDraftResponse>(
+      `${this.apiBaseUrl}/${claimId}/drafts/${draftId}/rebase/finish`, {});
+  }
+
+  cancelRebase(claimId: string, draftId: string): Observable<ClaimDraftResponse> {
+    return this.http.delete<ClaimDraftResponse>(
+      `${this.apiBaseUrl}/${claimId}/drafts/${draftId}/rebase`);
+  }
+
+  resetDraft(claimId: string, draftId: string): Observable<ClaimDraftResponse> {
+    return this.http.post<ClaimDraftResponse>(
+      `${this.apiBaseUrl}/${claimId}/drafts/${draftId}/reset`, {});
   }
 }

@@ -17,6 +17,9 @@ KVBind gives you:
 - definition-driven validation and dependency behavior
 - generated C# property accessors over a shared runtime
 
+
+[![KVBind Demo version alpha](https://youtube.com)](https://youtu.be/HM5_kpsniTw)
+
 ## Mental Model
 
 Think of each KVBind aggregate as a small Git-like repository for an object graph.

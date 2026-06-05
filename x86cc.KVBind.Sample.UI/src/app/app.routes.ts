@@ -3,6 +3,8 @@ import { AppLayoutComponent } from './shared/layout/app-layout/app-layout.compon
 import { ClaimsListComponent } from './features/claims/claims-list.component';
 import { ClaimDetailComponent } from './features/claims/claim-detail.component';
 import { ClaimDraftComponent } from './features/claims/claim-draft.component';
+import { ClaimRebaseComponent } from './features/claims/claim-rebase.component';
+import { ClaimReviewComponent } from './features/claims/claim-review.component';
 import { LoginComponent } from './features/auth/login.component';
 import { authGuard } from './core/guards/auth.guard';
 
@@ -17,6 +19,8 @@ export const routes: Routes = [
       { path: 'claims', component: ClaimsListComponent, title: 'Claims | KVBind Demo' },
       { path: 'claims/:claimId', component: ClaimDetailComponent, title: 'Claim | KVBind Demo' },
       { path: 'claims/:claimId/drafts/:draftId', component: ClaimDraftComponent, title: 'Draft | KVBind Demo' },
+      { path: 'claims/:claimId/drafts/:draftId/review', component: ClaimReviewComponent, title: 'Review changes | KVBind Demo' },
+      { path: 'claims/:claimId/drafts/:draftId/rebase', component: ClaimRebaseComponent, title: 'Resolve conflicts | KVBind Demo' },
     ],
   },
   { path: '**', redirectTo: 'claims' },

@@ -1,5 +1,4 @@
 import { CommonModule } from '@angular/common';
-import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
@@ -8,13 +7,24 @@ import {
   ClaimApiService,
   ClaimDraftResponse,
   ClaimPatchOperationRequest,
+  CollectionItemTypeMeta,
+  CollectionMeta,
   DefinitionSchemaResponse,
   FieldGroupMeta,
+  NestedNodeMeta,
   StaleDraftResponse,
   ValidateDraftResponse,
 } from './claim-api.service';
 import { UserService } from '../../core/services/user.service';
 import { FieldInputComponent, FieldMeta } from '../../shared/components/field-input.component';
+
+// A location in the claim tree the user is currently editing.
+type NavFrame =
+  | { kind: 'root' }
+  | { kind: 'group'; key: string }
+  | { kind: 'collection'; key: string }
+  | { kind: 'item'; collKey: string; itemId: string }
+  | { kind: 'nested'; key: string };
 
 @Component({
   selector: 'app-claim-draft',
@@ -33,6 +43,7 @@ export class ClaimDraftComponent implements OnInit, OnDestroy {
   validating = false;
   overlayOpen = false;
   validationResult: ValidateDraftResponse | null = null;
+  isStale = false;
 
   // Flat map of current field values: { path -> value }
   // path is the canonical KVBind path, e.g. "Status", "Policy/CoverageType"
@@ -51,6 +62,9 @@ export class ClaimDraftComponent implements OnInit, OnDestroy {
   // Nested node
   nestedNodeType: Record<string, string | null> = {};
   nestedNodeValues: Record<string, Record<string, unknown>> = {};
+
+  // Hierarchical navigation — a stack of frames; the last is the level being edited.
+  navStack: NavFrame[] = [{ kind: 'root' }];
 
   private autoSaveTimer?: ReturnType<typeof setInterval>;
 
@@ -78,6 +92,83 @@ export class ClaimDraftComponent implements OnInit, OnDestroy {
 
   get username(): string { return this.userService.getUser() ?? 'unknown'; }
   get pendingCount(): number { return this.pendingOps.size; }
+
+  // ── Hierarchical navigation ──
+
+  get currentFrame(): NavFrame { return this.navStack[this.navStack.length - 1]; }
+  get currentItemId(): string { const f = this.currentFrame; return f.kind === 'item' ? f.itemId : ''; }
+
+  private drillTo(frame: NavFrame): void { this.flushPending(); this.navStack = [...this.navStack, frame]; }
+  back(): void { this.flushPending(); if (this.navStack.length > 1) this.navStack = this.navStack.slice(0, -1); }
+  goToFrame(index: number): void { this.flushPending(); this.navStack = this.navStack.slice(0, index + 1); }
+
+  openGroup(key: string): void { this.drillTo({ kind: 'group', key }); }
+  openCollection(key: string): void { this.drillTo({ kind: 'collection', key }); }
+  openNested(key: string): void { this.drillTo({ kind: 'nested', key }); }
+  openItem(collKey: string, itemId: string): void { this.drillTo({ kind: 'item', collKey, itemId }); }
+
+  // Flush pending edits so each level change persists (back-navigation commits the section's edits).
+  private flushPending(): void { if (this.pendingOps.size > 0) this.saveNow(); }
+
+  // Definition meta resolved for the current frame.
+  get currentGroup(): FieldGroupMeta | null {
+    const f = this.currentFrame;
+    return f.kind === 'group' ? this.definition?.fieldGroups.find(g => g.key === f.key) ?? null : null;
+  }
+  get currentCollection(): CollectionMeta | null {
+    const f = this.currentFrame;
+    const key = f.kind === 'collection' ? f.key : f.kind === 'item' ? f.collKey : null;
+    return key ? this.definition?.collections.find(c => c.key === key) ?? null : null;
+  }
+  get currentItemType(): CollectionItemTypeMeta | null {
+    const coll = this.currentCollection;
+    return coll && coll.itemTypes.length > 0 ? coll.itemTypes[0] : null;
+  }
+  get currentNested(): NestedNodeMeta | null {
+    const f = this.currentFrame;
+    return f.kind === 'nested' ? this.definition?.nestedNodes.find(n => n.key === f.key) ?? null : null;
+  }
+
+  frameLabel(frame: NavFrame): string {
+    switch (frame.kind) {
+      case 'root': return 'Claim';
+      case 'group': return this.definition?.fieldGroups.find(g => g.key === frame.key)?.label ?? frame.key;
+      case 'collection': return this.definition?.collections.find(c => c.key === frame.key)?.label ?? frame.key;
+      case 'nested': return this.definition?.nestedNodes.find(n => n.key === frame.key)?.label ?? frame.key;
+      case 'item': {
+        const idx = this.getItemsForCollection(frame.collKey).findIndex(i => i.itemId === frame.itemId);
+        return idx >= 0 ? `Item ${idx + 1}` : 'Item';
+      }
+    }
+  }
+
+  // Root-card summaries.
+  groupSummaryText(group: FieldGroupMeta): string {
+    const vals = group.fields
+      .map(f => this.fieldValues[`${group.key}/${f.key}`])
+      .filter(v => v != null && v !== '');
+    return vals.length ? vals.slice(0, 2).map(v => String(v)).join(' · ') : 'Not set';
+  }
+  nestedSummaryText(): string {
+    const c = this.draft?.claim.claimant;
+    return c ? `${c.displayName ?? '—'} · ${c.type}` : 'Not set';
+  }
+
+  // Create an empty collection item, then drill straight into editing it.
+  addAndOpenItem(collKey: string): void {
+    const itemId = crypto.randomUUID();
+    this.dispatchPatch([{ operationCode: 'ADD', path: `/${collKey}`, value: { itemId } }], () => {
+      this.navStack = [...this.navStack, { kind: 'item', collKey, itemId }];
+    });
+  }
+
+  // Delete the current item and pop back to the collection.
+  removeItemAndBack(collKey: string, itemId: string): void {
+    this.expandedItems.delete(itemId);
+    this.dispatchPatch([{ operationCode: 'REMOVE', path: `/${collKey}/${itemId}` }], () => {
+      this.navStack = this.navStack.slice(0, -1);
+    });
+  }
 
   load(): void {
     this.api.getDraft(this.claimId, this.draftId).subscribe({
@@ -211,31 +302,35 @@ export class ClaimDraftComponent implements OnInit, OnDestroy {
     });
   }
 
+  // Commit goes through the review screen: flush pending edits, then navigate to review.
   commit(): void {
     if (this.pendingOps.size > 0) {
       this.dispatchPatch([...this.pendingOps.values()], () => {
         this.pendingOps.clear();
-        this.doCommit();
+        this.goToReview();
       });
     } else {
-      this.doCommit();
+      this.goToReview();
     }
   }
 
-  private doCommit(): void {
-    this.committing = true;
+  private goToReview(): void {
+    this.router.navigate(['/claims', this.claimId, 'drafts', this.draftId, 'review']);
+  }
+
+  // Stale banner action — rebase without committing.
+  rebaseNow(): void {
     this.error = '';
-    this.staleDraft = null;
-    this.api.commitDraft(this.claimId, this.draftId, { user: this.username }).subscribe({
-      next: () => this.router.navigate(['/claims', this.claimId]),
-      error: err => {
-        if (err instanceof HttpErrorResponse && err.status === 409) {
-          this.staleDraft = err.error as StaleDraftResponse;
+    this.api.beginRebase(this.claimId, this.draftId).subscribe({
+      next: result => {
+        if (result.outcome === 'ConflictsPending') {
+          this.router.navigate(['/claims', this.claimId, 'drafts', this.draftId, 'rebase']);
         } else {
-          this.error = `Unable to commit. ${err.message ?? ''}`;
+          this.isStale = false;
+          this.load();
         }
-        this.committing = false;
       },
+      error: err => (this.error = `Unable to rebase. ${err.message ?? ''}`),
     });
   }
 
@@ -290,6 +385,12 @@ export class ClaimDraftComponent implements OnInit, OnDestroy {
   }
 
   private applyDraft(draft: ClaimDraftResponse): void {
+    // Forced merge: if a rebase is in progress, the editor is locked behind the merge screen.
+    if (draft.isRebasing) {
+      this.router.navigate(['/claims', this.claimId, 'drafts', this.draftId, 'rebase']);
+      return;
+    }
+    this.isStale = draft.isStale;
     this.draft = draft;
     // Sync flat field values from draft (only fields not currently pending edits)
     const pending = new Set(this.pendingOps.keys());

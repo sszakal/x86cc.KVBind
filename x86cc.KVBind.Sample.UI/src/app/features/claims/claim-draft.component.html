@@ -1,7 +1,7 @@
 <!-- Header bar -->
 <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
   <div>
-    <a [routerLink]="['/claims', claimId]" class="text-sm font-medium text-brand-500 hover:text-brand-600">← Back to snapshot</a>
+    <a [routerLink]="['/claims', claimId]" class="text-sm font-medium text-brand-500 hover:text-brand-600">← Back to claim</a>
     <h1 class="mt-0.5 text-xl font-bold text-gray-900 dark:text-white">Edit draft</h1>
   </div>
   <div class="flex items-center gap-3">
@@ -37,9 +37,20 @@
 @if (error) {
   <div class="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">{{ error }}</div>
 }
+@if (isStale && !staleDraft) {
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/30">
+    <div>
+      <p class="text-sm font-semibold text-amber-800 dark:text-amber-200">Upstream changes detected</p>
+      <p class="mt-1 text-sm text-amber-700 dark:text-amber-300">This claim was updated after your draft started. Rebase before committing.</p>
+    </div>
+    <button class="h-9 shrink-0 rounded-lg bg-amber-500 px-4 text-sm font-semibold text-white hover:bg-amber-600" (click)="rebaseNow()">
+      Rebase now
+    </button>
+  </div>
+}
 @if (staleDraft) {
   <div class="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/30">
-    <p class="text-sm font-semibold text-amber-800 dark:text-amber-200">Stale draft — reload before committing</p>
+    <p class="text-sm font-semibold text-amber-800 dark:text-amber-200">Resolving against upstream…</p>
     <p class="mt-1 text-sm text-amber-700 dark:text-amber-300">{{ staleDraft.message }}</p>
   </div>
 }
@@ -87,193 +98,247 @@
 }
 
 @if (definition && draft) {
-  <div class="space-y-5 pb-32">
-
-    <!-- ═══ ROOT FIELDS (from definition schema) ═══ -->
-    <section class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
-      <div class="mb-4 flex items-center gap-2">
-        <h2 class="text-base font-semibold text-gray-900 dark:text-white">Claim details</h2>
-        <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-800">Root fields · auto-generated from definition</span>
-      </div>
-      <div class="grid gap-4 sm:grid-cols-2">
-        @for (field of definition.fields; track field.key) {
-          <div [ngClass]="field.uiHint === 'textarea' || field.uiHint === 'radio' ? 'sm:col-span-2' : ''">
-            <app-field-input
-              [field]="field"
-              [value]="fieldValues[field.key]"
-              (valueChange)="onFieldChange(field.key, $event)">
-            </app-field-input>
-          </div>
-        }
-      </div>
-    </section>
-
-    <!-- ═══ FIELD GROUPS (from definition schema) ═══ -->
-    @for (group of definition.fieldGroups; track group.key) {
-      <section class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
-        <div class="mb-4 flex items-center gap-2">
-          <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ group.label }}</h2>
-          <span class="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">Field group</span>
-          <span class="text-xs text-gray-400">{{ group.key }}/…</span>
-        </div>
-        <div class="grid gap-4 sm:grid-cols-2">
-          @for (field of group.fields; track field.key) {
-            <app-field-input
-              [field]="field"
-              [value]="fieldValues[group.key + '/' + field.key]"
-              (valueChange)="onFieldChange(group.key + '/' + field.key, $event)">
-            </app-field-input>
-          }
-        </div>
-      </section>
+  <!-- Breadcrumb -->
+  <nav class="mb-4 flex flex-wrap items-center gap-1 text-sm">
+    @for (frame of navStack; track $index; let last = $last) {
+      <button
+        class="rounded px-1.5 py-0.5 font-medium"
+        [ngClass]="last ? 'text-gray-900 dark:text-white' : 'text-brand-500 hover:text-brand-600'"
+        [disabled]="last"
+        (click)="goToFrame($index)">
+        {{ frameLabel(frame) }}
+      </button>
+      @if (!last) { <span class="text-gray-300 dark:text-gray-600">/</span> }
     }
+  </nav>
 
-    <!-- ═══ COLLECTIONS (from definition schema) ═══ -->
-    @for (coll of definition.collections; track coll.key) {
-      <section class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
-        @let items = getItemsForCollection(coll.key);
-        @let primaryType = coll.itemTypes.length > 0 ? coll.itemTypes[0] : null;
-        <div class="mb-4 flex items-center justify-between gap-2">
-          <div class="flex items-center gap-2">
-            <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ coll.label }}</h2>
-            <span class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">Collection</span>
-          </div>
-          <span class="text-sm text-gray-500">{{ items.length }} item{{ items.length !== 1 ? 's' : '' }}</span>
-        </div>
+  <div class="space-y-5 pb-32">
+    @switch (currentFrame.kind) {
 
-        <!-- Add item form -->
-        @if (primaryType) {
-          <div class="mb-4 rounded-xl border border-dashed border-gray-200 p-4 dark:border-gray-700">
-            <p class="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">Add item</p>
-            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              @for (field of primaryType.fields; track field.key) {
+      <!-- ═══ ROOT — top fields + section cards ═══ -->
+      @case ('root') {
+        <section class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+          <h2 class="mb-4 text-base font-semibold text-gray-900 dark:text-white">Claim details</h2>
+          <div class="grid gap-4 sm:grid-cols-2">
+            @for (field of definition.fields; track field.key) {
+              <div [ngClass]="field.uiHint === 'textarea' || field.uiHint === 'radio' || field.uiHint === 'multiselect' ? 'sm:col-span-2' : ''">
                 <app-field-input
                   [field]="field"
-                  [value]="getNewItemField(coll.key, field.key)"
-                  (valueChange)="setNewItemField(coll.key, field.key, $event)">
+                  [value]="fieldValues[field.key]"
+                  (valueChange)="onFieldChange(field.key, $event)">
                 </app-field-input>
-              }
-            </div>
-            <button
-              class="mt-3 h-9 rounded-lg border border-brand-200 bg-brand-50 px-4 text-sm font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-40 dark:border-brand-800/60 dark:bg-brand-950/30 dark:text-brand-300"
-              [disabled]="saving" (click)="addItem(coll.key, primaryType.token, primaryType.fields)">
-              + Add {{ coll.label | lowercase }} item
-            </button>
-          </div>
-        }
-
-        <!-- Items list — expandable rows -->
-        @if (items.length > 0) {
-          <div class="overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800">
-            @for (item of items; track item.itemId; let last = $last) {
-              <div [ngClass]="!last ? 'border-b border-gray-100 dark:border-gray-800' : ''">
-                <!-- Row header -->
-                <div class="flex items-center justify-between px-4 py-3">
-                  <div class="flex items-center gap-3">
-                    <button
-                      class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-gray-200 text-gray-400 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
-                      (click)="toggleItem(item.itemId)">
-                      <svg class="h-3.5 w-3.5 transition-transform" [ngClass]="expandedItems.has(item.itemId) ? 'rotate-90' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                      </svg>
-                    </button>
-                    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ getItemSummary(coll.key, item.itemId) }}</span>
-                  </div>
-                  <button class="text-xs text-red-400 hover:text-red-600 disabled:opacity-40"
-                    [disabled]="saving" (click)="removeItem(coll.key, item.itemId)">Remove</button>
-                </div>
-
-                <!-- Expanded inline form -->
-                @if (expandedItems.has(item.itemId) && primaryType) {
-                  <div class="border-t border-gray-100 bg-gray-50/50 px-6 py-5 dark:border-gray-800 dark:bg-gray-900/30">
-                    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      @for (field of primaryType.fields; track field.key) {
-                        <app-field-input
-                          [field]="field"
-                          [value]="getItemField(coll.key, item.itemId, field.key)"
-                          (valueChange)="onItemFieldChange(coll.key, item.itemId, field.key, $event)">
-                        </app-field-input>
-                      }
-                    </div>
-                    <p class="mt-3 text-xs text-gray-400">Changes are batched and saved on next auto-save or Save now.</p>
-                  </div>
-                }
               </div>
             }
           </div>
-        } @else {
-          <p class="text-sm text-gray-400">No items yet. Add one above.</p>
-        }
-      </section>
-    }
+        </section>
 
-    <!-- ═══ NESTED NODES (from definition schema) ═══ -->
-    @for (nested of definition.nestedNodes; track nested.key) {
-      <section class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
-        <div class="mb-4 flex items-center gap-2">
-          <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ nested.label }}</h2>
-          <span class="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-950/40 dark:text-purple-300">Nested node</span>
-          <span class="text-xs text-gray-400">Polymorphic — {{ nested.types.length }} types</span>
-        </div>
-
-        <!-- Type toggle -->
-        <div class="mb-4 flex flex-wrap gap-2">
-          @for (type of nested.types; track type.token) {
-            <button
-              class="rounded-lg border px-4 py-2 text-sm font-medium transition-colors"
-              [ngClass]="nestedNodeType[nested.key] === type.token
-                ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-950/30 dark:text-brand-300'
-                : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800'"
-              (click)="setNestedType(nested.key, type.token)">
-              {{ type.label }}
+        <div class="grid gap-4 sm:grid-cols-2">
+          @for (group of definition.fieldGroups; track group.key) {
+            <button type="button"
+              class="group/card flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-5 text-left transition-colors hover:border-brand-300 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:border-brand-700"
+              (click)="openGroup(group.key)">
+              <div>
+                <div class="flex items-center gap-2">
+                  <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ group.label }}</h3>
+                  <span class="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">Group</span>
+                </div>
+                <p class="mt-1 text-xs text-gray-500">{{ groupSummaryText(group) }}</p>
+              </div>
+              <svg class="h-4 w-4 text-gray-300 group-hover/card:text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
             </button>
           }
-          @if (draft.claim.claimant) {
-            <button class="rounded-lg border border-red-200 px-3 py-2 text-xs font-medium text-red-500 hover:bg-red-50 dark:border-red-900/60"
-              (click)="dropNestedNode(nested.key)">Drop</button>
+
+          @for (coll of definition.collections; track coll.key) {
+            @let count = getItemsForCollection(coll.key).length;
+            <button type="button"
+              class="group/card flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-5 text-left transition-colors hover:border-brand-300 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:border-brand-700"
+              (click)="openCollection(coll.key)">
+              <div>
+                <div class="flex items-center gap-2">
+                  <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ coll.label }}</h3>
+                  <span class="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">Collection</span>
+                </div>
+                <p class="mt-1 text-xs text-gray-500">{{ count }} item{{ count !== 1 ? 's' : '' }}</p>
+              </div>
+              <svg class="h-4 w-4 text-gray-300 group-hover/card:text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            </button>
+          }
+
+          @for (nested of definition.nestedNodes; track nested.key) {
+            <button type="button"
+              class="group/card flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-5 text-left transition-colors hover:border-brand-300 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:border-brand-700"
+              (click)="openNested(nested.key)">
+              <div>
+                <div class="flex items-center gap-2">
+                  <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ nested.label }}</h3>
+                  <span class="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700 dark:bg-purple-950/40 dark:text-purple-300">Nested</span>
+                </div>
+                <p class="mt-1 text-xs text-gray-500">{{ nestedSummaryText() }}</p>
+              </div>
+              <svg class="h-4 w-4 text-gray-300 group-hover/card:text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            </button>
           }
         </div>
+      }
 
-        <!-- Fields for selected type -->
-        @for (type of nested.types; track type.token) {
-          @if (nestedNodeType[nested.key] === type.token) {
-            <div class="space-y-4">
-              <div class="grid gap-4 sm:grid-cols-2">
-                @for (field of type.fields; track field.key) {
+      <!-- ═══ FIELD GROUP ═══ -->
+      @case ('group') {
+        @if (currentGroup; as group) {
+          <section class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+            <div class="mb-4 flex items-center justify-between">
+              <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ group.label }}</h2>
+              <button class="text-sm font-medium text-brand-500 hover:text-brand-600" (click)="back()">← Back</button>
+            </div>
+            <div class="grid gap-4 sm:grid-cols-2">
+              @for (field of group.fields; track field.key) {
+                <div [ngClass]="field.uiHint === 'textarea' || field.uiHint === 'radio' || field.uiHint === 'multiselect' ? 'sm:col-span-2' : ''">
                   <app-field-input
                     [field]="field"
-                    [value]="getNestedNodeField(nested.key, field.key)"
-                    (valueChange)="onNestedNodeFieldChange(nested.key, field.key, $event)">
+                    [value]="fieldValues[group.key + '/' + field.key]"
+                    (valueChange)="onFieldChange(group.key + '/' + field.key, $event)">
                   </app-field-input>
+                </div>
+              }
+            </div>
+          </section>
+        }
+      }
+
+      <!-- ═══ COLLECTION — item list ═══ -->
+      @case ('collection') {
+        @if (currentCollection; as coll) {
+          @let items = getItemsForCollection(coll.key);
+          <section class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+            <div class="mb-4 flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ coll.label }}</h2>
+                <span class="text-sm text-gray-500">{{ items.length }} item{{ items.length !== 1 ? 's' : '' }}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <button class="h-9 rounded-lg border border-brand-200 bg-brand-50 px-4 text-sm font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-40 dark:border-brand-800/60 dark:bg-brand-950/30 dark:text-brand-300"
+                  [disabled]="saving" (click)="addAndOpenItem(coll.key)">+ Add item</button>
+                <button class="text-sm font-medium text-brand-500 hover:text-brand-600" (click)="back()">← Back</button>
+              </div>
+            </div>
+
+            @if (items.length > 0) {
+              <div class="overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800">
+                @for (item of items; track item.itemId; let last = $last; let i = $index) {
+                  <div class="flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/40"
+                    [ngClass]="!last ? 'border-b border-gray-100 dark:border-gray-800' : ''">
+                    <button class="flex flex-1 items-center gap-3 text-left" (click)="openItem(coll.key, item.itemId)">
+                      <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-gray-100 text-xs font-medium text-gray-500 dark:bg-gray-800">{{ i + 1 }}</span>
+                      <span class="text-sm font-medium text-gray-900 dark:text-white">{{ getItemSummary(coll.key, item.itemId) }}</span>
+                    </button>
+                    <div class="flex items-center gap-3">
+                      <button class="text-xs font-medium text-brand-500 hover:text-brand-600" (click)="openItem(coll.key, item.itemId)">Edit</button>
+                      <button class="text-xs text-red-400 hover:text-red-600 disabled:opacity-40" [disabled]="saving" (click)="removeItem(coll.key, item.itemId)">Remove</button>
+                    </div>
+                  </div>
                 }
               </div>
-              <button
-                class="h-9 rounded-lg bg-brand-500 px-4 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-40"
-                [disabled]="saving" (click)="saveNestedNode(nested.key, type.token, type.fields)">
-                {{ draft.claim.claimant ? 'Update' : 'Set' }} {{ nested.label }}
-              </button>
-            </div>
+            } @else {
+              <p class="rounded-xl border border-dashed border-gray-200 py-8 text-center text-sm text-gray-400 dark:border-gray-700">No items yet. Click <span class="font-medium">Add item</span> to create one.</p>
+            }
+          </section>
+        }
+      }
+
+      <!-- ═══ COLLECTION ITEM — drill-in form ═══ -->
+      @case ('item') {
+        @if (currentCollection; as coll) {
+          @if (currentItemType; as type) {
+            <section class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+              <div class="mb-4 flex items-center justify-between">
+                <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ frameLabel(currentFrame) }}</h2>
+                <div class="flex items-center gap-3">
+                  <button class="text-xs text-red-400 hover:text-red-600 disabled:opacity-40" [disabled]="saving" (click)="removeItemAndBack(coll.key, currentItemId)">Delete item</button>
+                  <button class="text-sm font-medium text-brand-500 hover:text-brand-600" (click)="back()">← Back</button>
+                </div>
+              </div>
+              <div class="grid gap-4 sm:grid-cols-2">
+                @for (field of type.fields; track field.key) {
+                  <div [ngClass]="field.uiHint === 'textarea' || field.uiHint === 'radio' || field.uiHint === 'multiselect' ? 'sm:col-span-2' : ''">
+                    <app-field-input
+                      [field]="field"
+                      [value]="getItemField(coll.key, currentItemId, field.key)"
+                      (valueChange)="onItemFieldChange(coll.key, currentItemId, field.key, $event)">
+                    </app-field-input>
+                  </div>
+                }
+              </div>
+            </section>
           }
         }
+      }
 
-        <!-- Current value display -->
-        @if (draft.claim.claimant && !nestedNodeType[nested.key]) {
-          <div class="rounded-xl bg-gray-50 px-4 py-3 dark:bg-gray-900/50">
-            <p class="text-xs text-gray-400">Current</p>
-            <p class="mt-1 font-semibold text-gray-900 dark:text-white">{{ draft.claim.claimant.displayName || '—' }}</p>
-            <p class="text-xs text-gray-500">{{ draft.claim.claimant.type }}</p>
-          </div>
+      <!-- ═══ NESTED NODE ═══ -->
+      @case ('nested') {
+        @if (currentNested; as nested) {
+          <section class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+            <div class="mb-4 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ nested.label }}</h2>
+                <span class="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-950/40 dark:text-purple-300">Polymorphic — {{ nested.types.length }} types</span>
+              </div>
+              <button class="text-sm font-medium text-brand-500 hover:text-brand-600" (click)="back()">← Back</button>
+            </div>
+
+            <div class="mb-4 flex flex-wrap gap-2">
+              @for (type of nested.types; track type.token) {
+                <button
+                  class="rounded-lg border px-4 py-2 text-sm font-medium transition-colors"
+                  [ngClass]="nestedNodeType[nested.key] === type.token
+                    ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-950/30 dark:text-brand-300'
+                    : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800'"
+                  (click)="setNestedType(nested.key, type.token)">
+                  {{ type.label }}
+                </button>
+              }
+              @if (draft.claim.claimant) {
+                <button class="rounded-lg border border-red-200 px-3 py-2 text-xs font-medium text-red-500 hover:bg-red-50 dark:border-red-900/60"
+                  (click)="dropNestedNode(nested.key)">Drop</button>
+              }
+            </div>
+
+            @for (type of nested.types; track type.token) {
+              @if (nestedNodeType[nested.key] === type.token) {
+                <div class="space-y-4">
+                  <div class="grid gap-4 sm:grid-cols-2">
+                    @for (field of type.fields; track field.key) {
+                      <app-field-input
+                        [field]="field"
+                        [value]="getNestedNodeField(nested.key, field.key)"
+                        (valueChange)="onNestedNodeFieldChange(nested.key, field.key, $event)">
+                      </app-field-input>
+                    }
+                  </div>
+                  <button
+                    class="h-9 rounded-lg bg-brand-500 px-4 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-40"
+                    [disabled]="saving" (click)="saveNestedNode(nested.key, type.token, type.fields)">
+                    {{ draft.claim.claimant ? 'Update' : 'Set' }} {{ nested.label }}
+                  </button>
+                </div>
+              }
+            }
+
+            @if (draft.claim.claimant && !nestedNodeType[nested.key]) {
+              <div class="rounded-xl bg-gray-50 px-4 py-3 dark:bg-gray-900/50">
+                <p class="text-xs text-gray-400">Current</p>
+                <p class="mt-1 font-semibold text-gray-900 dark:text-white">{{ draft.claim.claimant.displayName || '—' }}</p>
+                <p class="text-xs text-gray-500">{{ draft.claim.claimant.type }}</p>
+              </div>
+            }
+          </section>
         }
-      </section>
+      }
     }
-
   </div>
 }
 
 <!-- ═══ OVERLAY PANEL — sticky bottom drawer ═══ -->
 @if (draft) {
   <div class="fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white shadow-2xl shadow-gray-900/20 dark:border-gray-700 dark:bg-gray-900 dark:shadow-black/40">
-    <!-- Drawer handle / toggle bar -->
     <button
       class="flex w-full items-center justify-between px-6 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50"
       (click)="overlayOpen = !overlayOpen">
@@ -295,7 +360,6 @@
       </svg>
     </button>
 
-    <!-- Expanded tree -->
     @if (overlayOpen) {
       <div class="max-h-[55vh] overflow-y-auto border-t border-gray-100 px-6 pb-6 pt-4 dark:border-gray-800">
         <p class="mb-3 text-xs text-gray-400">Live diff against committed snapshot. <span class="text-green-600 dark:text-green-400">Green = new value</span> · <span class="text-red-500 dark:text-red-400 line-through">Red = old value</span></p>

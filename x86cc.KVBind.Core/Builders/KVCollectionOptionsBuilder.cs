@@ -19,6 +19,15 @@ public sealed class KVCollectionOptionsBuilder<TParent, TModel>
 
     internal IReadOnlyList<KVCollectionItemDefinition> ItemDefinitions => _itemDefinitions;
 
+    internal string? DisplayNameValue { get; private set; }
+
+    public KVCollectionOptionsBuilder<TParent, TModel> DisplayName(string displayName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
+        DisplayNameValue = displayName;
+        return this;
+    }
+
     internal bool NotEmptyRule => _globalRules.NotEmptyRule;
 
     internal int? MinCountValue => _globalRules.MinCountValue;

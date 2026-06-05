@@ -11,6 +11,15 @@ public sealed class KVFieldGroupOptionsBuilder
 
     internal bool? IsResettable { get; private set; }
 
+    internal string? DisplayNameValue { get; private set; }
+
+    public KVFieldGroupOptionsBuilder DisplayName(string displayName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
+        DisplayNameValue = displayName;
+        return this;
+    }
+
     public KVFieldGroupOptionsBuilder Tag(string tag)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tag);

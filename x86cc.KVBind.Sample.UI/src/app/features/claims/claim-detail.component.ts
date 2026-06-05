@@ -15,7 +15,7 @@ export class ClaimDetailComponent implements OnInit {
   claimId = '';
   snapshot: ClaimSnapshotResponse | null = null;
   changesets: ClaimChangeSetResponse[] = [];
-  activeTab: 'snapshot' | 'items' | 'changesets' = 'snapshot';
+  activeTab: 'claim' | 'audit' = 'claim';
   selectedChangesetId = '';
   loading = false;
   error = '';

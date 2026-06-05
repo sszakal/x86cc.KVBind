@@ -245,6 +245,58 @@ public class DefinitionBuilderTests
         model.Overlay.Changes.Should().NotContainKey("ClaimNumber");
     }
 
+    [Fact]
+    public void DefinitionBuilder_DisplayName_FromBuilder_IsCapturedAcrossDefinitionKinds()
+    {
+        var builder = new KVBindBuilder<BuilderRootNode>();
+        builder.Field(x => x.Title, field => field.DisplayName("The Title"));
+        builder.FieldGroup(x => x.General, configure: options => options.DisplayName("General Section"));
+        builder.Collection(x => x.Items, collection =>
+        {
+            collection.DisplayName("Line Items");
+            collection.Item<BuilderItemNode>(item => item.Field(x => x.Code, field => field.DisplayName("Item Code")));
+        });
+
+        var definition = builder.Build();
+
+        definition.Fields.Single(f => f.SubSegmentPath == "Title").DisplayName.Should().Be("The Title");
+        definition.Nodes.Single(n => n.SubSegmentPath == "General").DisplayName.Should().Be("General Section");
+
+        var collectionDefinition = definition.Collections.Single(c => c.SubSegmentPath == "Items");
+        collectionDefinition.DisplayName.Should().Be("Line Items");
+        collectionDefinition.ItemDefinitionsByToken.Values
+            .First().NodeDefinition.Fields.Single(f => f.SubSegmentPath == "Code")
+            .DisplayName.Should().Be("Item Code");
+    }
+
+    [Fact]
+    public void DefinitionBuilder_DisplayName_FallsBackToKVBindAttribute()
+    {
+        var builder = new KVBindBuilder<DisplayNameAttributeModel>();
+        builder.Field(x => x.Code);
+
+        builder.Build().Fields.Single().DisplayName.Should().Be("Pretty Code");
+    }
+
+    [Fact]
+    public void DefinitionBuilder_DisplayName_BuilderWinsOverAttribute()
+    {
+        var builder = new KVBindBuilder<DisplayNameAttributeModel>();
+        builder.Field(x => x.Code, field => field.DisplayName("Explicit"));
+
+        builder.Build().Fields.Single().DisplayName.Should().Be("Explicit");
+    }
+
+    private sealed class DisplayNameAttributeModel : KVRootNode
+    {
+        [KVBind("Code", DisplayName = "Pretty Code")]
+        public string? Code
+        {
+            get => GetField<string?>("Code");
+            set => SetField("Code", value);
+        }
+    }
+
     private sealed class CanonicalKeyTestModel : KVRootNode
     {
         [KVBind("claim_number")]

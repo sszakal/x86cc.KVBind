@@ -13,9 +13,18 @@ public class KVFieldOptionsBuilder<TValue>
 
     internal bool IsRequired { get; private set; }
 
+    internal string? DisplayNameValue { get; private set; }
+
     public KVFieldOptionsBuilder<TValue> Required()
     {
         IsRequired = true;
+        return this;
+    }
+
+    public KVFieldOptionsBuilder<TValue> DisplayName(string displayName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
+        DisplayNameValue = displayName;
         return this;
     }
 

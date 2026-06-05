@@ -30,7 +30,7 @@ import { UserService } from '../../core/services/user.service';
                 class="mt-1.5 h-11 w-full rounded-lg border border-gray-300 px-4 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
                 [(ngModel)]="username"
                 name="username"
-                placeholder="e.g. adjuster-1"
+                placeholder="e.g. john@claims-ltd.com"
                 autocomplete="off"
                 autofocus />
               <p class="mt-1.5 text-xs text-gray-400">Used as the author on all draft edits and commits.</p>

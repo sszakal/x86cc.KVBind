@@ -22,37 +22,41 @@ interface ChangeTreeRow {
   depth: number;
 }
 
+interface GuidDelta { added: number; removed: number; }
+
 @Component({
   selector: 'app-change-tree-table',
   imports: [CommonModule],
   template: `
     @if (rows.length > 0) {
       <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
-        <table class="w-full min-w-[520px] text-left text-sm">
-          <thead class="border-b border-gray-100 bg-gray-50 text-xs uppercase text-gray-500 dark:border-gray-800 dark:bg-gray-900/60">
+        <table class="w-full min-w-[480px] text-left text-sm">
+          <thead class="border-b border-gray-100 bg-gray-50 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:bg-gray-900/60">
             <tr>
-              <th class="px-4 py-3 font-medium">Path</th>
+              <th class="px-4 py-3 font-medium">Field</th>
               <th class="px-4 py-3 font-medium">Change</th>
               <th class="px-4 py-3 font-medium">Old value</th>
               <th class="px-4 py-3 font-medium">New value</th>
-              <th class="px-4 py-3 font-medium">Full path</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
             @for (row of rows; track row.node.path) {
               <tr class="text-gray-700 dark:text-gray-300">
+                <!-- Field label -->
                 <td class="px-4 py-3">
                   <div class="flex items-center gap-2" [style.padding-left.px]="row.depth * 18">
                     @if (row.node.children.length > 0) {
-                      <button class="flex h-6 w-6 items-center justify-center rounded-md border border-gray-200 text-xs text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800" (click)="toggle(row.node.path)">
-                        {{ expanded.has(row.node.path) ? '-' : '+' }}
+                      <button class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-gray-200 text-xs text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                        (click)="toggle(row.node.path)">
+                        {{ expanded.has(row.node.path) ? '−' : '+' }}
                       </button>
                     } @else {
-                      <span class="h-6 w-6"></span>
+                      <span class="h-6 w-6 shrink-0"></span>
                     }
                     <span class="font-medium text-gray-900 dark:text-white">{{ row.node.label }}</span>
                   </div>
                 </td>
+                <!-- Change type badge -->
                 <td class="px-4 py-3">
                   @if (row.node.changeType) {
                     <span class="rounded-full px-2.5 py-1 text-xs font-medium" [ngClass]="badgeClass(row.node.changeType)">{{ row.node.changeType }}</span>
@@ -60,25 +64,39 @@ interface ChangeTreeRow {
                     <span class="text-xs text-gray-400">group</span>
                   }
                 </td>
+                <!-- Old value -->
                 <td class="max-w-56 px-4 py-3">
-                  @if (row.node.changeType && hasValue(row.node.oldValue)) {
+                  @if (row.node.changeType && isGuidArray(row.node.oldValue)) {
+                    <span class="text-sm text-red-500 line-through dark:text-red-400">{{ formatCount(row.node.oldValue) }}</span>
+                  } @else if (row.node.changeType && hasValue(row.node.oldValue)) {
                     <span class="break-words text-sm text-red-600 line-through dark:text-red-300">{{ formatValue(row.node.oldValue) }}</span>
                   } @else if (row.node.changeType) {
                     <span class="text-xs text-gray-400">not set</span>
                   } @else {
-                    <span class="text-xs text-gray-400">-</span>
+                    <span class="text-xs text-gray-400">—</span>
                   }
                 </td>
+                <!-- New value -->
                 <td class="max-w-56 px-4 py-3">
-                  @if (row.node.changeType && hasValue(row.node.newValue)) {
+                  @if (row.node.changeType && isGuidArray(row.node.newValue)) {
+                    @let delta = guidDelta(row.node.oldValue, row.node.newValue);
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <span class="text-sm font-semibold text-emerald-700 dark:text-emerald-300">{{ formatCount(row.node.newValue) }}</span>
+                      @if (delta.added > 0) {
+                        <span class="rounded px-1.5 py-0.5 font-mono text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">+{{ delta.added }}</span>
+                      }
+                      @if (delta.removed > 0) {
+                        <span class="rounded px-1.5 py-0.5 font-mono text-xs font-semibold bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-300">−{{ delta.removed }}</span>
+                      }
+                    </div>
+                  } @else if (row.node.changeType && hasValue(row.node.newValue)) {
                     <span class="break-words text-sm font-semibold text-emerald-700 dark:text-emerald-300">{{ formatValue(row.node.newValue) }}</span>
                   } @else if (row.node.changeType) {
                     <span class="text-xs text-gray-400">removed</span>
                   } @else {
-                    <span class="text-xs text-gray-400">-</span>
+                    <span class="text-xs text-gray-400">—</span>
                   }
                 </td>
-                <td class="px-4 py-3 font-mono text-xs text-gray-500">{{ row.node.path }}</td>
               </tr>
             }
           </tbody>
@@ -109,20 +127,13 @@ export class ChangeTreeTableComponent implements OnChanges {
     } else {
       this.expanded.add(path);
     }
-
     this.refreshRows();
   }
 
   badgeClass(changeType: string): string {
-    const normalized = changeType.toLowerCase();
-    if (normalized.includes('removed')) {
-      return 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300';
-    }
-
-    if (normalized.includes('added')) {
-      return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300';
-    }
-
+    const t = changeType.toLowerCase();
+    if (t.includes('removed')) return 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300';
+    if (t.includes('added'))   return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300';
     return 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300';
   }
 
@@ -130,41 +141,65 @@ export class ChangeTreeTableComponent implements OnChanges {
     return value !== null && value !== undefined;
   }
 
+  isGuid(value: unknown): boolean {
+    return typeof value === 'string'
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  }
+
+  isGuidArray(value: unknown): boolean {
+    return Array.isArray(value) && (value.length === 0 || (value as unknown[]).every(v => this.isGuid(v)));
+  }
+
+  formatCount(value: unknown): string {
+    const n = (value as unknown[]).length;
+    return `${n} item${n !== 1 ? 's' : ''}`;
+  }
+
+  guidDelta(oldValue: unknown, newValue: unknown): GuidDelta {
+    const oldSet = new Set<string>(Array.isArray(oldValue) ? (oldValue as string[]) : []);
+    const newSet = new Set<string>(Array.isArray(newValue) ? (newValue as string[]) : []);
+    let added = 0, removed = 0;
+    for (const id of newSet) if (!oldSet.has(id)) added++;
+    for (const id of oldSet) if (!newSet.has(id)) removed++;
+    return { added, removed };
+  }
+
   formatValue(value: unknown): string {
-    if (value === null || value === undefined) {
-      return '';
-    }
-
-    if (typeof value === 'string') {
-      return value;
-    }
-
-    if (typeof value === 'number' || typeof value === 'boolean') {
-      return String(value);
-    }
-
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
     return JSON.stringify(value);
   }
 
   private buildTree(changes: ChangeTreeChange[]): ChangeTreeNode[] {
     const roots: ChangeTreeNode[] = [];
     const nodes = new Map<string, ChangeTreeNode>();
+    // tracks how many UUID children have been created per parent path
+    const guidCounters = new Map<string, number>();
 
     for (const change of changes) {
       const normalizedPath = this.normalizePath(change.path);
-      if (!normalizedPath) {
-        continue;
-      }
+      if (!normalizedPath) continue;
 
-      const segments = normalizedPath.split('/').filter(segment => segment.length > 0);
+      const segments = normalizedPath.split('/').filter(s => s.length > 0);
       let parentChildren = roots;
       let currentPath = '';
 
       for (const segment of segments) {
+        const parentPath = currentPath;
         currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+
         let node = nodes.get(currentPath);
         if (!node) {
-          node = { label: segment, path: currentPath, changeType: '', children: [] };
+          let label: string;
+          if (this.isGuid(segment)) {
+            const n = (guidCounters.get(parentPath) ?? 0) + 1;
+            guidCounters.set(parentPath, n);
+            label = `Item #${n}`;
+          } else {
+            label = segment;
+          }
+          node = { label, path: currentPath, changeType: '', children: [] };
           nodes.set(currentPath, node);
           parentChildren.push(node);
         }
@@ -172,11 +207,11 @@ export class ChangeTreeTableComponent implements OnChanges {
         parentChildren = node.children;
       }
 
-      const node = nodes.get(normalizedPath);
-      if (node) {
-        node.changeType = this.mergeChangeType(node.changeType, change.changeType);
-        node.oldValue = change.oldValue ?? node.oldValue;
-        node.newValue = change.newValue ?? node.newValue;
+      const leaf = nodes.get(normalizedPath);
+      if (leaf) {
+        leaf.changeType = this.mergeChangeType(leaf.changeType, change.changeType);
+        leaf.oldValue = change.oldValue ?? leaf.oldValue;
+        leaf.newValue = change.newValue ?? leaf.newValue;
       }
     }
 
@@ -184,28 +219,17 @@ export class ChangeTreeTableComponent implements OnChanges {
   }
 
   private normalizePath(path: string): string {
-    const segments = path.split('/').filter(segment => segment.length > 0 && segment !== '$type' && segment !== '$id');
-    return segments.join('/');
+    return path.split('/').filter(s => s.length > 0 && s !== '$type' && s !== '$id').join('/');
   }
 
   private mergeChangeType(existing: string, next: string): string {
-    if (!existing) {
-      return next;
-    }
-
+    if (!existing) return next;
     const priority = ['Removed', 'Updated', 'Changed', 'Added'];
-    const existingIndex = priority.findIndex(value => existing.toLowerCase().includes(value.toLowerCase()));
-    const nextIndex = priority.findIndex(value => next.toLowerCase().includes(value.toLowerCase()));
-
-    if (existingIndex < 0) {
-      return next;
-    }
-
-    if (nextIndex < 0) {
-      return existing;
-    }
-
-    return nextIndex < existingIndex ? next : existing;
+    const ei = priority.findIndex(v => existing.toLowerCase().includes(v.toLowerCase()));
+    const ni = priority.findIndex(v => next.toLowerCase().includes(v.toLowerCase()));
+    if (ei < 0) return next;
+    if (ni < 0) return existing;
+    return ni < ei ? next : existing;
   }
 
   private expandNodes(nodes: ChangeTreeNode[]): void {

@@ -2,12 +2,10 @@ using System.Text.Json;
 
 namespace x86cc.KVBind.Sample.Api.Claims;
 
+// Create only captures the mandatory identity of the claim. All other fields are filled in on the
+// draft edit page after the claim (and its first draft) are opened.
 public sealed record CreateClaimRequest(
     string ClaimNumber,
-    string? IncidentDate,
-    string? Description,
-    string? PolicyNumber,
-    string? CoverageType,
     string User);
 
 public sealed record OpenClaimDraftRequest(string User);
@@ -20,10 +18,12 @@ public sealed record ClaimSummaryResponse(
     Guid ClaimId,
     string? ClaimNumber,
     string? Status,
+    string? Priority,
     string? Description,
     decimal ClaimedTotal,
     Guid SnapshotVersion,
-    Guid? LastCommitId);
+    Guid? LastCommitId,
+    DateTimeOffset Modified);
 
 public sealed record ClaimSnapshotResponse(
     Guid ClaimId,
@@ -39,7 +39,33 @@ public sealed record ClaimDraftResponse(
     ClaimDataResponse Claim,
     Guid BaseSnapshotVersion,
     Guid? BaseCommitId,
-    IReadOnlyList<ClaimChangeResponse> Changes);
+    IReadOnlyList<ClaimChangeResponse> Changes,
+    // Draft state — drives the editor vs. forced-merge screen on the frontend.
+    bool IsRebasing,
+    bool IsStale,
+    Guid LatestSnapshotVersion,
+    Guid? RebaseTargetVersion,
+    IReadOnlyList<RebaseConflictResponse> Conflicts);
+
+public sealed record RebaseConflictResponse(
+    string Path,
+    string Kind,           // Value | DeleteEdit
+    string Resolution,     // Unresolved | Ours | Theirs | Custom
+    object? BaseValue,     // V1 — common ancestor
+    object? MainValue,     // V2 — committed upstream
+    object? OursValue);    // draft value (null when the draft deleted the path)
+
+public sealed record RebaseResultResponse(
+    Guid ClaimId,
+    Guid DraftId,
+    string Outcome,        // AlreadyCurrent | Merged | ConflictsPending
+    Guid TargetSnapshotVersion,
+    IReadOnlyList<RebaseConflictResponse> Conflicts);
+
+public sealed record ResolveRebaseConflictRequest(
+    string Path,
+    string Resolution,     // Ours | Theirs | Custom
+    JsonElement? Value = null);
 
 public sealed record ClaimCommitResponse(
     Guid ClaimId,

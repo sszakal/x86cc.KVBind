@@ -27,15 +27,12 @@ public sealed class InsuranceClaimAggregateService(
         var overlay = KVOverlay.Create(snapshot.Clone(), request.User);
         var root = Bind(overlay);
 
+        // Only the mandatory identity is set at creation — everything else is edited on the draft page.
         root.ClaimNumber = request.ClaimNumber;
         root.Status = "draft";
-        root.IncidentDate = request.IncidentDate;
-        root.Description = request.Description;
-        root.Policy.PolicyNumber = request.PolicyNumber;
-        root.Policy.CoverageType = request.CoverageType;
 
         var commit = root.CreateCommit(DateTimeOffset.UtcNow);
-        var changes = ProjectCommitChanges(snapshot.Clone(), commit);
+        var changes = ProjectCommitChanges(snapshot.Clone(), commit, BuildDisplayNames());
         snapshot.Apply(commit);
 
         session.Store(new ClaimSnapshotDocument
@@ -68,10 +65,12 @@ public sealed class InsuranceClaimAggregateService(
                     document.Id,
                     root.ClaimNumber,
                     root.Status,
+                    root.Priority,
                     root.Description,
                     root.ClaimedTotal,
                     document.Snapshot.Version,
-                    document.Snapshot.LastCommitId);
+                    document.Snapshot.LastCommitId,
+                    document.Snapshot.Modified);
             })
             .ToArray();
     }
@@ -99,18 +98,57 @@ public sealed class InsuranceClaimAggregateService(
         }
 
         NormalizeSnapshot(snapshotDocument.Snapshot);
+
+        // Resume an existing open draft for this user rather than silently discarding it.
+        var existing = await session.Query<ClaimOverlayDocument>()
+            .Where(d => d.ClaimId == claimId && d.User == request.User)
+            .OrderByDescending(d => d.UpdatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (existing is not null)
+        {
+            return ProjectDraft(existing, snapshotDocument.Snapshot);
+        }
+
         var overlay = KVOverlay.Create(snapshotDocument.Snapshot.Clone(), request.User);
         var draft = ClaimOverlayDocument.Create(claimId, request.User, overlay);
         session.Store(draft);
         await session.SaveChangesAsync(cancellationToken);
 
-        return ProjectDraft(draft);
+        return ProjectDraft(draft, snapshotDocument.Snapshot);
     }
 
     public async Task<ClaimDraftResponse?> GetDraftAsync(Guid claimId, Guid draftId, CancellationToken cancellationToken)
     {
         var draft = await session.LoadAsync<ClaimOverlayDocument>(draftId, cancellationToken);
-        return draft is null || draft.ClaimId != claimId ? null : ProjectDraft(draft);
+        if (draft is null || draft.ClaimId != claimId)
+        {
+            return null;
+        }
+
+        var snapshotDocument = await session.LoadAsync<ClaimSnapshotDocument>(claimId, cancellationToken);
+        if (snapshotDocument is null)
+        {
+            return null;
+        }
+
+        NormalizeSnapshot(snapshotDocument.Snapshot);
+
+        // Auto-resync: an overlay with no draft changes and no rebase in progress can always be
+        // fast-forwarded onto the latest snapshot — an empty overlay can never conflict.
+        if (!draft.IsRebasing
+            && draft.Changes.Count == 0
+            && !IsDraftBasedOnLatestSnapshot(draft, snapshotDocument.Snapshot))
+        {
+            var emptyOverlay = draft.ToOverlay();
+            NormalizeOverlay(emptyOverlay);
+            emptyOverlay.Reset(snapshotDocument.Snapshot);
+            draft.UpdateFrom(emptyOverlay);
+            session.Store(draft);
+            await session.SaveChangesAsync(cancellationToken);
+        }
+
+        return ProjectDraft(draft, snapshotDocument.Snapshot);
     }
 
     public async Task<ClaimDraftResponse?> PatchDraftAsync(
@@ -125,6 +163,14 @@ public sealed class InsuranceClaimAggregateService(
             return null;
         }
 
+        var snapshotDocument = await session.LoadAsync<ClaimSnapshotDocument>(claimId, cancellationToken);
+        if (snapshotDocument is null)
+        {
+            return null;
+        }
+
+        NormalizeSnapshot(snapshotDocument.Snapshot);
+
         var overlay = draft.ToOverlay();
         NormalizeOverlay(overlay);
         var root = Bind(overlay);
@@ -134,8 +180,172 @@ public sealed class InsuranceClaimAggregateService(
         session.Store(draft);
         await session.SaveChangesAsync(cancellationToken);
 
-        return ProjectDraft(draft);
+        return ProjectDraft(draft, snapshotDocument.Snapshot);
     }
+
+    // ── Rebase ──────────────────────────────────────────────────────────────────
+
+    public async Task<RebaseResultResponse?> BeginRebaseAsync(Guid claimId, Guid draftId, CancellationToken cancellationToken)
+    {
+        var draft = await session.LoadAsync<ClaimOverlayDocument>(draftId, cancellationToken);
+        if (draft is null || draft.ClaimId != claimId)
+        {
+            return null;
+        }
+
+        var snapshotDocument = await session.LoadAsync<ClaimSnapshotDocument>(claimId, cancellationToken);
+        if (snapshotDocument is null)
+        {
+            return null;
+        }
+
+        NormalizeSnapshot(snapshotDocument.Snapshot);
+
+        var overlay = draft.ToOverlay();
+        NormalizeOverlay(overlay);
+
+        // Idempotent: if a rebase is already in flight, return its current state instead of throwing.
+        if (overlay.IsRebasing)
+        {
+            return new RebaseResultResponse(
+                claimId, draftId,
+                KVRebaseOutcome.ConflictsPending.ToString(),
+                overlay.RebaseTarget?.Version ?? snapshotDocument.Snapshot.Version,
+                overlay.Conflicts.Select(ProjectConflict).ToArray());
+        }
+
+        var outcome = overlay.BeginRebase(snapshotDocument.Snapshot);
+        draft.UpdateFrom(overlay);
+        session.Store(draft);
+        await session.SaveChangesAsync(cancellationToken);
+
+        return new RebaseResultResponse(
+            claimId, draftId,
+            outcome.ToString(),
+            snapshotDocument.Snapshot.Version,
+            overlay.Conflicts.Select(ProjectConflict).ToArray());
+    }
+
+    public async Task<RebaseResultResponse?> ResolveRebaseConflictAsync(
+        Guid claimId, Guid draftId, ResolveRebaseConflictRequest request, CancellationToken cancellationToken)
+    {
+        var draft = await session.LoadAsync<ClaimOverlayDocument>(draftId, cancellationToken);
+        if (draft is null || draft.ClaimId != claimId || !draft.IsRebasing)
+        {
+            return null;
+        }
+
+        if (!Enum.TryParse<KVConflictResolution>(request.Resolution, ignoreCase: true, out var resolution)
+            || resolution == KVConflictResolution.Unresolved)
+        {
+            throw new InvalidOperationException($"Invalid resolution '{request.Resolution}'. Use Ours, Theirs or Custom.");
+        }
+
+        var overlay = draft.ToOverlay();
+        NormalizeOverlay(overlay);
+
+        var customValue = resolution == KVConflictResolution.Custom ? ToConflictValue(request.Value) : null;
+        overlay.ResolveConflict(request.Path, resolution, customValue);
+
+        draft.UpdateFrom(overlay);
+        session.Store(draft);
+        await session.SaveChangesAsync(cancellationToken);
+
+        return new RebaseResultResponse(
+            claimId, draftId,
+            KVRebaseOutcome.ConflictsPending.ToString(),
+            overlay.RebaseTarget?.Version ?? draft.BaseSnapshotVersion,
+            overlay.Conflicts.Select(ProjectConflict).ToArray());
+    }
+
+    public async Task<ClaimDraftResponse?> FinishRebaseAsync(Guid claimId, Guid draftId, CancellationToken cancellationToken)
+    {
+        var draft = await session.LoadAsync<ClaimOverlayDocument>(draftId, cancellationToken);
+        if (draft is null || draft.ClaimId != claimId || !draft.IsRebasing)
+        {
+            return null;
+        }
+
+        var overlay = draft.ToOverlay();
+        NormalizeOverlay(overlay);
+        overlay.FinishRebase(); // throws if any conflict is unresolved
+
+        draft.UpdateFrom(overlay);
+        session.Store(draft);
+        await session.SaveChangesAsync(cancellationToken);
+
+        var snapshotDocument = await session.LoadAsync<ClaimSnapshotDocument>(claimId, cancellationToken);
+        NormalizeSnapshot(snapshotDocument!.Snapshot);
+        return ProjectDraft(draft, snapshotDocument.Snapshot);
+    }
+
+    public async Task<ClaimDraftResponse?> CancelRebaseAsync(Guid claimId, Guid draftId, CancellationToken cancellationToken)
+    {
+        var draft = await session.LoadAsync<ClaimOverlayDocument>(draftId, cancellationToken);
+        if (draft is null || draft.ClaimId != claimId || !draft.IsRebasing)
+        {
+            return null;
+        }
+
+        var overlay = draft.ToOverlay();
+        NormalizeOverlay(overlay);
+        overlay.CancelRebase();
+
+        draft.UpdateFrom(overlay);
+        session.Store(draft);
+        await session.SaveChangesAsync(cancellationToken);
+
+        var snapshotDocument = await session.LoadAsync<ClaimSnapshotDocument>(claimId, cancellationToken);
+        NormalizeSnapshot(snapshotDocument!.Snapshot);
+        return ProjectDraft(draft, snapshotDocument.Snapshot);
+    }
+
+    // Drops all draft changes and resyncs onto the latest snapshot — the "discard my changes" escape.
+    public async Task<ClaimDraftResponse?> ResetDraftAsync(Guid claimId, Guid draftId, CancellationToken cancellationToken)
+    {
+        var draft = await session.LoadAsync<ClaimOverlayDocument>(draftId, cancellationToken);
+        if (draft is null || draft.ClaimId != claimId)
+        {
+            return null;
+        }
+
+        var snapshotDocument = await session.LoadAsync<ClaimSnapshotDocument>(claimId, cancellationToken);
+        if (snapshotDocument is null)
+        {
+            return null;
+        }
+
+        NormalizeSnapshot(snapshotDocument.Snapshot);
+
+        var overlay = draft.ToOverlay();
+        NormalizeOverlay(overlay);
+        overlay.Reset(snapshotDocument.Snapshot);
+
+        draft.UpdateFrom(overlay);
+        session.Store(draft);
+        await session.SaveChangesAsync(cancellationToken);
+
+        return ProjectDraft(draft, snapshotDocument.Snapshot);
+    }
+
+    private static KVValue? ToConflictValue(JsonElement? value)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        var scalar = NormalizeValue(value.Value);
+        return scalar is null ? null : KVValue.FromObject(scalar);
+    }
+
+    private static RebaseConflictResponse ProjectConflict(KVConflict conflict) => new(
+        conflict.Path,
+        conflict.Kind.ToString(),
+        conflict.Resolution.ToString(),
+        conflict.BaseValue?.Value,
+        conflict.MainValue?.Value,
+        conflict.OursValue?.Value);
 
     public async Task<CommitClaimDraftResult?> CommitDraftAsync(
         Guid claimId,
@@ -172,7 +382,7 @@ public sealed class InsuranceClaimAggregateService(
         NormalizeOverlay(overlay);
         var root = Bind(overlay);
         var commit = root.CreateCommit(DateTimeOffset.UtcNow);
-        var changes = ProjectCommitChanges(snapshotDocument.Snapshot.Clone(), commit);
+        var changes = ProjectCommitChanges(snapshotDocument.Snapshot.Clone(), commit, BuildDisplayNames());
 
         snapshotDocument.Snapshot.Apply(commit);
         if (!string.IsNullOrWhiteSpace(request.User))
@@ -205,6 +415,7 @@ public sealed class InsuranceClaimAggregateService(
             .Where(document => document.ClaimId == claimId)
             .ToListAsync(cancellationToken);
 
+        var displayNames = BuildDisplayNames();
         return documents
             .OrderByDescending(document => document.Commit.Timestamp)
             .Select(document => new ClaimChangeSetResponse(
@@ -216,7 +427,7 @@ public sealed class InsuranceClaimAggregateService(
                 document.Commit.Changes.Keys.Where(k => document.Commit.Changes[k] == KVValue.Tombstone).Order(StringComparer.Ordinal).ToArray(),
                 document.Changes.Count > 0
                     ? document.Changes
-                    : ProjectCommitChanges(null, document.Commit)))
+                    : ProjectCommitChanges(null, document.Commit, displayNames)))
             .ToArray();
     }
 
@@ -243,11 +454,14 @@ public sealed class InsuranceClaimAggregateService(
             snapshot.LastCommitTimestamp);
     }
 
-    private ClaimDraftResponse ProjectDraft(ClaimOverlayDocument draft)
+    private ClaimDraftResponse ProjectDraft(ClaimOverlayDocument draft, KVSnapshot latestSnapshot)
     {
         var overlay = draft.ToOverlay();
         NormalizeOverlay(overlay);
         var root = Bind(overlay);
+
+        var isStale = !draft.IsRebasing && !IsDraftBasedOnLatestSnapshot(draft, latestSnapshot);
+
         return new ClaimDraftResponse(
             draft.Id,
             draft.ClaimId,
@@ -255,14 +469,19 @@ public sealed class InsuranceClaimAggregateService(
             ProjectClaim(root),
             overlay.BaseSnapshotVersion,
             overlay.BaseCommitId,
-            ProjectOverlayChanges(overlay, root.GetAllChanges().Changes));
+            ProjectOverlayChanges(overlay, root.GetAllChanges().Changes, BuildDisplayNames()),
+            draft.IsRebasing,
+            isStale,
+            latestSnapshot.Version,
+            draft.IsRebasing ? draft.RebaseTarget?.Version : null,
+            draft.Conflicts.Select(ProjectConflict).ToArray());
     }
 
-    private static IReadOnlyList<ClaimChangeResponse> ProjectOverlayChanges(KVOverlay overlay, IEnumerable<KVChangeDelta> changes)
+    private static IReadOnlyList<ClaimChangeResponse> ProjectOverlayChanges(KVOverlay overlay, IEnumerable<KVChangeDelta> changes, IReadOnlyDictionary<string, string>? displayNames = null)
     {
         return changes
             .Select(change => new ClaimChangeResponse(
-                NormalizeDisplayPath(change.Path),
+                NormalizeDisplayPath(change.Path, displayNames),
                 change.ChangeType.ToString(),
                 ProjectPathValue(overlay.Snapshot, change.Path),
                 ProjectPathValue(overlay, change.Path)))
@@ -272,7 +491,7 @@ public sealed class InsuranceClaimAggregateService(
             .ToArray();
     }
 
-    private static IReadOnlyList<ClaimChangeResponse> ProjectCommitChanges(KVSnapshot? beforeSnapshot, KVCommit commit)
+    private static IReadOnlyList<ClaimChangeResponse> ProjectCommitChanges(KVSnapshot? beforeSnapshot, KVCommit commit, IReadOnlyDictionary<string, string>? displayNames = null)
     {
         var changes = new List<ClaimChangeResponse>();
         foreach (var pair in commit.Changes.OrderBy(pair => pair.Key, StringComparer.Ordinal))
@@ -280,7 +499,7 @@ public sealed class InsuranceClaimAggregateService(
             if (pair.Value == KVValue.Tombstone)
             {
                 changes.Add(new ClaimChangeResponse(
-                    NormalizeDisplayPath(pair.Key),
+                    NormalizeDisplayPath(pair.Key, displayNames),
                     "Removed",
                     ProjectPathValue(beforeSnapshot, pair.Key),
                     null));
@@ -288,7 +507,7 @@ public sealed class InsuranceClaimAggregateService(
             else
             {
                 changes.Add(new ClaimChangeResponse(
-                    NormalizeDisplayPath(pair.Key),
+                    NormalizeDisplayPath(pair.Key, displayNames),
                     beforeSnapshot is not null && beforeSnapshot.TryGet(pair.Key, out _) ? "Updated" : "Added",
                     ProjectPathValue(beforeSnapshot, pair.Key),
                     pair.Value.Value));
@@ -316,12 +535,31 @@ public sealed class InsuranceClaimAggregateService(
         };
     }
 
-    private static string NormalizeDisplayPath(string path)
+    private static string NormalizeDisplayPath(string path, IReadOnlyDictionary<string, string>? displayNames = null)
     {
         var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries)
             .Where(segment => segment is not "$type" and not "$items")
             .ToArray();
-        return string.Join('/', segments);
+
+        if (displayNames is null || displayNames.Count == 0)
+            return string.Join('/', segments);
+
+        var result = new string[segments.Length];
+        var lookupPath = new System.Text.StringBuilder();
+        foreach (var (i, segment) in segments.Select((s, i) => (i, s)))
+        {
+            if (Guid.TryParse(segment, out _))
+            {
+                result[i] = segment; // kept as full UUID; frontend renders as "Item #N"
+            }
+            else
+            {
+                if (lookupPath.Length > 0) lookupPath.Append('/');
+                lookupPath.Append(segment);
+                result[i] = displayNames.TryGetValue(lookupPath.ToString(), out var name) ? name : segment;
+            }
+        }
+        return string.Join('/', result);
     }
 
     private static object? ProjectPathValue(KVSnapshot? snapshot, string path)
@@ -408,60 +646,111 @@ public sealed class InsuranceClaimAggregateService(
     private static AllowedValueOption VC(string id, string label, string template, IReadOnlyList<PlaceholderMeta> placeholders)
         => new(id, label, template, placeholders);
 
-    public static DefinitionSchemaResponse GetDefinitionSchema() => new(
-        Fields:
-        [
-            new("ClaimNumber",  "Claim Number",  "string",  "text",        true,  null),
-            new("Status",       "Status",        "string",  "select",      true,  ClaimStatus.All.Select(s => V(s.Id, s.Label)).ToArray()),
-            new("Priority",     "Priority",      "string",  "radio",       false, ClaimPriority.All.Select(p => V(p.Id, p.Label)).ToArray()),
-            new("IncidentDate", "Incident Date", "date",    "date",        false, null),
-            new("Description",  "Description",   "string",  "textarea",    false, null),
-            new("Tags",         "Tags",          "string",  "multiselect", false,
-                InsuranceClaimDefinitionBuilder.ClaimTags.Select(t => V(t.Id, t.Label)).ToArray()),
-        ],
-        FieldGroups:
-        [
-            new("Policy", "Policy",
+    // Builds a path → DisplayName lookup from the actual definition so the schema's labels are driven by the
+    // DSL (DisplayName(...) / [KVBind(DisplayName=...)]) rather than duplicated here. Falls back to the
+    // hand-authored label when the definition declares none.
+    private IReadOnlyDictionary<string, string> BuildDisplayNames()
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        Collect(registry.Get<InsuranceClaim>(), prefix: string.Empty);
+        return map;
+
+        void Collect(KVNodeDefinition node, string prefix)
+        {
+            foreach (var field in node.Fields)
+                Put(prefix, field.SubSegmentPath, field.DisplayName);
+
+            foreach (var group in node.Nodes)
+            {
+                Put(prefix, group.SubSegmentPath, group.DisplayName);
+                Collect(group, Combine(prefix, group.SubSegmentPath));
+            }
+
+            foreach (var collection in node.Collections)
+            {
+                Put(prefix, collection.SubSegmentPath, collection.DisplayName);
+                foreach (var item in collection.ItemDefinitionsByToken.Values)
+                    Collect(item.NodeDefinition, Combine(prefix, collection.SubSegmentPath));
+            }
+
+            foreach (var nested in node.NestedNodes)
+            {
+                Put(prefix, nested.SubSegmentPath, nested.DisplayName);
+                foreach (var type in nested.TypeDefinitionsByToken.Values)
+                    Collect(type.NodeDefinition, Combine(prefix, nested.SubSegmentPath));
+            }
+        }
+
+        void Put(string prefix, string segment, string? displayName)
+        {
+            if (!string.IsNullOrWhiteSpace(displayName))
+                map[Combine(prefix, segment)] = displayName!;
+        }
+
+        static string Combine(string prefix, string segment) =>
+            string.IsNullOrEmpty(prefix) ? segment : $"{prefix}/{segment}";
+    }
+
+    public DefinitionSchemaResponse GetDefinitionSchema()
+    {
+        var names = BuildDisplayNames();
+        string L(string key, string fallback) => names.TryGetValue(key, out var n) ? n : fallback;
+
+        return new(
+            Fields:
             [
-                new("PolicyNumber", "Policy Number", "string", "text",   false, null),
-                new("CoverageType", "Coverage Type", "string", "select", true,
+                new("ClaimNumber",  L("ClaimNumber", "Claim Number"),   "string",  "text",        true,  null),
+                new("Status",       L("Status", "Status"),              "string",  "select",      true,  ClaimStatus.All.Select(s => V(s.Id, s.Label)).ToArray()),
+                new("Priority",     L("Priority", "Priority"),          "string",  "radio",       false, ClaimPriority.All.Select(p => V(p.Id, p.Label)).ToArray()),
+                new("IncidentDate", L("IncidentDate", "Incident Date"), "date",    "date",        false, null),
+                new("Description",  L("Description", "Description"),     "string",  "textarea",    false, null),
+                new("Tags",         L("Tags", "Tags"),                  "string",  "multiselect", false,
+                    InsuranceClaimDefinitionBuilder.ClaimTags.Select(t => V(t.Id, t.Label)).ToArray()),
+            ],
+            FieldGroups:
+            [
+                new("Policy", L("Policy", "Policy"),
                 [
-                    V("comprehensive",  "Comprehensive"),
-                    VC("collision",      "Collision",
-                        "Collision — {Deductible:C} deductible",
-                        [new("Deductible", "Deductible Amount", "decimal")]),
-                    VC("collision_plus", "Collision Plus",
-                        "Collision Plus — {Deductible:C} deductible, {ExcessAmount:C} excess",
-                        [new("Deductible", "Deductible Amount", "decimal"), new("ExcessAmount", "Excess Amount", "decimal")]),
-                    V("liability",      "Liability Only"),
-                    V("medical",        "Medical Payments"),
+                    new("PolicyNumber", L("Policy/PolicyNumber", "Policy Number"), "string", "text",   false, null),
+                    new("CoverageType", L("Policy/CoverageType", "Coverage Type"), "string", "select", true,
+                    [
+                        V("comprehensive",  "Comprehensive"),
+                        VC("collision",      "Collision",
+                            "Collision — {Deductible:C} deductible",
+                            [new("Deductible", "Deductible Amount", "decimal")]),
+                        VC("collision_plus", "Collision Plus",
+                            "Collision Plus — {Deductible:C} deductible, {ExcessAmount:C} excess",
+                            [new("Deductible", "Deductible Amount", "decimal"), new("ExcessAmount", "Excess Amount", "decimal")]),
+                        V("liability",      "Liability Only"),
+                        V("medical",        "Medical Payments"),
+                    ]),
                 ]),
-            ]),
-        ],
-        Collections:
-        [
-            new("DamagedItems", "Damaged Items",
+            ],
+            Collections:
             [
-                new("DamagedItem", "Damaged Item",
+                new("DamagedItems", L("DamagedItems", "Damaged Items"),
                 [
-                    new("Description",     "Description",     "string",  "text",   true,  null),
-                    new("Category",        "Category",        "string",  "select", false, InsuranceClaimDefinitionBuilder.DamageCategories.Select(c => V(c, ToLabel(c))).ToArray()),
-                    new("EstimatedAmount", "Estimated Amount","decimal", "number", false, null),
+                    new("DamagedItem", "Damaged Item",
+                    [
+                        new("Description",     L("DamagedItems/Description", "Description"),         "string",  "text",   true,  null),
+                        new("Category",        L("DamagedItems/Category", "Category"),               "string",  "select", false, InsuranceClaimDefinitionBuilder.DamageCategories.Select(c => V(c, ToLabel(c))).ToArray()),
+                        new("EstimatedAmount", L("DamagedItems/EstimatedAmount", "Estimated Amount"),"decimal", "number", false, null),
+                    ]),
                 ]),
-            ]),
-            new("Notes", "Notes",
+                new("Notes", L("Notes", "Notes"),
+                [
+                    new("Note", "Note", [new("Text", L("Notes/Text", "Note text"), "string", "text", false, null)]),
+                ]),
+            ],
+            NestedNodes:
             [
-                new("Note", "Note", [new("Text", "Note text", "string", "text", false, null)]),
-            ]),
-        ],
-        NestedNodes:
-        [
-            new("Claimant", "Claimant",
-            [
-                new("PERSON",  "Person",  [new("FullName",    "Full name",    "string", "text", true,  null)]),
-                new("COMPANY", "Company", [new("CompanyName", "Company name", "string", "text", true,  null)]),
-            ]),
-        ]);
+                new("Claimant", L("Claimant", "Claimant"),
+                [
+                    new("PERSON",  "Person",  [new("FullName",    L("Claimant/FullName", "Full name"),       "string", "text", true,  null)]),
+                    new("COMPANY", "Company", [new("CompanyName", L("Claimant/CompanyName", "Company name"), "string", "text", true,  null)]),
+                ]),
+            ]);
+    }
 
     private static string ToLabel(string snake) =>
         string.Concat(snake.Split('_').Select(w => char.ToUpperInvariant(w[0]) + w[1..]))

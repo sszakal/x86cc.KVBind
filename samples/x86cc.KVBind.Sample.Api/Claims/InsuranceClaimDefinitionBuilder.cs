@@ -26,11 +26,13 @@ public sealed class InsuranceClaimDefinitionBuilder : IKVModelDefinitionBuilder
 
         // ── ClaimNumber ───────────────────────────────────────────────────────────
         builder.Field(x => x.ClaimNumber, f =>
-            f.Validation(p => p.For<SubmitClaimValidationProfile>(r => r.Required())));
+            f.DisplayName("Claim Number")
+             .Validation(p => p.For<SubmitClaimValidationProfile>(r => r.Required())));
 
         // ── Status — AllowedValue with labels + required for non-draft ────────────
         builder.Field(x => x.Status, f =>
         {
+            f.DisplayName("Status");
             // AllowedValue(storedToken, id, label)
             f.AllowedValue("draft",      "draft",      "Draft");
             f.AllowedValue("in_review",  "in_review",  "In Review");
@@ -43,22 +45,25 @@ public sealed class InsuranceClaimDefinitionBuilder : IKVModelDefinitionBuilder
         // ── Priority — AllowedValue with labels ───────────────────────────────────
         builder.Field(x => x.Priority, f =>
         {
+            f.DisplayName("Priority");
             f.AllowedValue("low",      "low",      "Low");
             f.AllowedValue("medium",   "medium",   "Medium");
             f.AllowedValue("high",     "high",     "High");
             f.AllowedValue("critical", "critical", "Critical");
         });
 
-        builder.Field(x => x.IncidentDate);
+        builder.Field(x => x.IncidentDate, f => f.DisplayName("Incident Date"));
 
         builder.Field(x => x.Description, f =>
-            f.Validation(p => p.For<SubmitClaimValidationProfile>(r => r.MaxLength(1000))));
+            f.DisplayName("Description")
+             .Validation(p => p.For<SubmitClaimValidationProfile>(r => r.MaxLength(1000))));
 
-        builder.Field(x => x.ClaimedTotal);
+        builder.Field(x => x.ClaimedTotal, f => f.DisplayName("Claimed Total"));
 
         // ── Tags — AllowedElementValue for multi-select array ─────────────────────
         builder.Field(x => x.Tags, f =>
         {
+            f.DisplayName("Tags");
             foreach (var (id, label) in ClaimTags)
                 f.AllowedElementValue<string>(id, id, label);
         });
@@ -66,12 +71,13 @@ public sealed class InsuranceClaimDefinitionBuilder : IKVModelDefinitionBuilder
         // ── Policy (field group) ──────────────────────────────────────────────────
         builder.FieldGroup(x => x.Policy, policy =>
         {
-            policy.Field(x => x.PolicyNumber);
+            policy.Field(x => x.PolicyNumber, f => f.DisplayName("Policy Number"));
 
             // Coverage type — two options use AllowedValueComponent with a template
             // to tell the UI "this option requires additional parameters".
             policy.Field(x => x.CoverageType, f =>
             {
+                f.DisplayName("Coverage Type");
                 f.AllowedValue("comprehensive",  "comprehensive",  "Comprehensive");
                 f.AllowedValueComponent("collision",      "collision",      "Collision",
                     c => c.Template("Collision — {Deductible:C} deductible")
@@ -89,16 +95,19 @@ public sealed class InsuranceClaimDefinitionBuilder : IKVModelDefinitionBuilder
         // ── Damaged Items ─────────────────────────────────────────────────────────
         builder.Collection(x => x.DamagedItems, items =>
         {
+            items.DisplayName("Damaged Items");
             items.Item<DamagedItem>(item =>
             {
                 item.Field(x => x.Description, f =>
-                    f.Validation(p => p.For<SubmitClaimValidationProfile>(r => r.Required())));
+                    f.DisplayName("Description")
+                     .Validation(p => p.For<SubmitClaimValidationProfile>(r => r.Required())));
                 item.Field(x => x.Category, f =>
                 {
+                    f.DisplayName("Category");
                     foreach (var cat in DamageCategories)
                         f.AllowedValue(cat, cat, ToLabel(cat));
                 });
-                item.Field(x => x.EstimatedAmount);
+                item.Field(x => x.EstimatedAmount, f => f.DisplayName("Estimated Amount"));
             });
 
             // Only enforce a minimum when submitting — draft can have zero items.
@@ -107,11 +116,15 @@ public sealed class InsuranceClaimDefinitionBuilder : IKVModelDefinitionBuilder
 
         // ── Notes ─────────────────────────────────────────────────────────────────
         builder.Collection(x => x.Notes, notes =>
-            notes.Item<ClaimNote>(note => note.Field(x => x.Text)));
+        {
+            notes.DisplayName("Notes");
+            notes.Item<ClaimNote>(note => note.Field(x => x.Text, f => f.DisplayName("Note text")));
+        });
 
         // ── Claimant ──────────────────────────────────────────────────────────────
         builder.NestedNode(x => x.Claimant, claimant =>
         {
+            claimant.DisplayName("Claimant");
             claimant.Bind<PersonClaimant>("PERSON", person =>
                 person.Field(x => x.FullName,
                     f => f.Validation(p => p.For<SubmitClaimValidationProfile>(r => r.Required()))));

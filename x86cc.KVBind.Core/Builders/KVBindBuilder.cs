@@ -67,7 +67,9 @@ public sealed class KVBindBuilder<TEntity>
         {
             SubSegmentPath = propertyName,
             IsRequired = options.IsRequired,
-            AllowedValues = options.AllowedValuesDefinition
+            AllowedValues = options.AllowedValuesDefinition,
+            // DSL DisplayName(...) wins; otherwise fall back to [KVBind(DisplayName = "...")] on the property.
+            DisplayName = options.DisplayNameValue ?? ResolveDisplayName(selector)
         };
         fieldDefinition.ValidationRules.AddRange(validationRules);
 
@@ -125,6 +127,7 @@ public sealed class KVBindBuilder<TEntity>
         }
 
         nodeDefinition.IsResettable = options.IsResettable;
+        nodeDefinition.DisplayName = options.DisplayNameValue ?? ResolveDisplayName(selector);
         _definition.Nodes.Add(nodeDefinition);
     }
 
@@ -155,7 +158,8 @@ public sealed class KVBindBuilder<TEntity>
         var collectionDefinition = new KVCollectionDefinition
         {
             SubSegmentPath = propertyName,
-            GetCollection = owner => getter((TEntity)owner)
+            GetCollection = owner => getter((TEntity)owner),
+            DisplayName = options.DisplayNameValue ?? ResolveDisplayName(selector)
         };
 
         foreach (var itemDefinition in options.ItemDefinitions)
@@ -202,7 +206,8 @@ public sealed class KVBindBuilder<TEntity>
 
         var nestedNodeDefinition = new KVNestedNodeDefinition
         {
-            SubSegmentPath = propertyName
+            SubSegmentPath = propertyName,
+            DisplayName = options.DisplayNameValue ?? ResolveDisplayName(selector)
         };
 
         foreach (var typeDefinition in options.TypeDefinitions)
@@ -294,6 +299,21 @@ public sealed class KVBindBuilder<TEntity>
         // This is the same key the source generator uses for GetField/SetField calls.
         var kvBind = memberExpression.Member.GetCustomAttribute<KVBindAttribute>();
         return kvBind?.CanonicalKey ?? memberExpression.Member.Name;
+    }
+
+    // Reads an optional [KVBind(DisplayName = "...")] from the selected property. Null when absent.
+    private static string? ResolveDisplayName(LambdaExpression selector)
+    {
+        var body = selector.Body;
+        if (body is UnaryExpression unaryExpression
+            && (unaryExpression.NodeType == ExpressionType.Convert || unaryExpression.NodeType == ExpressionType.ConvertChecked))
+        {
+            body = unaryExpression.Operand;
+        }
+
+        return body is MemberExpression memberExpression
+            ? memberExpression.Member.GetCustomAttribute<KVBindAttribute>()?.DisplayName
+            : null;
     }
 
 }

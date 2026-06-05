@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, OnChanges, Output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AppSelectComponent } from './app-select.component';
+import { AppDatePickerComponent } from './app-date-picker.component';
 
 export interface FieldMeta {
   key: string;
@@ -20,7 +21,7 @@ export interface FieldMeta {
 @Component({
   selector: 'app-field-input',
   standalone: true,
-  imports: [CommonModule, FormsModule, AppSelectComponent],
+  imports: [CommonModule, FormsModule, AppSelectComponent, AppDatePickerComponent],
   template: `
     <label class="block">
       <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -102,10 +103,13 @@ export interface FieldMeta {
         }
 
         @case ('date') {
-          <input type="date"
-            class="mt-1.5 h-11 w-full rounded-lg border border-gray-300 px-4 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-            [ngModel]="strVal"
-            (ngModelChange)="emit($event)" />
+          <div class="mt-1.5">
+            <app-date-picker
+              [value]="strVal"
+              [placeholder]="'Select ' + field.label.toLowerCase() + '…'"
+              (valueChange)="emit($event)">
+            </app-date-picker>
+          </div>
         }
 
         @case ('number') {

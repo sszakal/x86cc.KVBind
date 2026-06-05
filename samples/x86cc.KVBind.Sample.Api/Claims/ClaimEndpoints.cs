@@ -94,13 +94,88 @@ public static class ClaimEndpoints
             .WithName("CommitClaimDraft")
             .WithSummary("Commits a persisted draft overlay into the claim snapshot and records a changeset.");
 
+        group.MapPost("/{claimId:guid}/drafts/{draftId:guid}/rebase", async (
+                Guid claimId,
+                Guid draftId,
+                InsuranceClaimAggregateService service,
+                CancellationToken cancellationToken) =>
+            {
+                var response = await service.BeginRebaseAsync(claimId, draftId, cancellationToken);
+                return response is null ? Results.NotFound() : Results.Ok(response);
+            })
+            .WithName("BeginClaimDraftRebase")
+            .WithSummary("Starts a rebase of the draft onto the latest snapshot. Auto-merges when there are no conflicts; otherwise returns the conflict list.");
+
+        group.MapPost("/{claimId:guid}/drafts/{draftId:guid}/rebase/resolve", async (
+                Guid claimId,
+                Guid draftId,
+                ResolveRebaseConflictRequest request,
+                InsuranceClaimAggregateService service,
+                CancellationToken cancellationToken) =>
+            {
+                try
+                {
+                    var response = await service.ResolveRebaseConflictAsync(claimId, draftId, request, cancellationToken);
+                    return response is null ? Results.NotFound() : Results.Ok(response);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Results.BadRequest(new { error = ex.Message });
+                }
+            })
+            .WithName("ResolveClaimDraftRebaseConflict")
+            .WithSummary("Resolves a single rebase conflict (Ours, Theirs or Custom).");
+
+        group.MapPost("/{claimId:guid}/drafts/{draftId:guid}/rebase/finish", async (
+                Guid claimId,
+                Guid draftId,
+                InsuranceClaimAggregateService service,
+                CancellationToken cancellationToken) =>
+            {
+                try
+                {
+                    var response = await service.FinishRebaseAsync(claimId, draftId, cancellationToken);
+                    return response is null ? Results.NotFound() : Results.Ok(response);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Results.BadRequest(new { error = ex.Message });
+                }
+            })
+            .WithName("FinishClaimDraftRebase")
+            .WithSummary("Finishes the rebase — applies all resolutions and swaps the draft onto the target snapshot. Requires every conflict resolved.");
+
+        group.MapDelete("/{claimId:guid}/drafts/{draftId:guid}/rebase", async (
+                Guid claimId,
+                Guid draftId,
+                InsuranceClaimAggregateService service,
+                CancellationToken cancellationToken) =>
+            {
+                var response = await service.CancelRebaseAsync(claimId, draftId, cancellationToken);
+                return response is null ? Results.NotFound() : Results.Ok(response);
+            })
+            .WithName("CancelClaimDraftRebase")
+            .WithSummary("Aborts the rebase, keeping the draft changes on the original (stale) base.");
+
+        group.MapPost("/{claimId:guid}/drafts/{draftId:guid}/reset", async (
+                Guid claimId,
+                Guid draftId,
+                InsuranceClaimAggregateService service,
+                CancellationToken cancellationToken) =>
+            {
+                var response = await service.ResetDraftAsync(claimId, draftId, cancellationToken);
+                return response is null ? Results.NotFound() : Results.Ok(response);
+            })
+            .WithName("ResetClaimDraft")
+            .WithSummary("Drops all draft changes and resyncs the overlay onto the latest snapshot.");
+
         group.MapGet("/schema", () => Results.Ok(InsuranceClaimAggregateService.GetSchema()))
             .WithName("GetClaimSchema")
             .WithSummary("Returns allowed values for all constrained fields.");
 
-        group.MapGet("/definition", () => Results.Ok(InsuranceClaimAggregateService.GetDefinitionSchema()))
+        group.MapGet("/definition", (InsuranceClaimAggregateService service) => Results.Ok(service.GetDefinitionSchema()))
             .WithName("GetClaimDefinition")
-            .WithSummary("Returns the full field definition — drives auto-generated form rendering.");
+            .WithSummary("Returns the full field definition — drives auto-generated form rendering. Labels come from the DSL DisplayName(...).");
 
         group.MapPost("/{claimId:guid}/drafts/{draftId:guid}/validate", async (
                 Guid claimId,

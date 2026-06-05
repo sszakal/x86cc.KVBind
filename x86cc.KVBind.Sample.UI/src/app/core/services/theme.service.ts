@@ -5,10 +5,9 @@ export class ThemeService {
   readonly isDark = signal(false);
 
   constructor() {
+    // Default to light unless the user explicitly chose dark previously.
     const stored = localStorage.getItem('kvbind-theme');
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const dark = stored ? stored === 'dark' : prefersDark;
-    this.apply(dark);
+    this.apply(stored === 'dark');
   }
 
   toggle(): void {

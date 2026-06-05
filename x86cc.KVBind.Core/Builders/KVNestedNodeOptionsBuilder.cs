@@ -10,6 +10,15 @@ public sealed class KVNestedNodeOptionsBuilder<TBase>
 
     internal IReadOnlyList<KVNestedNodeTypeDefinition> TypeDefinitions => _typeDefinitions;
 
+    internal string? DisplayNameValue { get; private set; }
+
+    public KVNestedNodeOptionsBuilder<TBase> DisplayName(string displayName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
+        DisplayNameValue = displayName;
+        return this;
+    }
+
     public KVNestedNodeOptionsBuilder<TBase> Bind<TSubtype>(Action<KVBindBuilder<TSubtype>> configure)
         where TSubtype : TBase, new()
     {
