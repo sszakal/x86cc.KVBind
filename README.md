@@ -15,10 +15,13 @@ KVBind gives you:
 - canonical storage decoupled from UI and typed model layout
 - fewer migrations when forms, sections, or object wrappers change
 - definition-driven validation and dependency behavior
+
+
 - generated C# property accessors over a shared runtime
 
 
-[![KVBind Demo version alpha](https://youtube.com)](https://youtu.be/HM5_kpsniTw)
+<img width="400" height="290" alt="kvbind_demo" src="https://github.com/user-attachments/assets/f607c5dd-8bb2-49cc-80ec-d091fda59ca9" />
+
 
 ## Mental Model
 
