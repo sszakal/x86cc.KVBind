@@ -11,6 +11,7 @@ import {
   DefinitionSchemaResponse,
   FieldGroupMeta,
   StaleDraftResponse,
+  ValidateDraftResponse,
 } from './claim-api.service';
 import { UserService } from '../../core/services/user.service';
 import { FieldInputComponent, FieldMeta } from '../../shared/components/field-input.component';
@@ -29,7 +30,9 @@ export class ClaimDraftComponent implements OnInit, OnDestroy {
   staleDraft: StaleDraftResponse | null = null;
   saving = false;
   committing = false;
+  validating = false;
   overlayOpen = false;
+  validationResult: ValidateDraftResponse | null = null;
 
   // Flat map of current field values: { path -> value }
   // path is the canonical KVBind path, e.g. "Status", "Policy/CoverageType"
@@ -194,6 +197,20 @@ export class ClaimDraftComponent implements OnInit, OnDestroy {
 
   // ── COMMIT ──
 
+  validate(): void {
+    this.validating = true;
+    this.api.validateDraft(this.claimId, this.draftId).subscribe({
+      next: result => {
+        this.validationResult = result;
+        this.validating = false;
+      },
+      error: err => {
+        this.error = `Validation failed: ${err.message ?? ''}`;
+        this.validating = false;
+      },
+    });
+  }
+
   commit(): void {
     if (this.pendingOps.size > 0) {
       this.dispatchPatch([...this.pendingOps.values()], () => {
@@ -283,6 +300,7 @@ export class ClaimDraftComponent implements OnInit, OnDestroy {
     set('Priority', draft.claim.priority);
     set('IncidentDate', draft.claim.incidentDate);
     set('Description', draft.claim.description);
+    set('Tags', draft.claim.tags);
     set('Policy/PolicyNumber', draft.claim.policy.policyNumber);
     set('Policy/CoverageType', draft.claim.policy.coverageType);
 

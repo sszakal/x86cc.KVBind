@@ -80,6 +80,7 @@ export interface ClaimDataResponse {
   priority: string | null;
   incidentDate: string | null;
   description: string | null;
+  tags: string[] | null;
   claimedTotal: number;
   policy: ClaimPolicyResponse;
   damagedItems: DamagedItemResponse[];
@@ -129,7 +130,27 @@ export interface ClaimPatchOperationRequest {
   value?: unknown;
 }
 
-export interface FieldMeta { key: string; label: string; dataType: string; uiHint: string; isRequired: boolean; allowedValues: string[] | null; }
+export interface AllowedValueOption {
+  id: string;
+  label: string;
+  template: string | null;
+  placeholders: Array<{ name: string; label: string; dataType: string }> | null;
+}
+
+export interface ValidateDraftResponse {
+  profile: string;
+  isValid: boolean;
+  errors: Array<{ path: string; code: string; message: string }>;
+}
+
+export interface FieldMeta {
+  key: string;
+  label: string;
+  dataType: string;
+  uiHint: string;       // text | textarea | select | radio | number | date | multiselect
+  isRequired: boolean;
+  allowedValues: AllowedValueOption[] | null;
+}
 export interface FieldGroupMeta { key: string; label: string; fields: FieldMeta[]; }
 export interface CollectionItemTypeMeta { token: string; label: string; fields: FieldMeta[]; }
 export interface CollectionMeta { key: string; label: string; itemTypes: CollectionItemTypeMeta[]; }
@@ -154,6 +175,11 @@ export class ClaimApiService {
 
   getDefinition(): Observable<DefinitionSchemaResponse> {
     return this.http.get<DefinitionSchemaResponse>(`${this.apiBaseUrl}/definition`);
+  }
+
+  validateDraft(claimId: string, draftId: string): Observable<ValidateDraftResponse> {
+    return this.http.post<ValidateDraftResponse>(
+      `${this.apiBaseUrl}/${claimId}/drafts/${draftId}/validate`, {});
   }
 
   listClaims(): Observable<ClaimSummaryResponse[]> {

@@ -19,6 +19,9 @@ public partial class InsuranceClaim : KVRootNode
     [KVBind(nameof(Priority))]
     public partial string? Priority { get; set; }
 
+    [KVBind(nameof(Tags))]
+    public partial string[]? Tags { get; set; }
+
     [KVBind(nameof(ClaimedTotal))]
     public partial decimal ClaimedTotal { get; set; }
 
@@ -33,6 +36,13 @@ public partial class InsuranceClaim : KVRootNode
 
     [KVBind(nameof(Claimant))]
     public partial Claimant? Claimant { get; private set; }
+
+    // Switch to the stricter submit profile once the claim leaves draft state.
+    // root.Validate() automatically picks the right ruleset based on current status.
+    protected override KVValidationProfile GetValidationProfile() =>
+        Status is "in_review" or "approved" or "rejected" or "closed"
+            ? new SubmitClaimValidationProfile()
+            : KVDefaultValidationProfile.Instance;
 
     public void RecalculateClaimedTotal(KVChangeContext<InsuranceClaim> context)
     {

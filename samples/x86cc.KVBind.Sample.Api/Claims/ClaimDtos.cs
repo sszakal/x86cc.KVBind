@@ -78,6 +78,7 @@ public sealed record ClaimDataResponse(
     string? Priority,
     string? IncidentDate,
     string? Description,
+    string[]? Tags,
     decimal ClaimedTotal,
     ClaimPolicyResponse Policy,
     IReadOnlyList<DamagedItemResponse> DamagedItems,
@@ -101,13 +102,33 @@ public sealed record DefinitionSchemaResponse(
     IReadOnlyList<CollectionMeta> Collections,
     IReadOnlyList<NestedNodeMeta> NestedNodes);
 
+// Richer allowed value — carries label and optional template/placeholders
+// for AllowedValueComponent (structured option with parameter inputs).
+public sealed record AllowedValueOption(
+    string Id,
+    string Label,
+    string? Template,
+    IReadOnlyList<PlaceholderMeta>? Placeholders);
+
+public sealed record PlaceholderMeta(
+    string Name,
+    string Label,
+    string DataType);
+
 public sealed record FieldMeta(
     string Key,
     string Label,
     string DataType,           // string | decimal | int | bool | date
-    string UiHint,             // text | textarea | select | radio | number | date
+    string UiHint,             // text | textarea | select | radio | number | date | multiselect
     bool IsRequired,
-    IReadOnlyList<string>? AllowedValues);
+    IReadOnlyList<AllowedValueOption>? AllowedValues);
+
+public sealed record ValidateDraftResponse(
+    string Profile,
+    bool IsValid,
+    IReadOnlyList<ClaimValidationError> Errors);
+
+public sealed record ClaimValidationError(string Path, string Code, string Message);
 
 public sealed record FieldGroupMeta(
     string Key,

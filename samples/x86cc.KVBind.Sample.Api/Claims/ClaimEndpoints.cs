@@ -102,6 +102,18 @@ public static class ClaimEndpoints
             .WithName("GetClaimDefinition")
             .WithSummary("Returns the full field definition — drives auto-generated form rendering.");
 
+        group.MapPost("/{claimId:guid}/drafts/{draftId:guid}/validate", async (
+                Guid claimId,
+                Guid draftId,
+                InsuranceClaimAggregateService service,
+                CancellationToken cancellationToken) =>
+            {
+                var response = await service.ValidateDraftAsync(claimId, draftId, cancellationToken);
+                return response is null ? Results.NotFound() : Results.Ok(response);
+            })
+            .WithName("ValidateClaimDraft")
+            .WithSummary("Validates the draft. Profile is selected automatically based on the claim's current status.");
+
         group.MapGet("/{claimId:guid}/changesets", async (
                 Guid claimId,
                 InsuranceClaimAggregateService service,

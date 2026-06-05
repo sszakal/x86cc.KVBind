@@ -364,6 +364,7 @@ public sealed class InsuranceClaimAggregateService(
             root.Priority,
             root.IncidentDate,
             root.Description,
+            root.Tags,
             root.ClaimedTotal,
             new ClaimPolicyResponse(root.Policy.PolicyNumber, root.Policy.CoverageType),
             root.DamagedItems
@@ -375,27 +376,66 @@ public sealed class InsuranceClaimAggregateService(
             ProjectClaimant(root.Claimant));
     }
 
+    // Validates the draft using whichever profile the claim's current status selects.
+    // No external profile parameter — the claim decides its own validation strictness.
+    public async Task<ValidateDraftResponse?> ValidateDraftAsync(
+        Guid claimId, Guid draftId, CancellationToken cancellationToken)
+    {
+        var draft = await session.LoadAsync<ClaimOverlayDocument>(draftId, cancellationToken);
+        if (draft is null || draft.ClaimId != claimId) return null;
+
+        var overlay = draft.ToOverlay();
+        NormalizeOverlay(overlay);
+        var root = Bind(overlay);
+
+        var result = root.Validate(); // profile determined by root.Status via GetValidationProfile()
+        var profileName = root.Status is "in_review" or "approved" or "rejected" or "closed"
+            ? "submit" : "draft";
+
+        return new ValidateDraftResponse(
+            profileName,
+            result.Errors.Count == 0,
+            result.Errors.Select(e => new ClaimValidationError(e.Path, e.Code, e.Message)).ToArray());
+    }
+
     public static ClaimSchemaResponse GetSchema() => new(
-        InsuranceClaimDefinitionBuilder.StatusValues,
-        InsuranceClaimDefinitionBuilder.PriorityValues,
-        InsuranceClaimDefinitionBuilder.CoverageTypeValues,
-        InsuranceClaimDefinitionBuilder.DamageCategories);
+        ClaimStatus.All.Select(s => s.Id).ToArray(),
+        ClaimPriority.All.Select(p => p.Id).ToArray(),
+        ["comprehensive", "collision", "collision_plus", "liability", "medical"],
+        [.. InsuranceClaimDefinitionBuilder.DamageCategories]);
+
+    private static AllowedValueOption V(string id, string label) => new(id, label, null, null);
+    private static AllowedValueOption VC(string id, string label, string template, IReadOnlyList<PlaceholderMeta> placeholders)
+        => new(id, label, template, placeholders);
 
     public static DefinitionSchemaResponse GetDefinitionSchema() => new(
         Fields:
         [
-            new("ClaimNumber",   "Claim Number",   "string",  "text",     false, null),
-            new("Status",        "Status",         "string",  "select",   false, [.. InsuranceClaimDefinitionBuilder.StatusValues]),
-            new("Priority",      "Priority",       "string",  "radio",    false, [.. InsuranceClaimDefinitionBuilder.PriorityValues]),
-            new("IncidentDate",  "Incident Date",  "date",    "date",     false, null),
-            new("Description",   "Description",    "string",  "textarea", false, null),
+            new("ClaimNumber",  "Claim Number",  "string",  "text",        true,  null),
+            new("Status",       "Status",        "string",  "select",      true,  ClaimStatus.All.Select(s => V(s.Id, s.Label)).ToArray()),
+            new("Priority",     "Priority",      "string",  "radio",       false, ClaimPriority.All.Select(p => V(p.Id, p.Label)).ToArray()),
+            new("IncidentDate", "Incident Date", "date",    "date",        false, null),
+            new("Description",  "Description",   "string",  "textarea",    false, null),
+            new("Tags",         "Tags",          "string",  "multiselect", false,
+                InsuranceClaimDefinitionBuilder.ClaimTags.Select(t => V(t.Id, t.Label)).ToArray()),
         ],
         FieldGroups:
         [
             new("Policy", "Policy",
             [
-                new("PolicyNumber",  "Policy Number",  "string", "text",   false, null),
-                new("CoverageType",  "Coverage Type",  "string", "select", false, [.. InsuranceClaimDefinitionBuilder.CoverageTypeValues]),
+                new("PolicyNumber", "Policy Number", "string", "text",   false, null),
+                new("CoverageType", "Coverage Type", "string", "select", true,
+                [
+                    V("comprehensive",  "Comprehensive"),
+                    VC("collision",      "Collision",
+                        "Collision — {Deductible:C} deductible",
+                        [new("Deductible", "Deductible Amount", "decimal")]),
+                    VC("collision_plus", "Collision Plus",
+                        "Collision Plus — {Deductible:C} deductible, {ExcessAmount:C} excess",
+                        [new("Deductible", "Deductible Amount", "decimal"), new("ExcessAmount", "Excess Amount", "decimal")]),
+                    V("liability",      "Liability Only"),
+                    V("medical",        "Medical Payments"),
+                ]),
             ]),
         ],
         Collections:
@@ -404,24 +444,28 @@ public sealed class InsuranceClaimAggregateService(
             [
                 new("DamagedItem", "Damaged Item",
                 [
-                    new("Description",      "Description",      "string",  "text",   false, null),
-                    new("Category",         "Category",         "string",  "select", false, [.. InsuranceClaimDefinitionBuilder.DamageCategories]),
-                    new("EstimatedAmount",  "Estimated Amount", "decimal", "number", false, null),
+                    new("Description",     "Description",     "string",  "text",   true,  null),
+                    new("Category",        "Category",        "string",  "select", false, InsuranceClaimDefinitionBuilder.DamageCategories.Select(c => V(c, ToLabel(c))).ToArray()),
+                    new("EstimatedAmount", "Estimated Amount","decimal", "number", false, null),
                 ]),
             ]),
             new("Notes", "Notes",
             [
-                new("Note", "Note", [ new("Text", "Note", "string", "text", false, null) ]),
+                new("Note", "Note", [new("Text", "Note text", "string", "text", false, null)]),
             ]),
         ],
         NestedNodes:
         [
             new("Claimant", "Claimant",
             [
-                new("PERSON",  "Person",  [ new("FullName",    "Full name",    "string", "text", false, null) ]),
-                new("COMPANY", "Company", [ new("CompanyName", "Company name", "string", "text", false, null) ]),
+                new("PERSON",  "Person",  [new("FullName",    "Full name",    "string", "text", true,  null)]),
+                new("COMPANY", "Company", [new("CompanyName", "Company name", "string", "text", true,  null)]),
             ]),
         ]);
+
+    private static string ToLabel(string snake) =>
+        string.Concat(snake.Split('_').Select(w => char.ToUpperInvariant(w[0]) + w[1..]))
+              .Replace("_", " ", StringComparison.Ordinal);
 
     private static ClaimantResponse? ProjectClaimant(Claimant? claimant)
     {
