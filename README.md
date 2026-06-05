@@ -20,7 +20,7 @@ KVBind gives you:
 - generated C# property accessors over a shared runtime
 
 
-<img width="400" height="290" alt="kvbind_demo" src="https://github.com/user-attachments/assets/f607c5dd-8bb2-49cc-80ec-d091fda59ca9" />
+<img width="800" height="580" alt="kvbind_demo" src="https://github.com/user-attachments/assets/f607c5dd-8bb2-49cc-80ec-d091fda59ca9" />
 
 
 ## Mental Model
