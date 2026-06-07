@@ -14,11 +14,7 @@ KVBind gives you:
 - easy change detection and semantic diffs
 - patch-based editing for API workflows
 - replayable commits that can reconstruct an aggregate over time
-- canonical storage decoupled from UI and typed model layout
-- fewer migrations when forms, sections, or object wrappers change
 - definition-driven validation and dependency behavior
-
-
 - generated C# property accessors over a shared runtime
 
 

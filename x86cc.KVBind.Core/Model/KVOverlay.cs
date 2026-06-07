@@ -43,7 +43,8 @@ public sealed class KVOverlay
 
     public List<KVConflict> Conflicts { get; private set; } = [];
 
-    public bool HasUnresolvedConflicts => Conflicts.Any(conflict => !conflict.IsResolved);
+    // Only real conflicts block finishing. Incoming changes carry a default (accept) and never block.
+    public bool HasUnresolvedConflicts => Conflicts.Any(c => c.RequiresResolution && !c.IsResolved);
 
     public bool HasChanges => Changes.Count > 0;
 
@@ -135,37 +136,84 @@ public sealed class KVOverlay
     // ── Rebase operations ─────────────────────────────────────────────────────
 
     /// <summary>
-    /// Starts a rebase of this overlay onto <paramref name="target"/> (V2). The target is frozen for the
-    /// duration of the rebase. When <paramref name="autoMerge"/> is true and there are no conflicts, the
-    /// rebase completes immediately (the base is fast-forwarded and the draft changes are kept). When there
-    /// are conflicts, the overlay enters the rebasing state and the conflicts must be resolved before
-    /// <see cref="FinishRebase"/>.
+    /// Folds a sequence of commits into a "theirs" overlay over <paramref name="baseSnapshot"/> by replaying
+    /// each commit's changes through the overlay's own <see cref="Set"/> / <see cref="Remove"/> (so
+    /// last-write-wins and prefix-tombstone semantics fall out for free), then normalizes against the base
+    /// — dropping entries equal to the base value and tombstones for paths the base never had. The result
+    /// is the upstream change-set as another overlay sharing the same base; a full undo collapses to empty.
     /// </summary>
-    public KVRebaseOutcome BeginRebase(KVSnapshot target, bool autoMerge = true)
+    public static KVOverlay FromCommits(KVSnapshot baseSnapshot, IEnumerable<KVCommit> commits)
+    {
+        ArgumentNullException.ThrowIfNull(baseSnapshot);
+        ArgumentNullException.ThrowIfNull(commits);
+
+        var overlay = Create(baseSnapshot, "upstream");
+        foreach (var commit in commits)
+            foreach (var (path, value) in commit.Changes)
+            {
+                if (value == KVValue.Tombstone) overlay.Remove(path);
+                else overlay.Set(path, value);
+            }
+
+        overlay.NormalizeAgainstBase();
+        return overlay;
+    }
+
+    // Drops change entries that don't actually differ from the base: redundant upserts (equal value) and
+    // tombstones for paths the base has nothing at or under. Makes a net-zero fold canonical (empty).
+    private void NormalizeAgainstBase()
+    {
+        foreach (var key in Changes.Keys.ToList())
+        {
+            var value = Changes[key];
+            if (value == KVValue.Tombstone)
+            {
+                if (!Snapshot.ContainsPathOrDescendant(key))
+                    Changes.Remove(key);
+            }
+            else
+            {
+                Snapshot.TryGet(key, out var baseValue);
+                if (KVMerge.ValueEquals(value, baseValue))
+                    Changes.Remove(key);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Starts a rebase of this draft over the upstream <paramref name="missingCommits"/> (the commits made
+    /// since the draft's base). The diff is driven entirely by those commits; <paramref name="target"/>
+    /// (the latest snapshot) supplies the identity stamped onto the draft's base when the rebase finishes.
+    ///
+    /// Always produces a review list — non-conflicting incoming changes (default: accept) and real conflicts
+    /// (no default) — and enters the rebasing state; the caller finalizes with <see cref="FinishRebase"/>.
+    /// Returns <see cref="KVRebaseOutcome.CanAutomerge"/> when nothing blocks (only incoming changes, even an
+    /// empty list), or <see cref="KVRebaseOutcome.HasUnresolvedConflicts"/> when a manual decision is needed.
+    /// </summary>
+    public KVRebaseOutcome BeginRebase(KVSnapshot target, IReadOnlyList<KVCommit> missingCommits)
     {
         ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(missingCommits);
         if (IsRebasing)
             throw new InvalidOperationException("A rebase is already in progress. Finish or cancel it first.");
         if (target.AggregateId != AggregateId)
             throw new InvalidOperationException("Cannot rebase onto a snapshot from a different aggregate.");
 
-        if (target.Version == Snapshot.Version)
+        if (missingCommits.Count == 0)
             return KVRebaseOutcome.AlreadyCurrent;
 
-        var conflicts = KVMerge.ComputeConflicts(Snapshot, target, Changes);
+        var theirs = FromCommits(Snapshot, missingCommits);
+        var result = KVMerge.Merge(Snapshot, theirs.Changes, Changes);
 
-        if (conflicts.Count == 0 && autoMerge)
-        {
-            // Fast-forward: no overlapping changes, so the target's changes simply show through once we
-            // swap the base. The draft's own changes are untouched.
-            Snapshot = target.Clone();
-            return KVRebaseOutcome.Merged;
-        }
+        // Pre-seed the default (accept-all) merged $items arrays so collection membership reflects both
+        // sides' additions and clean deletions. Rejecting an incoming item later edits these.
+        foreach (var (path, value) in result.MergedItemArrays)
+            Changes[path] = value;
 
         RebaseTarget = target.Clone();
-        Conflicts = conflicts.ToList();
+        Conflicts = result.Conflicts.ToList();
         IsRebasing = true;
-        return conflicts.Count == 0 ? KVRebaseOutcome.Merged : KVRebaseOutcome.ConflictsPending;
+        return HasUnresolvedConflicts ? KVRebaseOutcome.HasUnresolvedConflicts : KVRebaseOutcome.CanAutomerge;
     }
 
     public void ResolveConflict(string path, KVConflictResolution resolution, KVValue? customValue = null)
@@ -241,6 +289,29 @@ public sealed class KVOverlay
 
     private void ApplyResolution(KVConflict conflict)
     {
+        // ── Incoming (non-conflicting) changes ───────────────────────────────────
+        if (conflict.IsIncoming)
+        {
+            switch (conflict.Resolution)
+            {
+                case KVConflictResolution.Theirs: // accept — let the target show through after the swap.
+                    foreach (var key in Changes.Keys.Where(k => KVPath.IsSameOrDescendant(k, conflict.Path)).ToList())
+                        Changes.Remove(key);
+                    break;
+
+                case KVConflictResolution.Ours: // reject — pin the pre-rebase (base) state as a counter-edit.
+                    ForceBaseSubtree(conflict.Path);
+                    if (conflict.Kind == KVConflictKind.IncomingItem)
+                        SyncItemsArrayForIncomingReject(conflict);
+                    break;
+
+                default:
+                    throw new InvalidOperationException($"Incoming change at '{conflict.Path}' is unresolved.");
+            }
+            return;
+        }
+
+        // ── Real conflicts ───────────────────────────────────────────────────────
         switch (conflict.Resolution)
         {
             case KVConflictResolution.Ours:
@@ -257,12 +328,19 @@ public sealed class KVOverlay
                         Changes[key] = KVValue.Tombstone;
                     }
                 }
+                // For item-level DeleteEdit Ours — no changes needed:
+                //   Case A (we deleted, target modified): tombstone stays, $items already excludes the item.
+                //   Case B (target deleted, we edited): our field changes stay, $items already includes the item.
                 break;
 
             case KVConflictResolution.Theirs:
                 // Drop the draft's change(s) under this path so the target value shows through after the swap.
                 foreach (var key in Changes.Keys.Where(k => KVPath.IsSameOrDescendant(k, conflict.Path)).ToList())
                     Changes.Remove(key);
+
+                // For item-level DeleteEdit, also sync the $items membership array.
+                if (conflict.Kind == KVConflictKind.DeleteEdit)
+                    SyncItemsArrayForResolution(conflict);
                 break;
 
             case KVConflictResolution.Custom:
@@ -273,6 +351,85 @@ public sealed class KVOverlay
             default:
                 throw new InvalidOperationException($"Conflict at '{conflict.Path}' is unresolved.");
         }
+    }
+
+    // Pins the pre-rebase (base = current Snapshot) state over a subtree as a counter-edit, so that after
+    // the base swaps to the target the effective value under <paramref name="path"/> stays at base — i.e.
+    // the incoming change is rejected. Only actual base↔target differences are written, keeping the draft clean.
+    private void ForceBaseSubtree(string path)
+    {
+        foreach (var key in Changes.Keys.Where(k => KVPath.IsSameOrDescendant(k, path)).ToList())
+            Changes.Remove(key);
+
+        foreach (var key in Snapshot.Data.Keys.Where(k => KVPath.IsSameOrDescendant(k, path)))
+        {
+            RebaseTarget!.Data.TryGetValue(key, out var targetValue);
+            if (!KVMerge.ValueEquals(Snapshot.Data[key], targetValue))
+                Changes[key] = Snapshot.Data[key]; // differs from target — pin base value.
+        }
+
+        foreach (var key in RebaseTarget!.Data.Keys.Where(k => KVPath.IsSameOrDescendant(k, path)))
+            if (!Snapshot.Data.ContainsKey(key))
+                Changes[key] = KVValue.Tombstone; // target-only leaf — remove it so base (absence) wins.
+    }
+
+    // $items fixup when an incoming collection-membership change is rejected.
+    //   Incoming add  (base empty under item path): reject → remove the id from our merged $items.
+    //   Incoming remove (base present under item path): reject → add the id back to our merged $items.
+    private void SyncItemsArrayForIncomingReject(KVConflict conflict)
+    {
+        var parentPath = KVPath.ParentPath(conflict.Path);
+        var itemsPath  = KVPath.Combine(parentPath, "$items");
+        var itemId     = KVMerge.LastSegment(conflict.Path);
+
+        if (!Changes.TryGetValue(itemsPath, out var currentItems) || currentItems == KVValue.Tombstone)
+            return;
+
+        var ids = KVMerge.ExtractItemIds(currentItems).ToList();
+        var wasIncomingAdd = !Snapshot.Data.Keys.Any(k => KVPath.IsSameOrDescendant(k, conflict.Path));
+
+        if (wasIncomingAdd)
+            ids.Remove(itemId);
+        else if (!ids.Contains(itemId, System.StringComparer.Ordinal))
+            ids.Add(itemId);
+
+        Changes[itemsPath] = KVMerge.BuildItemsValue(ids);
+    }
+
+    // Keeps the $items membership array consistent when a Theirs resolution is applied to an
+    // item-level DeleteEdit conflict.
+    //
+    // Case A (OursValue == null — we tombstoned the item, target edited it):
+    //   Theirs = restore the item. The Theirs branch already removed our tombstone. We also
+    //   need to add the item back into our $items array so the collection shows it.
+    //
+    // Case B (OursValue != null — target deleted the item, we edited it):
+    //   Theirs = accept the deletion. The Theirs branch removed our field edits. We also need
+    //   to remove the item from our $items array so the collection no longer shows it.
+    private void SyncItemsArrayForResolution(KVConflict conflict)
+    {
+        var parentPath = KVPath.ParentPath(conflict.Path);
+        var itemsPath  = KVPath.Combine(parentPath, "$items");
+        var itemId     = KVMerge.LastSegment(conflict.Path);
+
+        if (!Changes.TryGetValue(itemsPath, out var currentItems) || currentItems == KVValue.Tombstone)
+            return;
+
+        var ids = KVMerge.ExtractItemIds(currentItems).ToList();
+
+        if (conflict.OursValue is null)
+        {
+            // Case A Theirs: add the item back.
+            if (!ids.Contains(itemId, System.StringComparer.Ordinal))
+                ids.Add(itemId);
+        }
+        else
+        {
+            // Case B Theirs: remove the item.
+            ids.Remove(itemId);
+        }
+
+        Changes[itemsPath] = KVMerge.BuildItemsValue(ids);
     }
 
     public KVCommit ToCommit(DateTimeOffset timestamp)

@@ -52,17 +52,19 @@ export interface ClaimDraftResponse {
 
 export interface RebaseConflictResponse {
   path: string;
-  kind: 'Value' | 'DeleteEdit' | 'Structural';
+  kind: 'Value' | 'DeleteEdit' | 'Structural' | 'Incoming' | 'IncomingItem';
   resolution: 'Unresolved' | 'Ours' | 'Theirs' | 'Custom';
   baseValue: unknown;
   mainValue: unknown;
   oursValue: unknown;
+  isIncoming: boolean;
+  requiresResolution: boolean;
 }
 
 export interface RebaseResultResponse {
   claimId: string;
   draftId: string;
-  outcome: 'AlreadyCurrent' | 'Merged' | 'ConflictsPending';
+  outcome: 'AlreadyCurrent' | 'CanAutomerge' | 'HasUnresolvedConflicts';
   targetSnapshotVersion: string;
   conflicts: RebaseConflictResponse[];
 }

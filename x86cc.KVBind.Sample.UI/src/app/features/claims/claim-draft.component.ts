@@ -323,7 +323,8 @@ export class ClaimDraftComponent implements OnInit, OnDestroy {
     this.error = '';
     this.api.beginRebase(this.claimId, this.draftId).subscribe({
       next: result => {
-        if (result.outcome === 'ConflictsPending') {
+        // Always review what was pulled in — incoming changes and any conflicts — before finishing.
+        if (result.outcome !== 'AlreadyCurrent') {
           this.router.navigate(['/claims', this.claimId, 'drafts', this.draftId, 'rebase']);
         } else {
           this.isStale = false;

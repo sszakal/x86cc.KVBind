@@ -122,7 +122,8 @@ export class ClaimReviewComponent implements OnInit {
   private rebaseThenCommit(): void {
     this.api.beginRebase(this.claimId, this.draftId).subscribe({
       next: result => {
-        if (result.outcome === 'ConflictsPending') {
+        // Anything pulled in (incoming changes and/or conflicts) gets reviewed before committing.
+        if (result.outcome !== 'AlreadyCurrent') {
           this.committing = false;
           this.router.navigate(['/claims', this.claimId, 'drafts', this.draftId, 'rebase']);
         } else {

@@ -209,12 +209,16 @@ public sealed class InsuranceClaimAggregateService(
         {
             return new RebaseResultResponse(
                 claimId, draftId,
-                KVRebaseOutcome.ConflictsPending.ToString(),
+                RebaseStateOutcome(overlay).ToString(),
                 overlay.RebaseTarget?.Version ?? snapshotDocument.Snapshot.Version,
                 overlay.Conflicts.Select(ProjectConflict).ToArray());
         }
 
-        var outcome = overlay.BeginRebase(snapshotDocument.Snapshot);
+        // The diff is driven by the commits made since the draft's base — fetch them and fold them into
+        // "theirs" inside BeginRebase. The latest snapshot supplies the identity stamped on finish.
+        var missingCommits = await LoadMissingCommitsAsync(claimId, overlay.Snapshot.LastCommitTimestamp, cancellationToken);
+
+        var outcome = overlay.BeginRebase(snapshotDocument.Snapshot, missingCommits);
         draft.UpdateFrom(overlay);
         session.Store(draft);
         await session.SaveChangesAsync(cancellationToken);
@@ -225,6 +229,25 @@ public sealed class InsuranceClaimAggregateService(
             snapshotDocument.Snapshot.Version,
             overlay.Conflicts.Select(ProjectConflict).ToArray());
     }
+
+    // Commits made after the draft's base, in chronological order. (Timestamp ordering assumes distinct
+    // commit timestamps; a fully robust version would walk the PreviousCommitId chain from latest to base.)
+    private async Task<IReadOnlyList<KVCommit>> LoadMissingCommitsAsync(
+        Guid claimId, DateTimeOffset? baseTimestamp, CancellationToken cancellationToken)
+    {
+        var documents = await session.Query<ClaimChangeSetDocument>()
+            .Where(document => document.ClaimId == claimId)
+            .ToListAsync(cancellationToken);
+
+        return documents
+            .Where(document => baseTimestamp is null || document.Commit.Timestamp > baseTimestamp)
+            .OrderBy(document => document.Commit.Timestamp)
+            .Select(document => document.Commit)
+            .ToArray();
+    }
+
+    private static KVRebaseOutcome RebaseStateOutcome(KVOverlay overlay) =>
+        overlay.HasUnresolvedConflicts ? KVRebaseOutcome.HasUnresolvedConflicts : KVRebaseOutcome.CanAutomerge;
 
     public async Task<RebaseResultResponse?> ResolveRebaseConflictAsync(
         Guid claimId, Guid draftId, ResolveRebaseConflictRequest request, CancellationToken cancellationToken)
@@ -253,7 +276,7 @@ public sealed class InsuranceClaimAggregateService(
 
         return new RebaseResultResponse(
             claimId, draftId,
-            KVRebaseOutcome.ConflictsPending.ToString(),
+            RebaseStateOutcome(overlay).ToString(),
             overlay.RebaseTarget?.Version ?? draft.BaseSnapshotVersion,
             overlay.Conflicts.Select(ProjectConflict).ToArray());
     }
@@ -345,7 +368,9 @@ public sealed class InsuranceClaimAggregateService(
         conflict.Resolution.ToString(),
         conflict.BaseValue?.Value,
         conflict.MainValue?.Value,
-        conflict.OursValue?.Value);
+        conflict.OursValue?.Value,
+        conflict.IsIncoming,
+        conflict.RequiresResolution);
 
     public async Task<CommitClaimDraftResult?> CommitDraftAsync(
         Guid claimId,

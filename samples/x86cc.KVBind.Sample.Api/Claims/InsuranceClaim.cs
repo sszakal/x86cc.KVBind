@@ -22,8 +22,7 @@ public partial class InsuranceClaim : KVRootNode
     [KVBind(nameof(Tags))]
     public partial string[]? Tags { get; set; }
 
-    [KVBind(nameof(ClaimedTotal))]
-    public partial decimal ClaimedTotal { get; set; }
+    public decimal ClaimedTotal => DamagedItems.Sum(item => item.EstimatedAmount);
 
     [KVBind(nameof(Policy))]
     public ClaimPolicy Policy { get; } = new();
@@ -44,10 +43,6 @@ public partial class InsuranceClaim : KVRootNode
             ? new SubmitClaimValidationProfile()
             : KVDefaultValidationProfile.Instance;
 
-    public void RecalculateClaimedTotal(KVChangeContext<InsuranceClaim> context)
-    {
-        ClaimedTotal = DamagedItems.Sum(item => item.EstimatedAmount);
-    }
 }
 
 public partial class ClaimPolicy : KVFieldGroupNode

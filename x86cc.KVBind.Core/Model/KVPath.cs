@@ -63,6 +63,13 @@ internal static class KVPath
         return path[prefix.Length..];
     }
 
+    public static string ParentPath(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        var slash = path.LastIndexOf('/');
+        return slash < 0 ? string.Empty : path[..slash];
+    }
+
     public static bool TryGetDirectSegment(string path, string parentPath, Func<string, bool>? excludeSegment, out string segment)
     {
         segment = string.Empty;

@@ -58,7 +58,6 @@ public sealed class InsuranceClaimDefinitionBuilder : IKVModelDefinitionBuilder
             f.DisplayName("Description")
              .Validation(p => p.For<SubmitClaimValidationProfile>(r => r.MaxLength(1000))));
 
-        builder.Field(x => x.ClaimedTotal, f => f.DisplayName("Claimed Total"));
 
         // ── Tags — AllowedElementValue for multi-select array ─────────────────────
         builder.Field(x => x.Tags, f =>
@@ -133,9 +132,6 @@ public sealed class InsuranceClaimDefinitionBuilder : IKVModelDefinitionBuilder
                     f => f.Validation(p => p.For<SubmitClaimValidationProfile>(r => r.Required()))));
         });
 
-        // ── Reactions ─────────────────────────────────────────────────────────────
-        builder.OnChange(path => path.Collection(x => x.DamagedItems).Any(),                               x => x.RecalculateClaimedTotal);
-        builder.OnChange(path => path.Collection(x => x.DamagedItems).Field(x => x.EstimatedAmount), x => x.RecalculateClaimedTotal);
 
         return builder.Build();
     }
