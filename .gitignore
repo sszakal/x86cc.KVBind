@@ -62,3 +62,6 @@ nunit-*.xml
 #Rider
 .idea/
 *.DotSettings.user
+
+#Benchmarks
+BenchmarkDotNet.Artifacts/
