@@ -6,7 +6,7 @@ Typed C# bindings for canonical key-value document data.
 
 KVBind is a typed C# runtime for editing large schema-driven object graphs as canonical key-value data. It gives each aggregate a Git-like editing model: committed snapshots, user draft overlays, replayable commits, patch operations, validation, and change reactions.
 
-It is intended for large forms and document-like aggregates where users may spend time drafting changes before committing them, APIs need precise patch operations, and data identity must stay stable even when layout, sections, screens, or typed wrappers change.
+It is intended for large forms and document-like aggregates where users may spend time drafting changes before committing them and APIs need precise patch operations.
 
 KVBind gives you:
 
@@ -199,10 +199,6 @@ Applications own persistence of snapshots, overlays, and commits. KVBind provide
 
 KVBind stores values by canonical paths instead of serializing the current C# object graph shape. Typed nodes, field groups, sections, and UI layouts can evolve without automatically forcing persisted data migrations.
 
-If a field moves from one group, tab, section, or screen to another but keeps the same canonical key, the stored value can stay where it is. Migrations are still possible when business identity changes, but layout-only changes do not have to become data-shape changes.
-
-This is useful for long-lived business documents where the form evolves over time but existing persisted aggregates must remain readable, editable, and diffable.
-
 ## Definition DSL
 
 The definition DSL describes schema, validation, patch behavior, collection item types, nested node variants, and change reactions.
@@ -213,8 +209,6 @@ The definition DSL describes schema, validation, patch behavior, collection item
 builder.Field(x => x.Title);
 ```
 
-Fields are stable canonical values. Moving a field in your UI should not require moving the persisted value.
-
 ### Field Groups
 
 ```csharp
@@ -223,8 +217,6 @@ builder.FieldGroup(x => x.General, group =>
     group.Field(x => x.Code);
 });
 ```
-
-Field groups organize typed access without making the whole document depend on a single object serialization shape.
 
 ### Collections
 
@@ -239,7 +231,7 @@ builder.Collection(x => x.LineItems, collection =>
 });
 ```
 
-Collection rows use immutable GUID row identity. Typed code can create client- or server-provided rows:
+Collection rows use immutable GUID row identity. 
 
 ```csharp
 var item = agreement.LineItems.Create(Guid.NewGuid());
