@@ -20,22 +20,28 @@ internal static class KVChangeReactionRuntime
 
         try
         {
-            foreach (var ancestor in EnumerateAncestorNodes(source))
+            // Walk ancestors manually (no iterator allocation) and only compute the relative path
+            // (a substring) for ancestors that actually declare change reactions.
+            KVNode? ancestor = source;
+            while (ancestor is not null)
             {
-                var ancestorPath = ancestor.GetCanonicalPath();
-                var relativePath = KVPath.RelativeTo(canonicalPath, ancestorPath);
-                if (relativePath is null)
+                if (ancestor.Definition.ChangeReactions.Count > 0)
                 {
-                    continue;
-                }
-
-                foreach (var reaction in ancestor.Definition.ChangeReactions)
-                {
-                    if (reaction.Pattern.Matches(relativePath))
+                    var ancestorPath = ancestor.GetCanonicalPath();
+                    var relativePath = KVPath.RelativeTo(canonicalPath, ancestorPath);
+                    if (relativePath is not null)
                     {
-                        InvokeReaction(state, ancestor, ancestorPath, reaction, relativePath, oldValue, newValue);
+                        foreach (var reaction in ancestor.Definition.ChangeReactions)
+                        {
+                            if (reaction.Pattern.Matches(relativePath))
+                            {
+                                InvokeReaction(state, ancestor, ancestorPath, reaction, relativePath, oldValue, newValue);
+                            }
+                        }
                     }
                 }
+
+                ancestor = ParentNode(ancestor);
             }
         }
         finally
@@ -43,6 +49,13 @@ internal static class KVChangeReactionRuntime
             state.ExitScope(isTopLevel);
         }
     }
+
+    private static KVNode? ParentNode(KVNode node) => node.Parent switch
+    {
+        KVNode parentNode => parentNode,
+        IKVCollectionNode { Parent: KVNode collectionParent } => collectionParent,
+        _ => null
+    };
 
     private static void InvokeReaction(
         KVReactionExecutionState state,
@@ -86,30 +99,10 @@ internal static class KVChangeReactionRuntime
                 return root;
             }
 
-            current = current.Parent switch
-            {
-                KVNode parentNode => parentNode,
-                IKVCollectionNode { Parent: KVNode collectionParent } => collectionParent,
-                _ => null
-            };
+            current = ParentNode(current);
         }
 
         throw new InvalidOperationException("Change reactions require a bound root node.");
-    }
-
-    private static IEnumerable<KVNode> EnumerateAncestorNodes(KVNode source)
-    {
-        KVNode? current = source;
-        while (current is not null)
-        {
-            yield return current;
-            current = current.Parent switch
-            {
-                KVNode parentNode => parentNode,
-                IKVCollectionNode { Parent: KVNode collectionParent } => collectionParent,
-                _ => null
-            };
-        }
     }
 }
 

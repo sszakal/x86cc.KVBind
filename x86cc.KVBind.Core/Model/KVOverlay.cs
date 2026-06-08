@@ -58,6 +58,17 @@ public sealed class KVOverlay
         return Snapshot.TryGet(path, out value);
     }
 
+    // Span overload: lets callers probe an assembled path without first allocating it as a string
+    // (the field-read hot path builds the path in a stack buffer). Uses the dictionaries' Ordinal
+    // alternate lookup, so it is allocation-free.
+    public bool TryGet(ReadOnlySpan<char> path, out KVValue? value)
+    {
+        if (IsRemoved(path)) { value = default; return false; }
+        if (Changes.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(path, out value)) return true;
+        value = null;
+        return Snapshot.TryGet(path, out value);
+    }
+
     public bool TryGetSnapshotValue(string path, out KVValue? value) => Snapshot.TryGet(path, out value);
 
     public bool TryGetDraftValue(string path, out KVValue? value)
@@ -72,16 +83,24 @@ public sealed class KVOverlay
         Changes.TryGetValue(path, out var v) && v == KVValue.Tombstone;
 
     // True if path or any ancestor has a tombstone.
-    public bool IsRemoved(string path)
+    public bool IsRemoved(string path) => IsRemoved(path.AsSpan());
+
+    // Walk the path and its ancestors over a span, probing via the dictionary's span alternate lookup so
+    // the common (no-tombstone) case allocates nothing — instead of slicing a new substring per level.
+    public bool IsRemoved(ReadOnlySpan<char> path)
     {
-        if (HasRemovedPath(path)) return true;
-        var p = path;
-        var slash = p.LastIndexOf('/');
+        if (Changes.Count == 0) return false;
+
+        var lookup = Changes.GetAlternateLookup<ReadOnlySpan<char>>();
+        if (lookup.TryGetValue(path, out var exact) && exact == KVValue.Tombstone) return true;
+
+        var span = path;
+        var slash = span.LastIndexOf('/');
         while (slash >= 0)
         {
-            p = p[..slash];
-            if (HasRemovedPath(p)) return true;
-            slash = p.LastIndexOf('/');
+            span = span[..slash];
+            if (lookup.TryGetValue(span, out var v) && v == KVValue.Tombstone) return true;
+            slash = span.LastIndexOf('/');
         }
         return false;
     }

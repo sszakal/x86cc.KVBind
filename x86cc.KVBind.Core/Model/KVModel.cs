@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 
 namespace x86cc.KVBind.Core.Model;
 
@@ -43,15 +44,47 @@ public class KVModel
 
     public TValue Get<TValue>(string segment)
     {
-        if (!Overlay.TryGet(ResolveDataPath(segment), out var value) || value?.Value is null)
+        ArgumentNullException.ThrowIfNull(segment);
+
+        // Assemble DataPath + "/" + segment into a stack buffer and probe via the span overload, so a read
+        // does not allocate the combined path string (the dictionary key) on every field access.
+        var seg = segment.AsSpan().Trim('/');
+        KVValue? value;
+        if (DataPath.Length == 0)
         {
-            return default!;
+            if (!Overlay.TryGet(seg, out value) || value?.Value is null)
+            {
+                return default!;
+            }
+        }
+        else
+        {
+            var length = DataPath.Length + 1 + seg.Length;
+            char[]? rented = length > StackPathThreshold ? ArrayPool<char>.Shared.Rent(length) : null;
+            Span<char> buffer = rented ?? stackalloc char[StackPathThreshold];
+            DataPath.AsSpan().CopyTo(buffer);
+            buffer[DataPath.Length] = '/';
+            seg.CopyTo(buffer[(DataPath.Length + 1)..]);
+
+            var found = Overlay.TryGet(buffer[..length], out value);
+            if (rented is not null)
+            {
+                ArrayPool<char>.Shared.Return(rented);
+            }
+
+            if (!found || value?.Value is null)
+            {
+                return default!;
+            }
         }
 
         return value.Value is TValue typed
             ? typed
             : throw new InvalidCastException($"Stored value '{ResolveDataPath(segment)}' is '{value.Value.GetType().FullName}', not '{typeof(TValue).FullName}'.");
     }
+
+    // Paths longer than this fall back to a pooled buffer; shorter ones use the stack.
+    private const int StackPathThreshold = 512;
 
     internal bool TryGetValue(string segment, out KVValue? value)
     {

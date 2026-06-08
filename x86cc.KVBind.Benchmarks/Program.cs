@@ -1,3 +1,7 @@
-﻿// See https://aka.ms/new-console-template for more information
+using BenchmarkDotNet.Running;
+using x86cc.KVBind.Benchmarks;
 
-Console.WriteLine("Hello, World!");
+BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
+
+// Anchors the top-level statements to a named type for BenchmarkSwitcher.FromAssembly.
+public partial class Program;

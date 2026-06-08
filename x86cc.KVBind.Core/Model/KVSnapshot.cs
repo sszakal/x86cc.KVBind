@@ -47,6 +47,19 @@ public sealed class KVSnapshot
         return Data.TryGetValue(path, out value);
     }
 
+    // Span overload for the allocation-free read path — probes Data via its Ordinal alternate lookup.
+    public bool TryGet(ReadOnlySpan<char> path, out KVValue? value)
+    {
+        if (Data.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(path, out var found))
+        {
+            value = found;
+            return true;
+        }
+
+        value = null;
+        return false;
+    }
+
     public bool ContainsPathOrDescendant(string path)
     {
         if (string.IsNullOrWhiteSpace(path))

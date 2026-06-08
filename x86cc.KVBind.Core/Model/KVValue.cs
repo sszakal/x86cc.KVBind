@@ -68,7 +68,11 @@ public abstract class KVValue : IEquatable<KVValue>
 
 public sealed class KVValue<T>(T? value) : KVValue
 {
+    // Box value types once at construction so repeated Value reads (the field-read hot path)
+    // return the same boxed reference instead of re-boxing on every access.
+    private readonly object? _boxed = value;
+
     public T? TypedValue { get; } = value;
 
-    public override object? Value => TypedValue;
+    public override object? Value => _boxed;
 }

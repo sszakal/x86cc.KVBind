@@ -7,7 +7,7 @@ public abstract partial class KVNode
 {
     private KVFieldDefinition GetFieldDefinition(string subSegmentPath)
     {
-        return Definition.Fields.Find(f => string.Equals(f.SubSegmentPath, subSegmentPath, StringComparison.Ordinal))
+        return Definition.FindField(subSegmentPath)
                ?? throw new InvalidOperationException($"Field '{subSegmentPath}' is not declared under '{Definition.SubSegmentPath}'.");
     }
 
@@ -38,7 +38,19 @@ public abstract partial class KVNode
     {
         EnsureBound();
         ArgumentNullException.ThrowIfNull(fieldKey);
-        EnsureFieldDefined(fieldKey);
+        var fieldDefinition = GetFieldDefinition(fieldKey);
+
+        // Fast path: with no allowed-value remapping the stored type is exactly TValue, so we build the
+        // KVValue<TValue> directly instead of going through reflection (KVValue.FromObject) on every write.
+        if (fieldDefinition.AllowedValues is null)
+        {
+            var oldValue = Model.Get<object?>(fieldKey);
+            if (Equals(oldValue, value)) return;
+            Model.SetValue(fieldKey, new KVValue<TValue>(value));
+            EmitChange(KVPath.Combine(GetCanonicalPath(), fieldKey), oldValue, value);
+            return;
+        }
+
         SetFieldCore(fieldKey, value);
     }
 
