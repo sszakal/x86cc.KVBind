@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -49,8 +50,9 @@ public abstract class KVValue : IEquatable<KVValue>
             return Value is null && other.Value is null;
         }
 
+        // Same-runtime-type rule (unchanged), then structural equality on the wrapped values.
         return Value.GetType() == other.Value.GetType()
-               && string.Equals(JsonSerializer.Serialize(Value, Value.GetType(), JsonOptions), JsonSerializer.Serialize(other.Value, other.Value.GetType(), JsonOptions), StringComparison.Ordinal);
+               && StructuralEquals(Value, other.Value);
     }
 
     public override bool Equals(object? obj)
@@ -60,10 +62,81 @@ public abstract class KVValue : IEquatable<KVValue>
 
     public override int GetHashCode()
     {
-        return Value is null ? 0 : HashCode.Combine(Value.GetType(), JsonSerializer.Serialize(Value, Value.GetType(), JsonOptions));
+        return Value is null ? 0 : HashCode.Combine(Value.GetType(), StructuralHash(Value));
     }
 
     public override string? ToString() => Value?.ToString();
+
+    // Structural equality of two wrapped values known to share a runtime type. Strings and value types
+    // use their own (value) equality; arrays/collections compare element-wise; reference-type POCOs fall
+    // back to the original JSON-string compare so nothing exotic regresses.
+    private static bool StructuralEquals(object a, object b)
+    {
+        switch (a)
+        {
+            case string sa:
+                return string.Equals(sa, (string)b, StringComparison.Ordinal);
+
+            case IEnumerable ea:
+                var eb = (IEnumerable)b;
+                var ia = ea.GetEnumerator();
+                var ib = eb.GetEnumerator();
+                try
+                {
+                    while (true)
+                    {
+                        var hasA = ia.MoveNext();
+                        var hasB = ib.MoveNext();
+                        if (hasA != hasB) return false;          // different lengths
+                        if (!hasA) return true;                  // both exhausted
+                        if (!ElementEquals(ia.Current, ib.Current)) return false;
+                    }
+                }
+                finally
+                {
+                    (ia as IDisposable)?.Dispose();
+                    (ib as IDisposable)?.Dispose();
+                }
+
+            default:
+                return a.GetType().IsValueType
+                    ? a.Equals(b)
+                    : JsonEquals(a, b);
+        }
+    }
+
+    private static bool ElementEquals(object? a, object? b)
+    {
+        if (a is null || b is null) return a is null && b is null;
+        return a.GetType() == b.GetType() && StructuralEquals(a, b);
+    }
+
+    private static bool JsonEquals(object a, object b) =>
+        string.Equals(
+            JsonSerializer.Serialize(a, a.GetType(), JsonOptions),
+            JsonSerializer.Serialize(b, b.GetType(), JsonOptions),
+            StringComparison.Ordinal);
+
+    // Hash consistent with StructuralEquals: equal values always produce equal hashes.
+    private static int StructuralHash(object v)
+    {
+        switch (v)
+        {
+            case string s:
+                return s.GetHashCode(StringComparison.Ordinal);
+
+            case IEnumerable e:
+                var hash = new HashCode();
+                foreach (var element in e)
+                    hash.Add(element is null ? 0 : StructuralHash(element));
+                return hash.ToHashCode();
+
+            default:
+                return v.GetType().IsValueType
+                    ? v.GetHashCode()
+                    : JsonSerializer.Serialize(v, v.GetType(), JsonOptions).GetHashCode(StringComparison.Ordinal);
+        }
+    }
 }
 
 public sealed class KVValue<T>(T? value) : KVValue
