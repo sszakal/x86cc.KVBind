@@ -213,8 +213,7 @@ public class FieldBindingTests : KVModelTestBase
         restoredRoot.StringField.Should().Be("2027-01-01");
         restoredRoot.DateTimeField.Should().Be(dateTimeValue);
     }
-
-
+    
     [Fact]
     public void FieldBinding_WhenEnumValueIsOutsideAllowedSet_StoresRawValueForValidation()
     {

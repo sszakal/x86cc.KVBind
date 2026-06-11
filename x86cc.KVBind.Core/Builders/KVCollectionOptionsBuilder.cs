@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
+using x86cc.KVBind.Core.Definitions;
 
 namespace x86cc.KVBind.Core;
 
@@ -51,14 +52,32 @@ public sealed class KVCollectionOptionsBuilder<TParent, TModel>
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(typeToken);
         ArgumentNullException.ThrowIfNull(configure);
+
+        var builder = new KVBindBuilder<TItem>();
+        configure(builder);
+        return RegisterItem<TItem>(typeToken, builder.Build());
+    }
+
+    // Self-describing item subtype: the item type carries its own definition via IKVNodeDefinition, so no
+    // inline configuration is needed (enforced at compile time).
+    public KVCollectionOptionsBuilder<TParent, TModel> Item<TItem>()
+        where TItem : TModel, IKVNodeDefinition, new()
+        => Item<TItem>(typeof(TItem).Name);
+
+    public KVCollectionOptionsBuilder<TParent, TModel> Item<TItem>(string typeToken)
+        where TItem : TModel, IKVNodeDefinition, new()
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(typeToken);
+        return RegisterItem<TItem>(typeToken, TItem.Definition);
+    }
+
+    private KVCollectionOptionsBuilder<TParent, TModel> RegisterItem<TItem>(string typeToken, KVNodeDefinition nodeDefinition)
+        where TItem : TModel, new()
+    {
         if (typeof(KVRootNode).IsAssignableFrom(typeof(TItem)))
         {
             throw new InvalidOperationException($"Collection item type '{typeof(TItem).FullName}' cannot inherit KVRootNode.");
         }
-
-        var builder = new KVBindBuilder<TItem>();
-        configure(builder);
-        var nodeDefinition = builder.Build();
 
         if (_itemDefinitions.Exists(definition => definition.ModelType == typeof(TItem)))
         {

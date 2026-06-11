@@ -228,8 +228,7 @@ public sealed class KVCollectionRuleBuilder<TModel>
     internal void Evaluate(string path, KVNode node, string currentCanonicalPath, List<KVValidationError> errors)
     {
         var collectionKey = node.ResolveStoragePathForCanonicalPath(path, currentCanonicalPath);
-        var collectionDef = node.Definition.Collections.Find(c =>
-            string.Equals(c.SubSegmentPath, collectionKey, StringComparison.Ordinal));
+        var collectionDef = node.Definition.FindCollection(collectionKey);
         var collectionNode = collectionDef?.GetCollection(node);
         var children = collectionNode?.GetActiveItemIds() ?? [];
         var count = children.Count;
@@ -528,8 +527,7 @@ public sealed class KVGroupValueAccessor<TNode>
         }
 
         var collectionKey = ResolveStoragePath(collectionPath);
-        var collectionDef = _node.Definition.Collections.Find(c =>
-            string.Equals(c.SubSegmentPath, collectionKey, StringComparison.Ordinal));
+        var collectionDef = _node.Definition.FindCollection(collectionKey);
         if (collectionDef is null) return [];
 
         var collectionNode = collectionDef.GetCollection(_node);

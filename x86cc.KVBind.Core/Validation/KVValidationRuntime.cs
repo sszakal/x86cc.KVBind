@@ -159,10 +159,10 @@ internal static class KVValidationRuntime
 
     private static string ResolveScopePath(KVNode node, string scope, string currentCanonicalPath)
     {
-        if (node.Definition.Fields.Exists(field => string.Equals(field.SubSegmentPath, scope, StringComparison.Ordinal))
-            || node.Definition.Collections.Exists(collection => string.Equals(collection.SubSegmentPath, scope, StringComparison.Ordinal))
-            || node.Definition.Nodes.Exists(child => string.Equals(child.SubSegmentPath, scope, StringComparison.Ordinal))
-            || node.Definition.NestedNodes.Exists(nestedNode => string.Equals(nestedNode.SubSegmentPath, scope, StringComparison.Ordinal)))
+        if (node.Definition.FindField(scope) is not null
+            || node.Definition.FindCollection(scope) is not null
+            || node.Definition.FindNode(scope) is not null
+            || node.Definition.FindNestedNode(scope) is not null)
         {
             return BuildPath(currentCanonicalPath, scope);
         }

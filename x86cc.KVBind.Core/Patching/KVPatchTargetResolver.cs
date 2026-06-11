@@ -27,7 +27,7 @@ internal static class KVPatchTargetResolver
         }
 
         var segment = segments[depth];
-        var fieldDefinition = node.Definition.Fields.Find(field => string.Equals(field.SubSegmentPath, segment, StringComparison.Ordinal));
+        var fieldDefinition = node.Definition.FindField(segment);
         if (fieldDefinition is not null)
         {
             if (segments.Length != depth + 1)
@@ -45,7 +45,7 @@ internal static class KVPatchTargetResolver
             };
         }
 
-        var nodeDefinition = node.Definition.Nodes.Find(definition => string.Equals(definition.SubSegmentPath, segment, StringComparison.Ordinal));
+        var nodeDefinition = node.Definition.FindNode(segment);
         if (nodeDefinition is not null)
         {
             var childNode = nodeDefinition.GetChildNode(node)
@@ -53,13 +53,13 @@ internal static class KVPatchTargetResolver
             return Resolve(childNode, operation, segments, depth + 1, BuildPath(currentCanonicalPath, nodeDefinition.SubSegmentPath));
         }
 
-        var collectionDefinition = node.Definition.Collections.Find(definition => string.Equals(definition.SubSegmentPath, segment, StringComparison.Ordinal));
+        var collectionDefinition = node.Definition.FindCollection(segment);
         if (collectionDefinition is not null)
         {
             return ResolveCollection(node, operation, collectionDefinition, segments, depth, currentCanonicalPath);
         }
 
-        var nestedNodeDefinition = node.Definition.NestedNodes.Find(definition => string.Equals(definition.SubSegmentPath, segment, StringComparison.Ordinal));
+        var nestedNodeDefinition = node.Definition.FindNestedNode(segment);
         if (nestedNodeDefinition is not null)
         {
             return ResolveNestedNode(node, operation, nestedNodeDefinition, segments, depth, currentCanonicalPath);

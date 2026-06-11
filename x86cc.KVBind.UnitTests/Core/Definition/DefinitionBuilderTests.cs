@@ -13,7 +13,7 @@ public class DefinitionBuilderTests
     {
         var builder = new KVBindBuilder<BuilderRootNode>();
         builder.Field(x => x.Title, field => field.Required());
-        builder.FieldGroup(x => x.General, group => group.Tag("main").Resettable());
+        builder.FieldGroup(x => x.General, _ => { }, group => group.Tag("main").Resettable());
         builder.Collection(x => x.Items, collection =>
         {
             collection.Item<BuilderItemNode>(item => item.Field(x => x.Code));
@@ -60,7 +60,7 @@ public class DefinitionBuilderTests
     {
         var root = new BuilderRootNode();
         var builder = new KVBindBuilder<BuilderRootNode>();
-        builder.FieldGroup(x => x.General);
+        builder.FieldGroup(x => x.General, _ => { });
         builder.Collection(x => x.Items, collection =>
         {
             collection.Item<BuilderItemNode>(item => item.Field(x => x.Code));
@@ -250,7 +250,7 @@ public class DefinitionBuilderTests
     {
         var builder = new KVBindBuilder<BuilderRootNode>();
         builder.Field(x => x.Title, field => field.DisplayName("The Title"));
-        builder.FieldGroup(x => x.General, configure: options => options.DisplayName("General Section"));
+        builder.FieldGroup(x => x.General, define: _ => { }, configure: options => options.DisplayName("General Section"));
         builder.Collection(x => x.Items, collection =>
         {
             collection.DisplayName("Line Items");

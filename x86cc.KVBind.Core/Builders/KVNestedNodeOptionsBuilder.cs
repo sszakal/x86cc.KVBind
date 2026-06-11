@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using x86cc.KVBind.Core.Definitions;
 
 namespace x86cc.KVBind.Core;
 
@@ -24,6 +25,16 @@ public sealed class KVNestedNodeOptionsBuilder<TBase>
     {
         return Bind(typeof(TSubtype).Name, configure);
     }
+
+    // Self-describing subtype: the subtype carries its own definition via IKVNodeDefinition, so no inline
+    // configuration is needed (enforced at compile time).
+    public KVNestedNodeOptionsBuilder<TBase> Bind<TSubtype>()
+        where TSubtype : TBase, IKVNodeDefinition, new()
+        => Bind<TSubtype>(typeof(TSubtype).Name);
+
+    public KVNestedNodeOptionsBuilder<TBase> Bind<TSubtype>(string typeToken)
+        where TSubtype : TBase, IKVNodeDefinition, new()
+        => Bind<TSubtype>(typeToken, TSubtype.Definition);
 
     public KVNestedNodeOptionsBuilder<TBase> Bind<TSubtype>(string typeToken, Action<KVBindBuilder<TSubtype>> configure)
         where TSubtype : TBase, new()

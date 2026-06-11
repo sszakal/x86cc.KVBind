@@ -16,7 +16,11 @@ public class CollectionItemsKeyTests : KVModelTestBase
         {
             builder.Field(x => x.Title);
             builder.Field(x => x.Status);
-            builder.FieldGroup(x => x.General, g => { g.Field(x => x.Code); g.Field(x => x.Notes); });
+            builder.FieldGroup(x => x.General, g =>
+            {
+                g.Field(x => x.Code); 
+                g.Field(x => x.Notes);
+            });
             builder.Collection(x => x.Items, items =>
                 items.Item<ChangeSetItemNode>(item =>
                 {

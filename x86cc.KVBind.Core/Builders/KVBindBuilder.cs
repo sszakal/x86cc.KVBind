@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Reflection;
+using x86cc.KVBind.Core.Definitions;
 
 namespace x86cc.KVBind.Core;
 
@@ -76,10 +77,19 @@ public sealed class KVBindBuilder<TEntity>
         _definition.Fields.Add(fieldDefinition);
     }
 
-    public void FieldGroup<TGroup>(Expression<Func<TEntity, TGroup>> selector, Action<KVFieldGroupOptionsBuilder>? configure = null)
-        where TGroup : KVFieldGroupNode
+    // Self-describing field group: the group type carries its own definition via IKVNodeDefinition, so no
+    // inline lambda is needed. The interface constraint enforces this at compile time.
+    public void FieldGroup<TGroup>(Expression<Func<TEntity, TGroup>> selector)
+        where TGroup : KVFieldGroupNode, IKVNodeDefinition
     {
-        AddFieldGroup(selector, define: null, configure);
+        AddStaticFieldGroup<TGroup>(selector, configure: null);
+    }
+
+    public void FieldGroup<TGroup>(Expression<Func<TEntity, TGroup>> selector, Action<KVFieldGroupOptionsBuilder> configure)
+        where TGroup : KVFieldGroupNode, IKVNodeDefinition
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        AddStaticFieldGroup<TGroup>(selector, configure);
     }
 
     public void FieldGroup<TGroup>(
@@ -90,6 +100,57 @@ public sealed class KVBindBuilder<TEntity>
     {
         ArgumentNullException.ThrowIfNull(define);
         AddFieldGroup(selector, define, configure);
+    }
+
+    private void AddStaticFieldGroup<TGroup>(
+        Expression<Func<TEntity, TGroup>> selector,
+        Action<KVFieldGroupOptionsBuilder>? configure)
+        where TGroup : KVFieldGroupNode, IKVNodeDefinition
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+
+        var propertyName = ResolveSelectorKey(selector);
+        var getter = selector.Compile();
+        var options = new KVFieldGroupOptionsBuilder();
+        configure?.Invoke(options);
+
+        _definition.Nodes.RemoveAll(node => string.Equals(node.SubSegmentPath, propertyName, StringComparison.Ordinal));
+
+        // The type's static Definition describes only its internal structure (SubSegmentPath = "" and a
+        // throwing GetChildNode), so re-home it under this property with the parent's getter.
+        var nodeDefinition = RehomeFieldGroup(TGroup.Definition, propertyName, owner => getter((TEntity)owner));
+
+        foreach (var tag in options.Tags)
+        {
+            nodeDefinition.Tags.Add(tag);
+        }
+
+        nodeDefinition.IsResettable = options.IsResettable;
+        nodeDefinition.DisplayName = options.DisplayNameValue ?? ResolveDisplayName(selector);
+        _definition.Nodes.Add(nodeDefinition);
+    }
+
+    private static KVNodeDefinition RehomeFieldGroup(KVNodeDefinition source, string subSegmentPath, Func<KVNode, KVNode> getChildNode)
+    {
+        var definition = new KVNodeDefinition
+        {
+            SubSegmentPath = subSegmentPath,
+            GetChildNode = getChildNode
+        };
+
+        // Child definitions are immutable at bind time, so they can be shared by reference.
+        definition.Fields.AddRange(source.Fields);
+        definition.Nodes.AddRange(source.Nodes);
+        definition.Collections.AddRange(source.Collections);
+        definition.NestedNodes.AddRange(source.NestedNodes);
+        definition.ValidationRegistrations.AddRange(source.ValidationRegistrations);
+        definition.ChangeReactions.AddRange(source.ChangeReactions);
+        foreach (var tag in source.Tags)
+        {
+            definition.Tags.Add(tag);
+        }
+
+        return definition;
     }
 
     private void AddFieldGroup<TGroup>(
@@ -131,12 +192,36 @@ public sealed class KVBindBuilder<TEntity>
         _definition.Nodes.Add(nodeDefinition);
     }
 
+    // Self-describing single-type collection: the item type carries its own definition via
+    // IKVNodeDefinition, so no inline item declaration is needed (enforced at compile time).
+    public void Collection<TModel>(Expression<Func<TEntity, KVCollectionNode<TModel>>> selector)
+        where TModel : KVCollectionItemNode, IKVNodeDefinition, new()
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+
+        var propertyName = ResolveSelectorKey(selector);
+        var getter = selector.Compile();
+
+        _definition.Collections.RemoveAll(collection => string.Equals(collection.SubSegmentPath, propertyName, StringComparison.Ordinal));
+
+        var collectionDefinition = new KVCollectionDefinition
+        {
+            SubSegmentPath = propertyName,
+            GetCollection = owner => getter((TEntity)owner),
+            DisplayName = ResolveDisplayName(selector)
+        };
+        collectionDefinition.AddItemDefinition(typeof(TModel), typeof(TModel).Name, TModel.Definition);
+
+        _definition.Collections.Add(collectionDefinition);
+    }
+
     public void Collection<TModel>(
         Expression<Func<TEntity, KVCollectionNode<TModel>>> selector,
-        Action<KVCollectionOptionsBuilder<TEntity, TModel>>? configure = null)
+        Action<KVCollectionOptionsBuilder<TEntity, TModel>> configure)
         where TModel : KVCollectionItemNode, new()
     {
         ArgumentNullException.ThrowIfNull(selector);
+        ArgumentNullException.ThrowIfNull(configure);
         if (typeof(KVRootNode).IsAssignableFrom(typeof(TModel)))
         {
             throw new InvalidOperationException($"Collection item base type '{typeof(TModel).FullName}' cannot inherit KVRootNode.");
@@ -145,7 +230,7 @@ public sealed class KVBindBuilder<TEntity>
         var propertyName = ResolveSelectorKey(selector);
         var getter = selector.Compile();
         var options = new KVCollectionOptionsBuilder<TEntity, TModel>(ResolveSelectorKey);
-        configure?.Invoke(options);
+        configure(options);
         options.BuildValidationRules();
 
         if (options.ItemDefinitions.Count == 0)

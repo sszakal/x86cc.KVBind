@@ -96,7 +96,7 @@ public abstract partial class KVNode
 
     private KVNestedNodeDefinition GetNestedNodeDefinition(string nestedNodeKey)
     {
-        return Definition.NestedNodes.Find(definition => string.Equals(definition.SubSegmentPath, nestedNodeKey, StringComparison.Ordinal))
+        return Definition.FindNestedNode(nestedNodeKey)
                ?? throw new InvalidOperationException($"Nested node '{nestedNodeKey}' is not declared under '{Definition.SubSegmentPath}'.");
     }
 

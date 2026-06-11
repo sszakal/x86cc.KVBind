@@ -1,5 +1,3 @@
-
-
 # KVBind
 
 Typed C# bindings for canonical key-value document data.
@@ -17,11 +15,7 @@ KVBind gives you:
 - definition-driven validation and dependency behavior
 - generated C# property accessors over a shared runtime
 
-
-
 https://github.com/user-attachments/assets/dbbd4264-4d86-4db5-8c68-da4fd882f18d
-
-
 
 ## Mental Model
 
