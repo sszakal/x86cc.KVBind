@@ -6,8 +6,10 @@ namespace x86cc.KVBind.Core;
 
 public abstract partial class KVNode : KVNodeBase
 {
-    private readonly Dictionary<string, ActiveNestedNode> _activeNestedNodes = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, KVModel> _nestedSlotModels = new(StringComparer.Ordinal);
+    // Lazily allocated — most nodes (collection items, groups without nested nodes) never declare nested
+    // nodes, so these stay null and avoid two empty dictionaries per node.
+    private Dictionary<string, ActiveNestedNode>? _activeNestedNodes;
+    private Dictionary<string, KVModel>? _nestedSlotModels;
     private bool _isDetached;
 
     public KVNodeBase? Parent { get; private set; }

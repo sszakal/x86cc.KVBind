@@ -21,7 +21,7 @@ public abstract partial class KVNode
                 "Each KVNode instance is tied to exactly one parent context.");
 
         DetachActiveNestedNodes();
-        _nestedSlotModels.Clear();
+        _nestedSlotModels?.Clear();
 
         _isDetached = false;
         Parent = parent;
@@ -51,7 +51,7 @@ public abstract partial class KVNode
         {
             if (string.IsNullOrWhiteSpace(nestedNodeDefinition.SubSegmentPath))
                 throw new InvalidOperationException("Nested node definitions must define SubSegmentPath.");
-            _nestedSlotModels[nestedNodeDefinition.SubSegmentPath] = model.CreateChildModel(nestedNodeDefinition.SubSegmentPath);
+            (_nestedSlotModels ??= new(StringComparer.Ordinal))[nestedNodeDefinition.SubSegmentPath] = model.CreateChildModel(nestedNodeDefinition.SubSegmentPath);
         }
     }
 
@@ -75,7 +75,7 @@ public abstract partial class KVNode
     {
         if (_isDetached) return;
         DetachActiveNestedNodes();
-        _nestedSlotModels.Clear();
+        _nestedSlotModels?.Clear();
         _isDetached = true;
         Parent = null;
         Model = null!;
@@ -84,6 +84,7 @@ public abstract partial class KVNode
 
     private void DetachActiveNestedNodes()
     {
+        if (_activeNestedNodes is null) return;
         foreach (var activeNode in _activeNestedNodes.Values)
             activeNode.Node.DetachRuntime();
         _activeNestedNodes.Clear();

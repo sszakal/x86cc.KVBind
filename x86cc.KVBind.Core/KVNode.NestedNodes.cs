@@ -21,7 +21,8 @@ public abstract partial class KVNode
             return null;
         }
 
-        if (_activeNestedNodes.TryGetValue(nestedNodeKey, out var activeNode)
+        if (_activeNestedNodes is not null
+            && _activeNestedNodes.TryGetValue(nestedNodeKey, out var activeNode)
             && ReferenceEquals(activeNode.Model, nestedModel)
             && string.Equals(activeNode.TypeToken, typeToken, StringComparison.Ordinal))
         {
@@ -32,7 +33,7 @@ public abstract partial class KVNode
         var typeDefinition = definition.GetTypeDefinition(typeToken);
         var node = (KVNestedNode)Activator.CreateInstance(typeDefinition.ModelType)!;
         node.BindRuntime(nestedModel, typeDefinition.NodeDefinition, this);
-        _activeNestedNodes[nestedNodeKey] = new ActiveNestedNode(node, typeToken, nestedModel);
+        (_activeNestedNodes ??= new(StringComparer.Ordinal))[nestedNodeKey] = new ActiveNestedNode(node, typeToken, nestedModel);
         return (TBase)node;
     }
 
@@ -56,7 +57,7 @@ public abstract partial class KVNode
         var typeDefinition = definition.GetTypeDefinition(value.GetType());
         KVNestedNode.SetItemType(nestedModel, typeDefinition.TypeToken);
         value.BindRuntime(nestedModel, typeDefinition.NodeDefinition, this);
-        _activeNestedNodes[nestedNodeKey] = new ActiveNestedNode(value, typeDefinition.TypeToken, nestedModel);
+        (_activeNestedNodes ??= new(StringComparer.Ordinal))[nestedNodeKey] = new ActiveNestedNode(value, typeDefinition.TypeToken, nestedModel);
     }
 
     internal KVNestedNode? GetActiveNestedNode(KVNestedNodeDefinition definition, KVModel nestedModel)
@@ -68,7 +69,8 @@ public abstract partial class KVNode
             return null;
         }
 
-        if (_activeNestedNodes.TryGetValue(definition.SubSegmentPath, out var activeNode)
+        if (_activeNestedNodes is not null
+            && _activeNestedNodes.TryGetValue(definition.SubSegmentPath, out var activeNode)
             && ReferenceEquals(activeNode.Model, nestedModel)
             && string.Equals(activeNode.TypeToken, typeToken, StringComparison.Ordinal))
         {
@@ -79,13 +81,13 @@ public abstract partial class KVNode
         var typeDefinition = definition.GetTypeDefinition(typeToken);
         var node = (KVNestedNode)Activator.CreateInstance(typeDefinition.ModelType)!;
         node.BindRuntime(nestedModel, typeDefinition.NodeDefinition, this);
-        _activeNestedNodes[definition.SubSegmentPath] = new ActiveNestedNode(node, typeToken, nestedModel);
+        (_activeNestedNodes ??= new(StringComparer.Ordinal))[definition.SubSegmentPath] = new ActiveNestedNode(node, typeToken, nestedModel);
         return node;
     }
 
     internal KVModel GetNestedNodeModel(string nestedNodeKey)
     {
-        return _nestedSlotModels.TryGetValue(nestedNodeKey, out var slotModel)
+        return _nestedSlotModels is not null && _nestedSlotModels.TryGetValue(nestedNodeKey, out var slotModel)
             ? slotModel
             : throw new InvalidOperationException($"Nested node slot '{nestedNodeKey}' is not initialized. Ensure the node is fully bound.");
     }
@@ -102,7 +104,7 @@ public abstract partial class KVNode
 
     private void DetachActiveNestedNode(string nestedNodeKey)
     {
-        if (_activeNestedNodes.Remove(nestedNodeKey, out var activeNode))
+        if (_activeNestedNodes is not null && _activeNestedNodes.Remove(nestedNodeKey, out var activeNode))
             activeNode.Node.DetachRuntime();
     }
 
