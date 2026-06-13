@@ -27,18 +27,15 @@ public class OverlayCommitTests
     }
 
     [Fact]
-    public void OverlayCommit_WhenCreated_CapturesSnapshotVersionAndLastCommit()
+    public void OverlayCommit_WhenCreated_CapturesBaseCommitAndUser()
     {
         var snapshot = new KVSnapshot
         {
-            Version = Guid.Parse("11111111-1111-1111-1111-111111111111"),
             LastCommitId = Guid.Parse("22222222-2222-2222-2222-222222222222")
         };
 
         var overlay = KVOverlay.Create(snapshot, "editor");
 
-        overlay.AggregateId.Should().Be(snapshot.AggregateId);
-        overlay.BaseSnapshotVersion.Should().Be(snapshot.Version);
         overlay.BaseCommitId.Should().Be(snapshot.LastCommitId);
         overlay.User.Should().Be("editor");
     }
@@ -48,8 +45,6 @@ public class OverlayCommitTests
     {
         var snapshot = new KVSnapshot
         {
-            AggregateId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
-            Version = Guid.Parse("22222222-2222-2222-2222-222222222222"),
             LastCommitId = Guid.Parse("33333333-3333-3333-3333-333333333333"),
             ModifiedBy = "editor"
         };
@@ -57,12 +52,10 @@ public class OverlayCommitTests
 
         var clone = snapshot.Clone();
         snapshot.Data["Title"] = "Changed";
-        snapshot.Version = Guid.Parse("44444444-4444-4444-4444-444444444444");
         snapshot.LastCommitId = Guid.Parse("55555555-5555-5555-5555-555555555555");
 
-        clone.AggregateId.Should().Be(Guid.Parse("11111111-1111-1111-1111-111111111111"));
-        clone.Version.Should().Be(Guid.Parse("22222222-2222-2222-2222-222222222222"));
         clone.LastCommitId.Should().Be(Guid.Parse("33333333-3333-3333-3333-333333333333"));
+        clone.ModifiedBy.Should().Be("editor");
         clone.Data.Should().ContainKey("Title").WhoseValue.Should().Be("Original");
     }
 
@@ -77,7 +70,6 @@ public class OverlayCommitTests
 
         var commit = overlay.ToCommit(timestamp);
 
-        commit.AggregateId.Should().Be(snapshot.AggregateId);
         commit.PreviousCommitId.Should().Be(snapshot.LastCommitId);
         commit.User.Should().Be("editor");
         commit.Timestamp.Should().Be(timestamp);
@@ -112,7 +104,6 @@ public class OverlayCommitTests
 
         var commit = overlay.ToCommit(timestamp);
 
-        commit.AggregateId.Should().Be(snapshot.AggregateId);
         commit.User.Should().Be("editor");
         commit.Timestamp.Should().Be(timestamp);
         commit.Changes.Should().BeEmpty();

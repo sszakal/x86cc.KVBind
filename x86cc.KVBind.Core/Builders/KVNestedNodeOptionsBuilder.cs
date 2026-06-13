@@ -13,10 +13,21 @@ public sealed class KVNestedNodeOptionsBuilder<TBase>
 
     internal string? DisplayNameValue { get; private set; }
 
+    private readonly Dictionary<string, object?> _annotations = new(StringComparer.Ordinal);
+
+    internal IReadOnlyDictionary<string, object?> Annotations => _annotations;
+
     public KVNestedNodeOptionsBuilder<TBase> DisplayName(string displayName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
         DisplayNameValue = displayName;
+        return this;
+    }
+
+    public KVNestedNodeOptionsBuilder<TBase> Annotate(string key, object? value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        _annotations[key] = value;
         return this;
     }
 

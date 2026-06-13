@@ -92,8 +92,6 @@ public class FieldGroupBindingTests : KVModelTestBase
               SecondFieldGroup:
                 Field1: 7
                 Field2: 8
-            Id:
-            Version:
             """);
     }
 }

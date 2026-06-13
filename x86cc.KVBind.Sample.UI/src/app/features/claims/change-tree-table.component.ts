@@ -168,6 +168,8 @@ export class ChangeTreeTableComponent implements OnChanges {
     if (value === null || value === undefined) return '';
     if (typeof value === 'string') return value;
     if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    // Non-GUID arrays (e.g. multi-select labels) read better as a list than JSON.
+    if (Array.isArray(value)) return value.map(v => this.formatValue(v)).join(', ');
     return JSON.stringify(value);
   }
 

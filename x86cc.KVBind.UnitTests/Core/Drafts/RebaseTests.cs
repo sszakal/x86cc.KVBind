@@ -5,11 +5,9 @@ namespace x86cc.KVBind.UnitTests.Core;
 
 public class RebaseTests
 {
-    private static readonly Guid Aggregate = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
-
     private static KVSnapshot Snapshot(params (string Path, string Value)[] data)
     {
-        var snapshot = new KVSnapshot { AggregateId = Aggregate, Version = Guid.NewGuid() };
+        var snapshot = new KVSnapshot();
         foreach (var (path, value) in data)
             snapshot.Data[path] = value;
         return snapshot;
@@ -18,7 +16,7 @@ public class RebaseTests
     // For tests that mix string and KVValue entries (e.g. $items as string[]).
     private static KVSnapshot SnapshotV(params (string Path, KVValue Value)[] data)
     {
-        var snapshot = new KVSnapshot { AggregateId = Aggregate, Version = Guid.NewGuid() };
+        var snapshot = new KVSnapshot();
         foreach (var (path, value) in data)
             snapshot.Data[path] = value;
         return snapshot;
@@ -47,7 +45,6 @@ public class RebaseTests
     {
         var commit = new KVCommit
         {
-            AggregateId = Aggregate,
             CommitId = Guid.NewGuid(),
             PreviousCommitId = from.LastCommitId,
             Timestamp = DateTimeOffset.UtcNow,
@@ -68,7 +65,6 @@ public class RebaseTests
     {
         var commit = new KVCommit
         {
-            AggregateId = Aggregate,
             CommitId = Guid.NewGuid(),
             PreviousCommitId = baseSnapshot.LastCommitId,
             Timestamp = DateTimeOffset.UtcNow,
@@ -99,7 +95,6 @@ public class RebaseTests
         incoming.Resolution.Should().Be(KVConflictResolution.Theirs);
 
         overlay.FinishRebase(); // accept the default
-        overlay.BaseSnapshotVersion.Should().Be(v2.Version);
         Effective(overlay, "Title").Should().Be("B"); // accepted
         Effective(overlay, "Desc").Should().Be("Y");  // our draft preserved
     }
@@ -116,7 +111,6 @@ public class RebaseTests
         overlay.ResolveConflict("Title", KVConflictResolution.Ours); // reject the incoming change
         overlay.FinishRebase();
 
-        overlay.BaseSnapshotVersion.Should().Be(v2.Version);
         Effective(overlay, "Title").Should().Be("A"); // rejected — base value pinned over the target's
         overlay.Changes.Should().ContainKey("Title"); // surfaces as a counter-edit on the draft
     }
@@ -146,7 +140,6 @@ public class RebaseTests
 
         outcome.Should().Be(KVRebaseOutcome.CanAutomerge); // empty draft: all upstream changes are incoming
         overlay.FinishRebase();
-        overlay.BaseSnapshotVersion.Should().Be(v2.Version);
         Effective(overlay, "Title").Should().Be("B");
     }
 
@@ -213,7 +206,6 @@ public class RebaseTests
         overlay.FinishRebase();
 
         overlay.IsRebasing.Should().BeFalse();
-        overlay.BaseSnapshotVersion.Should().Be(v2.Version);
         Effective(overlay, "Title").Should().Be("Mine");
     }
 
@@ -337,7 +329,6 @@ public class RebaseTests
         overlay.CancelRebase();
 
         overlay.IsRebasing.Should().BeFalse();
-        overlay.BaseSnapshotVersion.Should().Be(v1.Version);
         Effective(overlay, "Title").Should().Be("Mine");
     }
 
@@ -354,7 +345,6 @@ public class RebaseTests
 
         overlay.IsRebasing.Should().BeFalse();
         overlay.HasChanges.Should().BeFalse();
-        overlay.BaseSnapshotVersion.Should().Be(v2.Version);
         Effective(overlay, "Title").Should().Be("Theirs");
     }
 
@@ -758,7 +748,6 @@ public class RebaseTests
         outcome.Should().Be(KVRebaseOutcome.CanAutomerge);
         overlay.Conflicts.Should().BeEmpty(); // net-zero fold → nothing to review
         overlay.FinishRebase();
-        overlay.BaseSnapshotVersion.Should().Be(target.Version); // base advanced
         Effective(overlay, "Title").Should().Be("A");
         Effective(overlay, "Desc").Should().Be("my draft");
     }

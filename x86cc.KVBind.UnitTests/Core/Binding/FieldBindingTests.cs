@@ -166,8 +166,6 @@ public class FieldBindingTests : KVModelTestBase
                 Label: First
               - Id: third
                 Label: Third
-            Id:
-            Version:
             """);
     }
 
@@ -239,7 +237,7 @@ public class FieldBindingTests : KVModelTestBase
 
 public partial class FieldTestModel : KVRootNode
 {
-    [KVBind(nameof(BooleanField))]
+    [KVBind(nameof(BooleanField))] 
     public partial bool BooleanField { get; set; }
 
     [KVBind(nameof(CharField))]

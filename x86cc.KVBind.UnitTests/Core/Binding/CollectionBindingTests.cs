@@ -301,8 +301,6 @@ public class CollectionBindingTests : KVModelTestBase
                     Field2: 6
                   - Field1: 7
                     Field2: 8
-            Id:
-            Version:
             """);
     }
 

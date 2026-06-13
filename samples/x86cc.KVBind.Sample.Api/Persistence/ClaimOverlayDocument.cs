@@ -24,20 +24,28 @@ public sealed class ClaimOverlayDocument
 
     public List<KVConflict> Conflicts { get; set; } = [];
 
-    public Guid BaseSnapshotVersion => Snapshot.Version;
-
     public Guid? BaseCommitId => Snapshot.LastCommitId;
 
     public static ClaimOverlayDocument Create(Guid claimId, string user, KVOverlay overlay)
     {
         var document = new ClaimOverlayDocument
         {
-            Id = Guid.NewGuid(),
+            Id = DraftId(claimId, user),
             ClaimId = claimId,
             User = user,
         };
         document.UpdateFrom(overlay);
         return document;
+    }
+
+    // A user has at most one open draft per claim, so (ClaimId, User) is the identity. Marten keys a
+    // document by a single member, so we derive a deterministic Guid from the pair — same claim+user
+    // always maps to the same document, which makes uniqueness structural (no separate index needed).
+    public static Guid DraftId(Guid claimId, string user)
+    {
+        var bytes = System.Security.Cryptography.MD5.HashData(
+            System.Text.Encoding.UTF8.GetBytes($"{claimId:D}:{user}"));
+        return new Guid(bytes);
     }
 
     public KVOverlay ToOverlay()

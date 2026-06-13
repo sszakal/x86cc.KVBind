@@ -5,8 +5,6 @@ namespace x86cc.KVBind.Core.Model;
 
 public sealed class KVCommit
 {
-    public Guid AggregateId { get; set; }
-
     public Guid CommitId { get; set; } = Guid.NewGuid();
 
     public Guid? PreviousCommitId { get; set; }

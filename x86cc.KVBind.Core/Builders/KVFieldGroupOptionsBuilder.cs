@@ -5,9 +5,9 @@ namespace x86cc.KVBind.Core;
 
 public sealed class KVFieldGroupOptionsBuilder
 {
-    private readonly HashSet<string> _tags = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, object?> _annotations = new(StringComparer.Ordinal);
 
-    internal IReadOnlyCollection<string> Tags => _tags;
+    internal IReadOnlyDictionary<string, object?> Annotations => _annotations;
 
     internal bool? IsResettable { get; private set; }
 
@@ -20,10 +20,10 @@ public sealed class KVFieldGroupOptionsBuilder
         return this;
     }
 
-    public KVFieldGroupOptionsBuilder Tag(string tag)
+    public KVFieldGroupOptionsBuilder Annotate(string key, object? value)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(tag);
-        _tags.Add(tag);
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        _annotations[key] = value;
         return this;
     }
 

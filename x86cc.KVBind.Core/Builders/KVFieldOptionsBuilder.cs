@@ -8,12 +8,15 @@ public class KVFieldOptionsBuilder<TValue>
 {
     private readonly List<KVExplicitAllowedValue> _explicitAllowedValues = [];
     private readonly List<IKVFieldValidationRuleFactory<TValue>> _validationFactories = [];
+    private readonly Dictionary<string, object?> _annotations = new(StringComparer.Ordinal);
 
     internal KVAllowedValuesDefinition? AllowedValuesDefinition { get; private set; }
 
     internal bool IsRequired { get; private set; }
 
     internal string? DisplayNameValue { get; private set; }
+
+    internal IReadOnlyDictionary<string, object?> Annotations => _annotations;
 
     public KVFieldOptionsBuilder<TValue> Required()
     {
@@ -25,6 +28,13 @@ public class KVFieldOptionsBuilder<TValue>
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
         DisplayNameValue = displayName;
+        return this;
+    }
+
+    public KVFieldOptionsBuilder<TValue> Annotate(string key, object? value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        _annotations[key] = value;
         return this;
     }
 

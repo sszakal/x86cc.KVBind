@@ -25,20 +25,12 @@ public class RootBindingTests : KVModelTestBase
     }
     
     [Fact]
-    public void RootBinding_WhenRootModelIsBound_ExposesRootModelIdAndVersion()
+    public void RootBinding_WhenRootModelIsBound_ExposesBoundRootModel()
     {
-        var model = new KVModelRoot { Id = "contract-1", Version = "v1" };
+        var model = new KVModelRoot();
         var root = CreateRoot<NewRootNode>(model);
 
         root.RootModel().Should().BeSameAs(model);
-        root.Id.Should().Be("contract-1");
-        root.Version.Should().Be("v1");
-
-        root.Id = "contract-2";
-        root.Version = "v2";
-
-        model.Id.Should().Be("contract-2");
-        model.Version.Should().Be("v2");
     }
 
     [Fact]

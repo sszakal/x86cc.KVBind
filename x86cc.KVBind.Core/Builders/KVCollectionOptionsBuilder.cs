@@ -22,10 +22,21 @@ public sealed class KVCollectionOptionsBuilder<TParent, TModel>
 
     internal string? DisplayNameValue { get; private set; }
 
+    private readonly Dictionary<string, object?> _annotations = new(StringComparer.Ordinal);
+
+    internal IReadOnlyDictionary<string, object?> Annotations => _annotations;
+
     public KVCollectionOptionsBuilder<TParent, TModel> DisplayName(string displayName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
         DisplayNameValue = displayName;
+        return this;
+    }
+
+    public KVCollectionOptionsBuilder<TParent, TModel> Annotate(string key, object? value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        _annotations[key] = value;
         return this;
     }
 

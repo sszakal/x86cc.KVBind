@@ -32,13 +32,13 @@ public class SelfDescribingNodeTests : KVModelTestBase
     {
         RegisterModelDefinition<SelfDescribingRoot>(b =>
         {
-            b.FieldGroup(x => x.Group, o => o.DisplayName("Group Section").Tag("main"));
+            b.FieldGroup(x => x.Group, o => o.DisplayName("Group Section").Annotate("main", true));
             b.Collection(x => x.Items);
         });
 
         var group = CreateRegistry().Get<SelfDescribingRoot>().Nodes.Single(n => n.SubSegmentPath == "Group");
         group.DisplayName.Should().Be("Group Section");
-        group.Tags.Should().Contain("main");
+        group.Annotations.Should().ContainKey("main");
         group.Fields.Select(f => f.SubSegmentPath).Should().Contain("Code"); // structure still pulled from the static def
     }
 

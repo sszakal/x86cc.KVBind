@@ -32,7 +32,7 @@ public sealed class InsuranceClaimDefinitionBuilder : IKVModelDefinitionBuilder
         // ── Status — AllowedValue with labels + required for non-draft ────────────
         builder.Field(x => x.Status, f =>
         {
-            f.DisplayName("Status");
+            f.DisplayName("Status").UiControl("select");
             // AllowedValue(storedToken, id, label)
             f.AllowedValue("draft",      "draft",      "Draft");
             f.AllowedValue("in_review",  "in_review",  "In Review");
@@ -45,24 +45,25 @@ public sealed class InsuranceClaimDefinitionBuilder : IKVModelDefinitionBuilder
         // ── Priority — AllowedValue with labels ───────────────────────────────────
         builder.Field(x => x.Priority, f =>
         {
-            f.DisplayName("Priority");
+            f.DisplayName("Priority").UiControl("radio");
             f.AllowedValue("low",      "low",      "Low");
             f.AllowedValue("medium",   "medium",   "Medium");
             f.AllowedValue("high",     "high",     "High");
             f.AllowedValue("critical", "critical", "Critical");
         });
 
-        builder.Field(x => x.IncidentDate, f => f.DisplayName("Incident Date"));
+        builder.Field(x => x.IncidentDate, f => f.DisplayName("Incident Date").UiControl("date"));
 
         builder.Field(x => x.Description, f =>
             f.DisplayName("Description")
+             .UiControl("textarea")
              .Validation(p => p.For<SubmitClaimValidationProfile>(r => r.MaxLength(1000))));
 
 
         // ── Tags — AllowedElementValue for multi-select array ─────────────────────
         builder.Field(x => x.Tags, f =>
         {
-            f.DisplayName("Tags");
+            f.DisplayName("Tags").UiControl("multiselect");
             foreach (var (id, label) in ClaimTags)
                 f.AllowedElementValue<string>(id, id, label);
         });
@@ -76,7 +77,7 @@ public sealed class InsuranceClaimDefinitionBuilder : IKVModelDefinitionBuilder
             // to tell the UI "this option requires additional parameters".
             policy.Field(x => x.CoverageType, f =>
             {
-                f.DisplayName("Coverage Type");
+                f.DisplayName("Coverage Type").UiControl("select");
                 f.AllowedValue("comprehensive",  "comprehensive",  "Comprehensive");
                 f.AllowedValueComponent("collision",      "collision",      "Collision",
                     c => c.Template("Collision — {Deductible:C} deductible")
@@ -89,7 +90,7 @@ public sealed class InsuranceClaimDefinitionBuilder : IKVModelDefinitionBuilder
                 f.AllowedValue("medical",   "medical",   "Medical Payments");
                 f.Validation(p => p.For<SubmitClaimValidationProfile>(r => r.Required()));
             });
-        });
+        }, options => options.Section());
 
         // ── Damaged Items ─────────────────────────────────────────────────────────
         builder.Collection(x => x.DamagedItems, items =>
@@ -102,11 +103,11 @@ public sealed class InsuranceClaimDefinitionBuilder : IKVModelDefinitionBuilder
                      .Validation(p => p.For<SubmitClaimValidationProfile>(r => r.Required())));
                 item.Field(x => x.Category, f =>
                 {
-                    f.DisplayName("Category");
+                    f.DisplayName("Category").UiControl("select");
                     foreach (var cat in DamageCategories)
                         f.AllowedValue(cat, cat, ToLabel(cat));
                 });
-                item.Field(x => x.EstimatedAmount, f => f.DisplayName("Estimated Amount"));
+                item.Field(x => x.EstimatedAmount, f => f.DisplayName("Estimated Amount").UiControl("number"));
             });
 
             // Only enforce a minimum when submitting — draft can have zero items.

@@ -16,8 +16,4 @@ public class KVModelRoot : KVModel
     public static KVModelRoot Create(KVOverlay overlay) => new(overlay);
 
     public KVSnapshot Snapshot => Overlay.Snapshot;
-
-    public string Id { get; set; } = string.Empty;
-
-    public string Version { get; set; } = string.Empty;
 }

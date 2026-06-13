@@ -12,10 +12,6 @@ public abstract class KVRootNode : KVNode
     public KVModelRoot RootModel() => Model as KVModelRoot
                                     ?? throw new InvalidOperationException("KVRootNode is not bound to KVModelRoot.");
 
-    public string Id { get => RootModel().Id; set => RootModel().Id = value; }
-
-    public string Version { get => RootModel().Version; set => RootModel().Version = value; }
-
     protected override void Bind(KVModel model, KVNodeDefinition definition, KVNodeBase? parent = null)
     {
         if (parent is not null)

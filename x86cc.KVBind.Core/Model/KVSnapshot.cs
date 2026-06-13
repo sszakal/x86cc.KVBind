@@ -5,14 +5,15 @@ namespace x86cc.KVBind.Core.Model;
 
 public sealed class KVSnapshot
 {
-    public Guid AggregateId { get; set; } = Guid.NewGuid();
-
+    // Identity (which stream this is) and the optimistic-concurrency token are consumer concerns — they
+    // live on the consumer's wrapper, not here. The commit chain (LastCommitId) anchors the snapshot.
     public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.UtcNow;
 
     public Guid? LastCommitId { get; set; }
 
     public DateTimeOffset? LastCommitTimestamp { get; set; }
 
+    // Audit, maintained as a derived projection of the commit log (first/last commit's who/when).
     public DateTimeOffset Created { get; set; } = DateTimeOffset.UtcNow;
 
     public string CreatedBy { get; set; } = string.Empty;
@@ -21,15 +22,12 @@ public sealed class KVSnapshot
 
     public string ModifiedBy { get; set; } = string.Empty;
 
-    public Guid Version { get; set; } = Guid.NewGuid();
-
     public Dictionary<string, KVValue> Data { get; set; } = new(StringComparer.Ordinal);
 
     public KVSnapshot Clone()
     {
         return new KVSnapshot
         {
-            AggregateId = AggregateId,
             Timestamp = Timestamp,
             LastCommitId = LastCommitId,
             LastCommitTimestamp = LastCommitTimestamp,
@@ -37,7 +35,6 @@ public sealed class KVSnapshot
             CreatedBy = CreatedBy,
             Modified = Modified,
             ModifiedBy = ModifiedBy,
-            Version = Version,
             Data = new Dictionary<string, KVValue>(Data, StringComparer.Ordinal)
         };
     }
@@ -87,11 +84,6 @@ public sealed class KVSnapshot
     {
         ArgumentNullException.ThrowIfNull(commit);
 
-        if (commit.AggregateId != AggregateId)
-        {
-            throw new InvalidOperationException("Commit aggregate id does not match snapshot aggregate id.");
-        }
-
         if (commit.PreviousCommitId != LastCommitId)
         {
             throw new InvalidOperationException("Commit does not continue the snapshot commit chain.");
@@ -110,7 +102,6 @@ public sealed class KVSnapshot
         Modified = commit.Timestamp;
         ModifiedBy = commit.User;
         Timestamp = DateTimeOffset.UtcNow;
-        Version = Guid.NewGuid();
     }
 
     public void Apply(IEnumerable<KVCommit> commits)

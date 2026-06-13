@@ -6,26 +6,20 @@ namespace x86cc.KVBind.Core.Model;
 
 public sealed class KVOverlay
 {
-    private string _user = null!;
-
     public KVOverlay(KVSnapshot snapshot, string user)
     {
         Snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
         User = user;
     }
 
-    public Guid AggregateId => Snapshot.AggregateId;
-
-    // The overlay's base (V1) is whatever snapshot it currently sits on — these track it directly.
-    public Guid BaseSnapshotVersion => Snapshot.Version;
-
+    // The overlay's base (V1) is whatever snapshot it currently sits on — the commit chain anchors it.
     public Guid? BaseCommitId => Snapshot.LastCommitId;
 
     public string User
     {
-        get => _user;
-        set => _user = !string.IsNullOrWhiteSpace(value) ? value : throw new ArgumentException("Overlay user cannot be empty.", nameof(value));
-    }
+        get;
+        set => field = !string.IsNullOrWhiteSpace(value) ? value : throw new ArgumentException("Overlay user cannot be empty.", nameof(value));
+    } = null!;
 
     public KVSnapshot Snapshot { get; private set; }
 
@@ -215,8 +209,6 @@ public sealed class KVOverlay
         ArgumentNullException.ThrowIfNull(missingCommits);
         if (IsRebasing)
             throw new InvalidOperationException("A rebase is already in progress. Finish or cancel it first.");
-        if (target.AggregateId != AggregateId)
-            throw new InvalidOperationException("Cannot rebase onto a snapshot from a different aggregate.");
 
         if (missingCommits.Count == 0)
             return KVRebaseOutcome.AlreadyCurrent;
@@ -286,8 +278,6 @@ public sealed class KVOverlay
     public void Reset(KVSnapshot target)
     {
         ArgumentNullException.ThrowIfNull(target);
-        if (target.AggregateId != AggregateId)
-            throw new InvalidOperationException("Cannot reset onto a snapshot from a different aggregate.");
 
         Changes.Clear();
         Snapshot = target.Clone();
@@ -455,7 +445,6 @@ public sealed class KVOverlay
     {
         return new KVCommit
         {
-            AggregateId = AggregateId,
             CommitId = Guid.NewGuid(),
             PreviousCommitId = BaseCommitId,
             User = User,

@@ -13,7 +13,7 @@ public class DefinitionBuilderTests
     {
         var builder = new KVBindBuilder<BuilderRootNode>();
         builder.Field(x => x.Title, field => field.Required());
-        builder.FieldGroup(x => x.General, _ => { }, group => group.Tag("main").Resettable());
+        builder.FieldGroup(x => x.General, _ => { }, group => group.Annotate("main", true).Resettable());
         builder.Collection(x => x.Items, collection =>
         {
             collection.Item<BuilderItemNode>(item => item.Field(x => x.Code));
@@ -33,7 +33,7 @@ public class DefinitionBuilderTests
             Nodes:
               - SubSegmentPath: General
                 Fields: []
-                Tags:
+                Annotations:
                   - main
                 IsResettable: true
             Collections:
@@ -50,7 +50,7 @@ public class DefinitionBuilderTests
                       - SpecialCode
                 AggregateRules: []
             ValidationRegistrations: []
-            Tags: []
+            Annotations: []
             SubSegmentPath:
             """);
     }
@@ -73,7 +73,7 @@ public class DefinitionBuilderTests
             Nodes:
               - SubSegmentPath: General
                 Fields: []
-                Tags: []
+                Annotations: []
             Collections:
               - SubSegmentPath: Items
                 Items:
@@ -83,7 +83,7 @@ public class DefinitionBuilderTests
                       - Code
                 AggregateRules: []
             ValidationRegistrations: []
-            Tags: []
+            Annotations: []
             SubSegmentPath:
             """);
     }
@@ -141,9 +141,29 @@ public class DefinitionBuilderTests
             ValidationRegistrations:
               - ScopePath: Title
                 Rules: 1
-            Tags: []
+            Annotations: []
             SubSegmentPath:
             """);
+    }
+
+    [Fact]
+    public void DefinitionBuilder_Annotations_AreCapturedPerElement_WithArbitraryValues()
+    {
+        var builder = new KVBindBuilder<BuilderRootNode>();
+        builder.Field(x => x.Title, field => field.Annotate("ui:control", "textarea").Annotate("ui:width", 2));
+        builder.Collection(x => x.Items, collection =>
+        {
+            collection.DisplayName("Items").Annotate("ui:role", "section");
+            collection.Item<BuilderItemNode>(item => item.Field(x => x.Code));
+        });
+
+        var definition = builder.Build();
+
+        var title = definition.Fields.Single(field => field.SubSegmentPath == "Title");
+        title.Annotations["ui:control"].Should().Be("textarea");
+        title.Annotations["ui:width"].Should().Be(2); // object? preserves the int, not "2"
+
+        definition.Collections.Single().Annotations["ui:role"].Should().Be("section");
     }
 
     private static object ProjectDefinition(KVNodeDefinition definition)
@@ -158,7 +178,7 @@ public class DefinitionBuilderTests
                 registration.ScopePath,
                 Rules = registration.Rules.Count
             }).ToArray(),
-            Tags = definition.Tags.Order(StringComparer.Ordinal).ToArray(),
+            Annotations = definition.Annotations.Keys.Order(StringComparer.Ordinal).ToArray(),
             definition.SubSegmentPath
         };
     }
@@ -169,7 +189,7 @@ public class DefinitionBuilderTests
         {
             definition.SubSegmentPath,
             Fields = definition.Fields.Select(ProjectField).ToArray(),
-            Tags = definition.Tags.Order(StringComparer.Ordinal).ToArray(),
+            Annotations = definition.Annotations.Keys.Order(StringComparer.Ordinal).ToArray(),
             definition.IsResettable
         };
     }

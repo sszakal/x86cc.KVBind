@@ -73,6 +73,7 @@ public sealed class KVBindBuilder<TEntity>
             DisplayName = options.DisplayNameValue ?? ResolveDisplayName(selector)
         };
         fieldDefinition.ValidationRules.AddRange(validationRules);
+        fieldDefinition.AddAnnotations(options.Annotations);
 
         _definition.Fields.Add(fieldDefinition);
     }
@@ -120,11 +121,7 @@ public sealed class KVBindBuilder<TEntity>
         // throwing GetChildNode), so re-home it under this property with the parent's getter.
         var nodeDefinition = RehomeFieldGroup(TGroup.Definition, propertyName, owner => getter((TEntity)owner));
 
-        foreach (var tag in options.Tags)
-        {
-            nodeDefinition.Tags.Add(tag);
-        }
-
+        nodeDefinition.AddAnnotations(options.Annotations);
         nodeDefinition.IsResettable = options.IsResettable;
         nodeDefinition.DisplayName = options.DisplayNameValue ?? ResolveDisplayName(selector);
         _definition.Nodes.Add(nodeDefinition);
@@ -145,10 +142,7 @@ public sealed class KVBindBuilder<TEntity>
         definition.NestedNodes.AddRange(source.NestedNodes);
         definition.ValidationRegistrations.AddRange(source.ValidationRegistrations);
         definition.ChangeReactions.AddRange(source.ChangeReactions);
-        foreach (var tag in source.Tags)
-        {
-            definition.Tags.Add(tag);
-        }
+        definition.AddAnnotations(source.Annotations);
 
         return definition;
     }
@@ -182,11 +176,7 @@ public sealed class KVBindBuilder<TEntity>
         define?.Invoke(childBuilder);
         var nodeDefinition = childBuilder.Build();
 
-        foreach (var tag in options.Tags)
-        {
-            nodeDefinition.Tags.Add(tag);
-        }
-
+        nodeDefinition.AddAnnotations(options.Annotations);
         nodeDefinition.IsResettable = options.IsResettable;
         nodeDefinition.DisplayName = options.DisplayNameValue ?? ResolveDisplayName(selector);
         _definition.Nodes.Add(nodeDefinition);
@@ -262,6 +252,7 @@ public sealed class KVBindBuilder<TEntity>
             collectionDefinition.AddPatchOperation(operation);
         }
 
+        collectionDefinition.AddAnnotations(options.Annotations);
         _definition.Collections.Add(collectionDefinition);
     }
 
@@ -300,6 +291,7 @@ public sealed class KVBindBuilder<TEntity>
             nestedNodeDefinition.AddTypeDefinition(typeDefinition.ModelType, typeDefinition.TypeToken, typeDefinition.NodeDefinition);
         }
 
+        nestedNodeDefinition.AddAnnotations(options.Annotations);
         _definition.NestedNodes.Add(nestedNodeDefinition);
     }
 

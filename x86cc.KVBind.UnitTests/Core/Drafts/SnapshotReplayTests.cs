@@ -11,13 +11,11 @@ public class SnapshotReplayTests : DeepGraphTestBase
     {
         var snapshot = new KVSnapshot
         {
-            AggregateId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
             LastCommitId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
             LastCommitTimestamp = new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero),
             ModifiedBy = "editor"
         };
         snapshot.Data["Title"] = "Existing";
-        var version = snapshot.Version;
         var timestamp = snapshot.Timestamp;
 
         snapshot.Apply(Array.Empty<KVCommit>());
@@ -26,25 +24,7 @@ public class SnapshotReplayTests : DeepGraphTestBase
         snapshot.LastCommitId.Should().Be(Guid.Parse("22222222-2222-2222-2222-222222222222"));
         snapshot.LastCommitTimestamp.Should().Be(new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
         snapshot.ModifiedBy.Should().Be("editor");
-        snapshot.Version.Should().Be(version);
         snapshot.Timestamp.Should().Be(timestamp);
-    }
-
-    [Fact]
-    public void SnapshotReplay_WhenCommitAggregateIdDoesNotMatch_Throws()
-    {
-        var snapshot = new KVSnapshot { AggregateId = Guid.Parse("11111111-1111-1111-1111-111111111111") };
-        var commit = new KVCommit
-        {
-            AggregateId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
-            CommitId = Guid.Parse("33333333-3333-3333-3333-333333333333"),
-            User = "editor",
-            Timestamp = DateTimeOffset.UtcNow
-        };
-
-        var act = () => snapshot.Apply([commit]);
-
-        act.Should().Throw<InvalidOperationException>().WithMessage("*aggregate id*");
     }
 
     [Fact]
@@ -52,14 +32,12 @@ public class SnapshotReplayTests : DeepGraphTestBase
     {
         var baseSnapshot = new KVSnapshot
         {
-            AggregateId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
             LastCommitId = Guid.Parse("22222222-2222-2222-2222-222222222222")
         };
         baseSnapshot.Data["Title"] = "Base";
         baseSnapshot.Data["Items/old/Name"] = "Remove me";
         var first = new KVCommit
         {
-            AggregateId = baseSnapshot.AggregateId,
             CommitId = Guid.Parse("33333333-3333-3333-3333-333333333333"),
             PreviousCommitId = baseSnapshot.LastCommitId,
             User = "editor",
@@ -68,7 +46,6 @@ public class SnapshotReplayTests : DeepGraphTestBase
         };
         var second = new KVCommit
         {
-            AggregateId = baseSnapshot.AggregateId,
             CommitId = Guid.Parse("44444444-4444-4444-4444-444444444444"),
             PreviousCommitId = first.CommitId,
             User = "editor",
@@ -89,10 +66,9 @@ public class SnapshotReplayTests : DeepGraphTestBase
     [Fact]
     public void SnapshotReplay_WhenLaterCommitInBatchFails_KeepsEarlierAppliedCommits()
     {
-        var snapshot = new KVSnapshot { AggregateId = Guid.Parse("11111111-1111-1111-1111-111111111111") };
+        var snapshot = new KVSnapshot();
         var first = new KVCommit
         {
-            AggregateId = snapshot.AggregateId,
             CommitId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
             User = "editor",
             Timestamp = new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero),
@@ -100,7 +76,6 @@ public class SnapshotReplayTests : DeepGraphTestBase
         };
         var brokenSecond = new KVCommit
         {
-            AggregateId = snapshot.AggregateId,
             CommitId = Guid.Parse("33333333-3333-3333-3333-333333333333"),
             PreviousCommitId = Guid.Parse("44444444-4444-4444-4444-444444444444"),
             User = "editor",
@@ -141,7 +116,7 @@ public class SnapshotReplayTests : DeepGraphTestBase
         sibling.LeafField = "sibling";
         CommitAndContinue(root, model, commits);
 
-        var replayed = new KVSnapshot { AggregateId = model.Snapshot.AggregateId };
+        var replayed = new KVSnapshot();
         replayed.Apply(commits);
 
         replayed.Data.Should().BeEquivalentTo(model.Snapshot.Data);
@@ -167,7 +142,7 @@ public class SnapshotReplayTests : DeepGraphTestBase
         leaf.LeafField = "leaf-2";
         CommitAndContinue(root, model, commits);
 
-        var replayed = new KVSnapshot { AggregateId = model.Snapshot.AggregateId };
+        var replayed = new KVSnapshot();
         var act = () => replayed.Apply(commits.Skip(1));
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*commit chain*");

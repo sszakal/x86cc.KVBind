@@ -27,14 +27,14 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
 
         await using (var session = Store.LightweightSession())
         {
-            session.Store(new IntegrationSnapshotDocument { Id = snapshot.AggregateId, Snapshot = snapshot });
+            session.Store(new IntegrationSnapshotDocument { Id = AggregateId, Snapshot = snapshot });
             await session.SaveChangesAsync();
         }
 
         IntegrationSnapshotDocument? reloaded;
         await using (var session = Store.QuerySession())
         {
-            reloaded = await session.LoadAsync<IntegrationSnapshotDocument>(snapshot.AggregateId);
+            reloaded = await session.LoadAsync<IntegrationSnapshotDocument>(AggregateId);
         }
 
         reloaded.Should().NotBeNull();
@@ -67,7 +67,7 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         var root = Bind(overlay);
         ApplyDraftEdits(root);
 
-        var overlayDocument = IntegrationOverlayDocument.Create(snapshot.AggregateId, "adjuster-a", overlay);
+        var overlayDocument = IntegrationOverlayDocument.Create(AggregateId, "adjuster-a", overlay);
         await using (var session = Store.LightweightSession())
         {
             session.Store(overlayDocument);
@@ -105,7 +105,7 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         var root = Bind(overlay);
         ApplyDraftEdits(root);
 
-        var overlayDocument = IntegrationOverlayDocument.Create(snapshot.AggregateId, "adjuster-a", overlay);
+        var overlayDocument = IntegrationOverlayDocument.Create(AggregateId, "adjuster-a", overlay);
         await using (var session = Store.LightweightSession())
         {
             session.Store(overlayDocument);
@@ -125,8 +125,8 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
 
         await using (var session = Store.LightweightSession())
         {
-            session.Store(new IntegrationCommitDocument { Id = commit.CommitId, AggregateId = snapshot.AggregateId, Commit = commit });
-            session.Store(new IntegrationSnapshotDocument { Id = snapshot.AggregateId, Snapshot = snapshot });
+            session.Store(new IntegrationCommitDocument { Id = commit.CommitId, AggregateId = AggregateId, Commit = commit });
+            session.Store(new IntegrationSnapshotDocument { Id = AggregateId, Snapshot = snapshot });
             await session.SaveChangesAsync();
         }
 
@@ -135,7 +135,7 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         await using (var session = Store.QuerySession())
         {
             reloadedCommit = await session.LoadAsync<IntegrationCommitDocument>(commit.CommitId);
-            reloadedSnapshot = await session.LoadAsync<IntegrationSnapshotDocument>(snapshot.AggregateId);
+            reloadedSnapshot = await session.LoadAsync<IntegrationSnapshotDocument>(AggregateId);
         }
 
         reloadedCommit.Should().NotBeNull();
@@ -168,7 +168,7 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         firstDraft.SmartStatus = IntegrationSmartStatus.New;
         firstDraft.CompensationType = IntegrationCompensationType.Manager;
 
-        var overlayDocument = IntegrationOverlayDocument.Create(snapshot.AggregateId, "adjuster-a", firstOverlay);
+        var overlayDocument = IntegrationOverlayDocument.Create(AggregateId, "adjuster-a", firstOverlay);
         await using (var session = Store.LightweightSession())
         {
             session.Store(overlayDocument);
@@ -228,7 +228,7 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         var orderId2 = Guid.Parse("aaaa0002-0000-0000-0000-000000000000");
         var orderId3 = Guid.Parse("aaaa0003-0000-0000-0000-000000000000");
 
-        var snapshot = new KVSnapshot { AggregateId = Guid.NewGuid(), CreatedBy = "test", ModifiedBy = "test" };
+        var snapshot = new KVSnapshot { CreatedBy = "test", ModifiedBy = "test" };
         var overlay = KVOverlay.Create(snapshot, "test");
         var root = Bind(overlay);
         var o1 = root.Orders.Create(orderId1); o1.OrderNumber = "ORD-1";
@@ -245,14 +245,14 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         // Persist and reload from Postgres
         await using (var session = Store.LightweightSession())
         {
-            session.Store(new IntegrationSnapshotDocument { Id = snapshot.AggregateId, Snapshot = snapshot });
+            session.Store(new IntegrationSnapshotDocument { Id = AggregateId, Snapshot = snapshot });
             await session.SaveChangesAsync();
         }
 
         IntegrationSnapshotDocument? reloaded;
         await using (var session = Store.QuerySession())
         {
-            reloaded = await session.LoadAsync<IntegrationSnapshotDocument>(snapshot.AggregateId);
+            reloaded = await session.LoadAsync<IntegrationSnapshotDocument>(AggregateId);
         }
 
         reloaded.Should().NotBeNull();
@@ -270,11 +270,11 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
     private async Task<KVSnapshot> PersistSnapshotAsync(KVSnapshot snapshot)
     {
         await using var session = Store.LightweightSession();
-        session.Store(new IntegrationSnapshotDocument { Id = snapshot.AggregateId, Snapshot = snapshot });
+        session.Store(new IntegrationSnapshotDocument { Id = AggregateId, Snapshot = snapshot });
         await session.SaveChangesAsync();
 
         await using var query = Store.QuerySession();
-        var reloaded = await query.LoadAsync<IntegrationSnapshotDocument>(snapshot.AggregateId);
+        var reloaded = await query.LoadAsync<IntegrationSnapshotDocument>(AggregateId);
         return reloaded!.Snapshot;
     }
 
@@ -282,7 +282,6 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
     {
         var snapshot = new KVSnapshot
         {
-            AggregateId = AggregateId,
             CreatedBy = "creator",
             ModifiedBy = "creator"
         };
