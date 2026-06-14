@@ -40,6 +40,16 @@ public sealed class KVCollectionOptionsBuilder<TParent, TModel>
         return this;
     }
 
+    internal Action<Abstractions.IKVCollectionNode>? DefaultSeedAction { get; private set; }
+
+    // Seeds initial items into a fresh, empty collection (ApplyDefaults), e.g. `c => c.Create<TItem>()`.
+    public KVCollectionOptionsBuilder<TParent, TModel> Default(Action<KVCollectionNode<TModel>> seed)
+    {
+        ArgumentNullException.ThrowIfNull(seed);
+        DefaultSeedAction = collection => seed((KVCollectionNode<TModel>)collection);
+        return this;
+    }
+
     internal bool NotEmptyRule => _globalRules.NotEmptyRule;
 
     internal int? MinCountValue => _globalRules.MinCountValue;

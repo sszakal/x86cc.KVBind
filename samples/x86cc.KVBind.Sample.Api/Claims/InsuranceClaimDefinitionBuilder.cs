@@ -33,6 +33,7 @@ public sealed class InsuranceClaimDefinitionBuilder : IKVModelDefinitionBuilder
         builder.Field(x => x.Status, f =>
         {
             f.DisplayName("Status").UiControl("select");
+            f.Default("draft"); // a fresh claim starts in draft (materialized by CreateNew/ApplyDefaults)
             // AllowedValue(storedToken, id, label)
             f.AllowedValue("draft",      "draft",      "Draft");
             f.AllowedValue("in_review",  "in_review",  "In Review");

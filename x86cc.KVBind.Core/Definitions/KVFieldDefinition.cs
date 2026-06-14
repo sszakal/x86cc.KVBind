@@ -9,4 +9,9 @@ public class KVFieldDefinition: KVDefinition
     internal KVAllowedValuesDefinition? AllowedValues { get; init; }
 
     public List<KVCompiledValidationRule> ValidationRules { get; } = new();
+
+    // Create-time default, materialized into the overlay by ApplyDefaults where the field is unset.
+    // HasDefault distinguishes "default is null/false/0" from "no default declared".
+    public bool HasDefault { get; init; }
+    public object? DefaultValue { get; init; }
 }

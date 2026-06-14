@@ -12,6 +12,9 @@ public sealed class KVNestedNodeDefinition : KVDefinition
 
     public IReadOnlyDictionary<string, KVNestedNodeTypeDefinition> TypeDefinitionsByToken => _typeDefinitionsByToken;
 
+    // The subtype token a fresh aggregate initializes this slot to (ApplyDefaults). Null = leave unset.
+    public string? DefaultTypeToken { get; set; }
+
     internal void AddTypeDefinition(Type modelType, string typeToken, KVNodeDefinition nodeDefinition)
     {
         ArgumentNullException.ThrowIfNull(modelType);

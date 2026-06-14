@@ -25,6 +25,9 @@ public class KVCollectionDefinition : KVDefinition
 
     public int? MaxCount { get; set; }
 
+    // Seeds initial items into a fresh, empty collection (ApplyDefaults). Null = default to empty.
+    internal Action<IKVCollectionNode>? DefaultSeed { get; set; }
+
     public List<KVCollectionAggregateRule> AggregateRules { get; } = new();
 
     public List<KVCompiledValidationRule> ValidationRules { get; } = new();

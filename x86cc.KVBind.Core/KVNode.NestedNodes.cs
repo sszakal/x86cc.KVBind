@@ -85,6 +85,23 @@ public abstract partial class KVNode
         return node;
     }
 
+    // Initializes a nested-node slot to a subtype by token (used by ApplyDefaults). Mirrors SetNestedNode
+    // but resolves the type from the token rather than an instance.
+    internal KVNestedNode InitNestedNodeToToken(string nestedNodeKey, string token)
+    {
+        EnsureBound();
+        var definition = GetNestedNodeDefinition(nestedNodeKey);
+        var nestedModel = GetNestedNodeModel(nestedNodeKey);
+        DetachActiveNestedNode(nestedNodeKey);
+
+        var typeDefinition = definition.GetTypeDefinition(token);
+        var node = (KVNestedNode)Activator.CreateInstance(typeDefinition.ModelType)!;
+        KVNestedNode.SetItemType(nestedModel, typeDefinition.TypeToken);
+        node.BindRuntime(nestedModel, typeDefinition.NodeDefinition, this);
+        (_activeNestedNodes ??= new(StringComparer.Ordinal))[nestedNodeKey] = new ActiveNestedNode(node, typeDefinition.TypeToken, nestedModel);
+        return node;
+    }
+
     internal KVModel GetNestedNodeModel(string nestedNodeKey)
     {
         return _nestedSlotModels is not null && _nestedSlotModels.TryGetValue(nestedNodeKey, out var slotModel)

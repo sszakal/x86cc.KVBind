@@ -36,6 +36,24 @@ public abstract class KVRootNode : KVNode
         return Create<TSelf>(new KVModelRoot(overlay), definition);
     }
 
+    // Creates the aggregate and materializes declared defaults into the (uncommitted) overlay. Use this for a
+    // brand-new aggregate; plain Create binds an existing one without touching its values.
+    public static TSelf CreateNew<TSelf>(KVModelRoot model, KVNodeDefinition definition) where TSelf : KVRootNode, new()
+    {
+        var node = Create<TSelf>(model, definition);
+        node.ApplyDefaults();
+        return node;
+    }
+
+    public static TSelf CreateNew<TSelf>(KVOverlay overlay, KVNodeDefinition definition) where TSelf : KVRootNode, new()
+    {
+        return CreateNew<TSelf>(new KVModelRoot(overlay), definition);
+    }
+
+    // Fills any unset field/nested/collection default declared in the definition into the overlay. Idempotent
+    // (fill-blanks-only); CreateNew calls it for you.
+    public void ApplyDefaults() => ApplyDefaultsRecursive();
+
     public void Clear()
     {
         Model.Overlay.Clear();

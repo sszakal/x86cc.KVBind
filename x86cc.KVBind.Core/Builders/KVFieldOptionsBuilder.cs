@@ -18,9 +18,21 @@ public class KVFieldOptionsBuilder<TValue>
 
     internal IReadOnlyDictionary<string, object?> Annotations => _annotations;
 
+    internal bool HasDefault { get; private set; }
+
+    internal object? DefaultValue { get; private set; }
+
     public KVFieldOptionsBuilder<TValue> Required()
     {
         IsRequired = true;
+        return this;
+    }
+
+    // Create-time default, written into the overlay by ApplyDefaults when the field is unset.
+    public KVFieldOptionsBuilder<TValue> Default(TValue value)
+    {
+        HasDefault = true;
+        DefaultValue = value;
         return this;
     }
 

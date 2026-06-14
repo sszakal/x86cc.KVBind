@@ -32,11 +32,11 @@ public sealed class InsuranceClaimAggregateService(
             ModifiedBy = request.User
         };
         var overlay = KVOverlay.Create(snapshot.Clone(), request.User);
-        var root = Bind(overlay);
+        // CreateNew materializes declared defaults (e.g. Status = "draft") into the overlay.
+        var root = BindNew(overlay);
 
         // Only the mandatory identity is set at creation — everything else is edited on the draft page.
         root.ClaimNumber = request.ClaimNumber;
-        root.Status = "draft";
 
         var commit = root.CreateCommit(DateTimeOffset.UtcNow);
         var changes = ProjectCommitChanges(snapshot.Clone(), commit, BuildDisplayNames());
@@ -465,6 +465,12 @@ public sealed class InsuranceClaimAggregateService(
     private InsuranceClaim Bind(KVOverlay overlay)
     {
         return KVRootNode.Create<InsuranceClaim>(overlay, registry.Get<InsuranceClaim>());
+    }
+
+    // Binds a brand-new aggregate, materializing declared defaults into the overlay.
+    private InsuranceClaim BindNew(KVOverlay overlay)
+    {
+        return KVRootNode.CreateNew<InsuranceClaim>(overlay, registry.Get<InsuranceClaim>());
     }
 
     // A draft is current iff its base commit is the snapshot's head commit (the commit chain is the anchor).

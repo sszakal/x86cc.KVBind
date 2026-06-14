@@ -31,6 +31,23 @@ public sealed class KVNestedNodeOptionsBuilder<TBase>
         return this;
     }
 
+    internal string? DefaultTypeTokenValue { get; private set; }
+
+    // A fresh aggregate initializes this slot to this subtype (ApplyDefaults). Uses the subtype's default
+    // token (typeof(TSubtype).Name) — declare a matching Bind<TSubtype>().
+    public KVNestedNodeOptionsBuilder<TBase> DefaultType<TSubtype>() where TSubtype : TBase
+    {
+        DefaultTypeTokenValue = typeof(TSubtype).Name;
+        return this;
+    }
+
+    public KVNestedNodeOptionsBuilder<TBase> DefaultType(string typeToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(typeToken);
+        DefaultTypeTokenValue = typeToken;
+        return this;
+    }
+
     public KVNestedNodeOptionsBuilder<TBase> Bind<TSubtype>(Action<KVBindBuilder<TSubtype>> configure)
         where TSubtype : TBase, new()
     {

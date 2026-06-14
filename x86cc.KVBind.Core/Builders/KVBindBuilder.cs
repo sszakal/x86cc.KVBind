@@ -69,6 +69,8 @@ public sealed class KVBindBuilder<TEntity>
             SubSegmentPath = propertyName,
             IsRequired = options.IsRequired,
             AllowedValues = options.AllowedValuesDefinition,
+            HasDefault = options.HasDefault,
+            DefaultValue = options.DefaultValue,
             // DSL DisplayName(...) wins; otherwise fall back to [KVBind(DisplayName = "...")] on the property.
             DisplayName = options.DisplayNameValue ?? ResolveDisplayName(selector)
         };
@@ -253,6 +255,7 @@ public sealed class KVBindBuilder<TEntity>
         }
 
         collectionDefinition.AddAnnotations(options.Annotations);
+        collectionDefinition.DefaultSeed = options.DefaultSeedAction;
         _definition.Collections.Add(collectionDefinition);
     }
 
@@ -292,6 +295,7 @@ public sealed class KVBindBuilder<TEntity>
         }
 
         nestedNodeDefinition.AddAnnotations(options.Annotations);
+        nestedNodeDefinition.DefaultTypeToken = options.DefaultTypeTokenValue;
         _definition.NestedNodes.Add(nestedNodeDefinition);
     }
 
