@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # The test projects transitively build Core + the source generator (and the sample the integration
+      # tests bind against). We target them directly to avoid the Aspire AppHost, which needs a workload.
+      - name: Unit tests
+        run: dotnet test x86cc.KVBind.UnitTests/x86cc.KVBind.UnitTests.csproj -c Release
+
+      # Integration tests spin up Postgres via Testcontainers; Docker is available on ubuntu-latest.
+      - name: Integration tests
+        run: dotnet test x86cc.KVBind.IntegrationTests/x86cc.KVBind.IntegrationTests.csproj -c Release
+
+      # Validate that both NuGet packages build on every push/PR.
+      - name: Pack (validate)
+        run: |
+          dotnet pack x86cc.KVBind.Core/x86cc.KVBind.Core.csproj -c Release -o ./artifacts
+          dotnet pack x86cc.KVBind.SourceGenerator/x86cc.KVBind.SourceGenerator.csproj -c Release -o ./artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nupkg
+          path: ./artifacts/*nupkg

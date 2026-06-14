@@ -10,8 +10,40 @@
     <NoWarn>$(NoWarn);RS2007;RS2008</NoWarn>
   </PropertyGroup>
 
+  <!-- NuGet package metadata: ships as a standalone analyzer/dev-dependency package. -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>x86cc.KVBind.SourceGenerator</PackageId>
+    <Title>x86cc.KVBind Source Generator</Title>
+    <Description>Roslyn source generator for x86cc.KVBind: implements [KVBind] partial properties as computed views over the key-value store. Use alongside the x86cc.KVBind.Core package.</Description>
+    <Authors>Stefan Szakal</Authors>
+    <Company>x86.cc</Company>
+    <PackageProjectUrl>https://github.com/sszakal/x86cc.KVBind</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/sszakal/x86cc.KVBind</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>kvbind;source-generator;roslyn;analyzer;codegen</PackageTags>
+    <!-- Local/default version; CI overrides with -p:Version=<tag> on release. -->
+    <Version>0.1.0</Version>
+
+    <!-- Analyzer packaging: no lib/ assembly, no package dependencies, marked as a development dependency. -->
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <DevelopmentDependency>true</DevelopmentDependency>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Place the generator where Roslyn loads analyzers from, plus the README for nuget.org. -->
+  <ItemGroup>
+    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>

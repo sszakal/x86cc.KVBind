@@ -6,4 +6,39 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
+  <!-- NuGet package metadata -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>x86cc.KVBind.Core</PackageId>
+    <Title>x86cc.KVBind</Title>
+    <Description>Versioned key-value binding for .NET. Strongly-typed domain models are computed views over a flat, path-keyed draft/commit store, with diffing, merging and rebase. Pair with the x86cc.KVBind.SourceGenerator package for [KVBind] code generation.</Description>
+    <Authors>Stefan Szakal</Authors>
+    <Company>x86.cc</Company>
+    <PackageProjectUrl>https://github.com/sszakal/x86cc.KVBind</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/sszakal/x86cc.KVBind</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>kvbind;key-value;versioning;diff;merge;rebase;source-generator;domain-model</PackageTags>
+    <!-- Local/default version; CI overrides with -p:Version=<tag> on release. -->
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <!-- Source Link + deterministic, documented build (SDK 8+ has Source Link for GitHub built in). -->
+  <PropertyGroup>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Ship the XML doc for the documented surface without failing on undocumented public members. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
 </Project>
