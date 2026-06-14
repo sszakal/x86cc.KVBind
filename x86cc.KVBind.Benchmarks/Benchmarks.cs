@@ -2,7 +2,7 @@ using BenchmarkDotNet.Attributes;
 
 namespace x86cc.KVBind.Benchmarks;
 
-// 1. Initialise: build the full 3-level graph (ChildCount children per collection) from scratch.
+// 1. Initialize: build the full 3-level graph (ChildCount children per collection) from scratch.
 [MemoryDiagnoser]
 public class InitializeBenchmark
 {

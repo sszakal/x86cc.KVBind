@@ -1,5 +1,4 @@
 using BenchmarkDotNet.Running;
-using x86cc.KVBind.Benchmarks;
 
 BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
 

@@ -23,6 +23,9 @@ builder.AddNpgsqlDataSource("kvbind");
 builder.Services.AddMarten(options =>
 {
     options.Connection(kvbindConnectionString);
+    // Pin the serializer explicitly (Marten 8+ already defaults to STJ) so a future default change can't
+    // silently switch it, and to fix enum/casing conventions for the jsonb representation in one place.
+    options.UseSystemTextJsonForSerialization(EnumStorage.AsString, Casing.CamelCase);
     options.Schema.For<ClaimSnapshotDocument>().Identity(x => x.Id);
     options.Schema.For<ClaimOverlayDocument>().Identity(x => x.Id);
     options.Schema.For<ClaimChangeSetDocument>().Identity(x => x.Id);
