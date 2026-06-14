@@ -12,7 +12,7 @@ public sealed class IntegrationOverlayDocument
 
     public KVSnapshot Snapshot { get; set; } = new();
 
-    public Dictionary<string, KVValue> Changes { get; set; } = new(StringComparer.Ordinal);
+    public KVDictionary Changes { get; set; } = new();
 
     public static IntegrationOverlayDocument Create(Guid aggregateId, string user, KVOverlay overlay)
     {
@@ -22,20 +22,20 @@ public sealed class IntegrationOverlayDocument
             AggregateId = aggregateId,
             User = user,
             Snapshot = overlay.Snapshot.Clone(),
-            Changes = new Dictionary<string, KVValue>(overlay.Changes, StringComparer.Ordinal)
+            Changes = new KVDictionary(overlay.Changes)
         };
     }
 
     public KVOverlay ToOverlay()
     {
         var overlay = KVOverlay.Create(Snapshot.Clone(), User);
-        overlay.Changes = new Dictionary<string, KVValue>(Changes, StringComparer.Ordinal);
+        overlay.Changes = new KVDictionary(Changes);
         return overlay;
     }
 
     public void UpdateFrom(KVOverlay overlay)
     {
         Snapshot = overlay.Snapshot.Clone();
-        Changes = new Dictionary<string, KVValue>(overlay.Changes, StringComparer.Ordinal);
+        Changes = new KVDictionary(overlay.Changes);
     }
 }

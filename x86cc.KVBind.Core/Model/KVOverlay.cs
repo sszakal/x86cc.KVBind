@@ -24,7 +24,7 @@ public sealed class KVOverlay
     public KVSnapshot Snapshot { get; private set; }
 
     // Single dictionary: regular KVValue = change, KVValue.Tombstone = deleted path (and its descendants).
-    public Dictionary<string, KVValue> Changes { get; set; } = new(StringComparer.Ordinal);
+    public KVDictionary Changes { get; set; } = new();
 
     // ── Rebase state ──────────────────────────────────────────────────────────
     // While a rebase is in progress the overlay holds a frozen copy of the target snapshot (V2) and the
@@ -449,7 +449,7 @@ public sealed class KVOverlay
             PreviousCommitId = BaseCommitId,
             User = User,
             Timestamp = timestamp,
-            Changes = new Dictionary<string, KVValue>(Changes, StringComparer.Ordinal)
+            Changes = new KVDictionary(Changes)
         };
     }
 }

@@ -66,7 +66,6 @@ public sealed class InsuranceClaimAggregateService(
             .OrderBy(document => document.Snapshot.Modified)
             .Select(document =>
             {
-                NormalizeSnapshot(document.Snapshot);
                 var root = Bind(KVOverlay.Create(document.Snapshot.Clone(), "system"));
                 return new ClaimSummaryResponse(
                     document.Id,
@@ -90,7 +89,6 @@ public sealed class InsuranceClaimAggregateService(
             return null;
         }
 
-        NormalizeSnapshot(document.Snapshot);
         return ProjectSnapshot(document.Id, document.Snapshot);
     }
 
@@ -103,8 +101,6 @@ public sealed class InsuranceClaimAggregateService(
         {
             return null;
         }
-
-        NormalizeSnapshot(snapshotDocument.Snapshot);
 
         // Resume an existing open draft for this user rather than silently discarding it. The draft is
         // keyed by (ClaimId, User), so a direct load resolves it — there is at most one.
@@ -138,8 +134,6 @@ public sealed class InsuranceClaimAggregateService(
             return null;
         }
 
-        NormalizeSnapshot(snapshotDocument.Snapshot);
-
         // Auto-resync: an overlay with no draft changes and no rebase in progress can always be
         // fast-forwarded onto the latest snapshot — an empty overlay can never conflict.
         if (!draft.IsRebasing
@@ -147,7 +141,6 @@ public sealed class InsuranceClaimAggregateService(
             && !IsDraftBasedOnLatestSnapshot(draft, snapshotDocument.Snapshot))
         {
             var emptyOverlay = draft.ToOverlay();
-            NormalizeOverlay(emptyOverlay);
             emptyOverlay.Reset(snapshotDocument.Snapshot);
             draft.UpdateFrom(emptyOverlay);
             session.Store(draft);
@@ -175,10 +168,7 @@ public sealed class InsuranceClaimAggregateService(
             return null;
         }
 
-        NormalizeSnapshot(snapshotDocument.Snapshot);
-
         var overlay = draft.ToOverlay();
-        NormalizeOverlay(overlay);
         var root = Bind(overlay);
         root.Patch(request.Select(ToPatchOperation));
 
@@ -205,10 +195,7 @@ public sealed class InsuranceClaimAggregateService(
             return null;
         }
 
-        NormalizeSnapshot(snapshotDocument.Snapshot);
-
         var overlay = draft.ToOverlay();
-        NormalizeOverlay(overlay);
 
         // Idempotent: if a rebase is already in flight, return its current state instead of throwing.
         if (overlay.IsRebasing)
@@ -271,7 +258,6 @@ public sealed class InsuranceClaimAggregateService(
         }
 
         var overlay = draft.ToOverlay();
-        NormalizeOverlay(overlay);
 
         var customValue = resolution == KVConflictResolution.Custom ? ToConflictValue(request.Value) : null;
         overlay.ResolveConflict(request.Path, resolution, customValue);
@@ -296,7 +282,6 @@ public sealed class InsuranceClaimAggregateService(
         }
 
         var overlay = draft.ToOverlay();
-        NormalizeOverlay(overlay);
         overlay.FinishRebase(); // throws if any conflict is unresolved
 
         draft.UpdateFrom(overlay);
@@ -304,8 +289,7 @@ public sealed class InsuranceClaimAggregateService(
         await session.SaveChangesAsync(cancellationToken);
 
         var snapshotDocument = await session.LoadAsync<ClaimSnapshotDocument>(claimId, cancellationToken);
-        NormalizeSnapshot(snapshotDocument!.Snapshot);
-        return ProjectDraft(draft, snapshotDocument.Snapshot);
+        return ProjectDraft(draft, snapshotDocument!.Snapshot);
     }
 
     public async Task<ClaimDraftResponse?> CancelRebaseAsync(Guid claimId, Guid draftId, CancellationToken cancellationToken)
@@ -317,7 +301,6 @@ public sealed class InsuranceClaimAggregateService(
         }
 
         var overlay = draft.ToOverlay();
-        NormalizeOverlay(overlay);
         overlay.CancelRebase();
 
         draft.UpdateFrom(overlay);
@@ -325,8 +308,7 @@ public sealed class InsuranceClaimAggregateService(
         await session.SaveChangesAsync(cancellationToken);
 
         var snapshotDocument = await session.LoadAsync<ClaimSnapshotDocument>(claimId, cancellationToken);
-        NormalizeSnapshot(snapshotDocument!.Snapshot);
-        return ProjectDraft(draft, snapshotDocument.Snapshot);
+        return ProjectDraft(draft, snapshotDocument!.Snapshot);
     }
 
     // Drops all draft changes and resyncs onto the latest snapshot — the "discard my changes" escape.
@@ -344,10 +326,7 @@ public sealed class InsuranceClaimAggregateService(
             return null;
         }
 
-        NormalizeSnapshot(snapshotDocument.Snapshot);
-
         var overlay = draft.ToOverlay();
-        NormalizeOverlay(overlay);
         overlay.Reset(snapshotDocument.Snapshot);
 
         draft.UpdateFrom(overlay);
@@ -396,7 +375,6 @@ public sealed class InsuranceClaimAggregateService(
             return null;
         }
 
-        NormalizeSnapshot(snapshotDocument.Snapshot);
         if (!IsDraftBasedOnLatestSnapshot(draft, snapshotDocument.Snapshot))
         {
             return CommitClaimDraftResult.Stale(new StaleDraftResponse(
@@ -410,7 +388,6 @@ public sealed class InsuranceClaimAggregateService(
         }
 
         var overlay = draft.ToOverlay();
-        NormalizeOverlay(overlay);
         var root = Bind(overlay);
         var commit = root.CreateCommit(DateTimeOffset.UtcNow);
         var changes = ProjectCommitChanges(snapshotDocument.Snapshot.Clone(), commit, BuildDisplayNames());
@@ -481,7 +458,6 @@ public sealed class InsuranceClaimAggregateService(
 
     private ClaimSnapshotResponse ProjectSnapshot(Guid claimId, KVSnapshot snapshot)
     {
-        NormalizeSnapshot(snapshot);
         var root = Bind(KVOverlay.Create(snapshot.Clone(), "system"));
         return new ClaimSnapshotResponse(
             claimId,
@@ -494,7 +470,6 @@ public sealed class InsuranceClaimAggregateService(
     private ClaimDraftResponse ProjectDraft(ClaimOverlayDocument draft, KVSnapshot latestSnapshot)
     {
         var overlay = draft.ToOverlay();
-        NormalizeOverlay(overlay);
         var root = Bind(overlay);
 
         var isStale = !draft.IsRebasing && !IsDraftBasedOnLatestSnapshot(draft, latestSnapshot);
@@ -756,7 +731,6 @@ public sealed class InsuranceClaimAggregateService(
         if (draft is null || draft.ClaimId != claimId) return null;
 
         var overlay = draft.ToOverlay();
-        NormalizeOverlay(overlay);
         var root = Bind(overlay);
 
         var result = root.Validate(); // profile determined by root.Status via GetValidationProfile()
@@ -984,16 +958,6 @@ public sealed class InsuranceClaimAggregateService(
         }
 
         return NormalizeValue(value.Value);
-    }
-
-    private static void NormalizeOverlay(KVOverlay overlay)
-    {
-        NormalizeSnapshot(overlay.Snapshot);
-    }
-
-    private static void NormalizeSnapshot(KVSnapshot snapshot)
-    {
-        snapshot.Data = new Dictionary<string, KVValue>(snapshot.Data, StringComparer.Ordinal);
     }
 
     private static object? NormalizeValue(object? value)

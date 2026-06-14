@@ -40,7 +40,7 @@ public static class KVMerge
         // "Theirs" resolved against the base: an overlay whose TryGet/IsRemoved give the upstream-effective
         // value at any path (their override, or the base value, or absent when they deleted it).
         var theirsOverlay = KVOverlay.Create(baseSnapshot, "upstream");
-        theirsOverlay.Changes = new Dictionary<string, KVValue>(theirs, System.StringComparer.Ordinal);
+        theirsOverlay.Changes = new KVDictionary(theirs);
 
         // The set of leaf paths upstream actually changed vs base (replaces the old full-snapshot scan).
         // Upserts that differ from base; prefix tombstones expanded against the base leaves they remove.

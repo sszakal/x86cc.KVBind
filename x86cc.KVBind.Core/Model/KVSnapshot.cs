@@ -22,7 +22,7 @@ public sealed class KVSnapshot
 
     public string ModifiedBy { get; set; } = string.Empty;
 
-    public Dictionary<string, KVValue> Data { get; set; } = new(StringComparer.Ordinal);
+    public KVDictionary Data { get; set; } = new();
 
     public KVSnapshot Clone()
     {
@@ -35,7 +35,7 @@ public sealed class KVSnapshot
             CreatedBy = CreatedBy,
             Modified = Modified,
             ModifiedBy = ModifiedBy,
-            Data = new Dictionary<string, KVValue>(Data, StringComparer.Ordinal)
+            Data = new KVDictionary(Data)
         };
     }
 

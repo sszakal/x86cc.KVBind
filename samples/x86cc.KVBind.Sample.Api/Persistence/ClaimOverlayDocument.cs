@@ -12,7 +12,7 @@ public sealed class ClaimOverlayDocument
 
     public KVSnapshot Snapshot { get; set; } = new();
 
-    public Dictionary<string, KVValue> Changes { get; set; } = new(StringComparer.Ordinal);
+    public KVDictionary Changes { get; set; } = new();
 
     public DateTimeOffset UpdatedAt { get; set; }
 
@@ -51,7 +51,8 @@ public sealed class ClaimOverlayDocument
     public KVOverlay ToOverlay()
     {
         var overlay = KVOverlay.Create(Snapshot.Clone(), User);
-        overlay.Changes = new Dictionary<string, KVValue>(Changes, StringComparer.Ordinal);
+        // Defensive copy so overlay edits don't mutate this (Marten-tracked) document before UpdateFrom.
+        overlay.Changes = new KVDictionary(Changes);
         if (IsRebasing && RebaseTarget is not null)
             overlay.RestoreRebaseState(RebaseTarget.Clone(), Conflicts);
         return overlay;
@@ -60,7 +61,7 @@ public sealed class ClaimOverlayDocument
     public void UpdateFrom(KVOverlay overlay)
     {
         Snapshot = overlay.Snapshot.Clone();
-        Changes = new Dictionary<string, KVValue>(overlay.Changes, StringComparer.Ordinal);
+        Changes = new KVDictionary(overlay.Changes);
         IsRebasing = overlay.IsRebasing;
         RebaseTarget = overlay.RebaseTarget?.Clone();
         Conflicts = [.. overlay.Conflicts];
