@@ -7,8 +7,7 @@ namespace x86cc.KVBind.IntegrationTests.Fixtures;
 
 public abstract class PostgresMartenTestBase : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:17.6")
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:17.6")
         .WithDatabase("kvbind_integration")
         .WithUsername("postgres")
         .WithPassword("postgres")

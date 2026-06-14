@@ -2,9 +2,6 @@ using Meziantou.Framework.HumanReadable;
 using Meziantou.Framework.InlineSnapshotTesting;
 using Meziantou.Framework.InlineSnapshotTesting.Serialization;
 using x86cc.KVBind.Core;
-using x86cc.KVBind.UnitTests.Core;
-using YamlDotNet.Serialization;
-using YamlDotNet.Serialization.NamingConventions;
 
 static class AssemblyInitializer
 {
@@ -16,7 +13,6 @@ static class AssemblyInitializer
             SnapshotUpdateStrategy = SnapshotUpdateStrategy.Default,
             
             MergeTools = [ MergeTool.BeyondCompare ],
-            //SnapshotSerializer = new YamlsSnapshotSerializer()
             SnapshotSerializer = new HumanReadableSnapshotSerializer(settings =>
             {
                 settings.IncludeFields = false;
@@ -46,18 +42,5 @@ static class AssemblyInitializer
                     new HumanReadableIgnoreAttribute());
             })
         };
-    }
-    
-    
-    public sealed class YamlsSnapshotSerializer : SnapshotSerializer
-    {
-        /// <inheritdoc/>
-        public override string Serialize(object? value)
-        {
-            var serializer = new SerializerBuilder()
-                .WithNamingConvention(CamelCaseNamingConvention.Instance)
-                .Build();
-            return serializer.Serialize(value);
-        }
     }
 }
