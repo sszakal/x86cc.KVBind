@@ -6,6 +6,10 @@ public class KVFieldDefinition: KVDefinition
 {
     public bool IsRequired { get; init; }
 
+    // Root-only marker: when the aggregate is bound with a parent snapshot, this member is read-only and
+    // sourced from the parent (see KVOverlay inheritance). Editable on a parentless master.
+    public bool IsInherited { get; init; }
+
     internal KVAllowedValuesDefinition? AllowedValues { get; init; }
 
     public List<KVCompiledValidationRule> ValidationRules { get; } = new();

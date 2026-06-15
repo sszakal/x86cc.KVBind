@@ -26,6 +26,86 @@ public sealed class KVOverlay
     // Single dictionary: regular KVValue = change, KVValue.Tombstone = deleted path (and its descendants).
     public KVDictionary Changes { get; set; } = new();
 
+    // ── Inheritance (transient: injected at bind, never serialized or committed) ──────────────────────────
+    // When a child aggregate is bound with its parent's snapshot, the inherited root members (and their whole
+    // subtrees) read from the parent and reject writes. A parentless master has no inheritance — those same
+    // members are then normal editable fields. The prefixes come from KVNodeDefinition.InheritedPrefixes.
+    private KVSnapshot? _inheritedSource;
+    private string[] _inheritedPrefixes = [];
+
+    public bool HasInheritance => _inheritedSource is not null;
+
+    // A reserved root key persisting "this aggregate is a child of a parent" (value true). Its presence in
+    // the effective state marks an aggregate as a child; the consumer holds the actual parent id and must
+    // supply the parent snapshot at bind. Detach tombstones it. Not an inherited path, so reads/writes of it
+    // are unaffected by the inheritance layer.
+    internal const string ChildMarkKey = "$parent";
+
+    // Effective presence of the child mark (Changes over Snapshot): true for a freshly-marked child (staged)
+    // and a loaded child (committed); false once detached (tombstoned). Checked before inheritance is set.
+    public bool IsMarkedChild => TryGet(ChildMarkKey, out _);
+
+    public void MarkAsChild() => Set(ChildMarkKey, KVValue.FromObject(true));
+
+    public void SetInheritance(KVSnapshot parentSource, IReadOnlyList<string> inheritedPrefixes)
+    {
+        ArgumentNullException.ThrowIfNull(parentSource);
+        ArgumentNullException.ThrowIfNull(inheritedPrefixes);
+        _inheritedSource = parentSource;
+        _inheritedPrefixes = inheritedPrefixes as string[] ?? inheritedPrefixes.ToArray();
+    }
+
+    // True when the path equals or sits under an inherited root member.
+    private bool IsInheritedPath(ReadOnlySpan<char> path)
+    {
+        foreach (var prefix in _inheritedPrefixes)
+            if (KVPath.IsSameOrDescendant(path, prefix)) return true;
+        return false;
+    }
+
+    private void GuardWritable(string path)
+    {
+        if (_inheritedSource is not null && IsInheritedPath(path))
+            throw new InvalidOperationException($"Path '{path}' is inherited from the parent and is read-only.");
+    }
+
+    /// <summary>
+    /// Severs the parent link: copies every inherited value from the parent into this overlay's draft
+    /// <see cref="Changes"/> (so it becomes the child's own, editable data) and clears the inheritance.
+    /// The copy is a normal draft edit — commit it via <see cref="ToCommit"/> to persist it into the child
+    /// snapshot. No-op when not inheriting. After committing, stop supplying the parent at future binds.
+    /// </summary>
+    public void Detach()
+    {
+        var wasMarkedChild = IsMarkedChild;
+
+        if (_inheritedSource is not null)
+        {
+            var source = _inheritedSource;
+            var prefixes = _inheritedPrefixes;
+
+            // Clear the link first so the copy writes are permitted (the guard no longer fires).
+            _inheritedSource = null;
+            _inheritedPrefixes = [];
+
+            foreach (var (key, value) in source.Data)
+            {
+                foreach (var prefix in prefixes)
+                {
+                    if (KVPath.IsSameOrDescendant(key, prefix))
+                    {
+                        Changes[key] = value;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Remove the child mark in the same draft/commit so a later rebind no longer requires a parent.
+        if (wasMarkedChild)
+            Changes[ChildMarkKey] = KVValue.Tombstone;
+    }
+
     // ── Rebase state ──────────────────────────────────────────────────────────
     // While a rebase is in progress the overlay holds a frozen copy of the target snapshot (V2) and the
     // list of conflicts. The target is frozen at BeginRebase so the user resolves against a stable view
@@ -46,6 +126,7 @@ public sealed class KVOverlay
 
     public bool TryGet(string path, out KVValue? value)
     {
+        if (_inheritedSource is not null && IsInheritedPath(path)) return _inheritedSource.TryGet(path, out value);
         if (IsRemoved(path)) { value = default; return false; }
         if (Changes.TryGetValue(path, out value)) return true; // not tombstone since IsRemoved would have caught it
         value = null;
@@ -57,6 +138,7 @@ public sealed class KVOverlay
     // alternate lookup, so it is allocation-free.
     public bool TryGet(ReadOnlySpan<char> path, out KVValue? value)
     {
+        if (_inheritedSource is not null && IsInheritedPath(path)) return _inheritedSource.TryGet(path, out value);
         if (IsRemoved(path)) { value = default; return false; }
         if (Changes.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(path, out value)) return true;
         value = null;
@@ -108,11 +190,13 @@ public sealed class KVOverlay
 
     public void Set(string path, KVValue value)
     {
+        GuardWritable(path);
         Changes[path] = value;
     }
 
     public bool Remove(string path)
     {
+        GuardWritable(path);
         var hadValue = Changes.ContainsKey(path)
                     || Changes.Keys.Any(k => KVPath.IsSameOrDescendant(k, path) && !string.Equals(k, path, StringComparison.Ordinal))
                     || Snapshot.ContainsPathOrDescendant(path);

@@ -62,6 +62,10 @@ public sealed class KVBindBuilder<TEntity>
         var propertyName = ResolveSelectorKey(selector);
         var options = new KVFieldOptionsBuilder<TValue>();
         configure?.Invoke(options);
+        EnsureInheritedAllowed(options.IsInherited, propertyName);
+        // Inherited + default is valid: the default applies only when the aggregate is created WITHOUT a
+        // parent (a master). With a parent (a child) the value is inherited and the default is skipped
+        // (see KVNode.Defaults.ApplyDefaultsRecursive). After Detach() the field becomes the child's own.
         var validationRules = options.BuildValidationRules();
 
         _definition.Fields.RemoveAll(field => string.Equals(field.SubSegmentPath, propertyName, StringComparison.Ordinal));
@@ -69,6 +73,7 @@ public sealed class KVBindBuilder<TEntity>
         {
             SubSegmentPath = propertyName,
             IsRequired = options.IsRequired,
+            IsInherited = options.IsInherited,
             AllowedValues = options.AllowedValuesDefinition,
             HasDefault = options.HasDefault,
             DefaultValue = options.DefaultValue,
@@ -125,7 +130,9 @@ public sealed class KVBindBuilder<TEntity>
         var nodeDefinition = RehomeFieldGroup(TGroup.Definition, propertyName, owner => getter((TEntity)owner));
 
         nodeDefinition.AddAnnotations(options.Annotations);
+        EnsureInheritedAllowed(options.IsInherited, nodeDefinition.SubSegmentPath);
         nodeDefinition.IsResettable = options.IsResettable;
+        nodeDefinition.IsInherited = options.IsInherited;
         nodeDefinition.DisplayName = options.DisplayNameValue ?? ResolveDisplayName(selector);
         _definition.Nodes.Add(nodeDefinition);
     }
@@ -180,7 +187,9 @@ public sealed class KVBindBuilder<TEntity>
         var nodeDefinition = childBuilder.Build();
 
         nodeDefinition.AddAnnotations(options.Annotations);
+        EnsureInheritedAllowed(options.IsInherited, nodeDefinition.SubSegmentPath);
         nodeDefinition.IsResettable = options.IsResettable;
+        nodeDefinition.IsInherited = options.IsInherited;
         nodeDefinition.DisplayName = options.DisplayNameValue ?? ResolveDisplayName(selector);
         _definition.Nodes.Add(nodeDefinition);
     }
@@ -245,6 +254,8 @@ public sealed class KVBindBuilder<TEntity>
             collectionDefinition.AddItemDefinition(itemDefinition.ModelType, itemDefinition.TypeToken, itemDefinition.NodeDefinition);
         }
 
+        EnsureInheritedAllowed(options.IsInherited, collectionDefinition.SubSegmentPath);
+        collectionDefinition.IsInherited = options.IsInherited;
         collectionDefinition.NotEmpty = options.NotEmptyRule;
         collectionDefinition.MinCount = options.MinCountValue;
         collectionDefinition.MaxCount = options.MaxCountValue;
@@ -295,7 +306,9 @@ public sealed class KVBindBuilder<TEntity>
             nestedNodeDefinition.AddTypeDefinition(typeDefinition.ModelType, typeDefinition.TypeToken, typeDefinition.NodeDefinition);
         }
 
+        EnsureInheritedAllowed(options.IsInherited, nestedNodeDefinition.SubSegmentPath);
         nestedNodeDefinition.AddAnnotations(options.Annotations);
+        nestedNodeDefinition.IsInherited = options.IsInherited;
         nestedNodeDefinition.DefaultTypeToken = options.DefaultTypeTokenValue;
         _definition.NestedNodes.Add(nestedNodeDefinition);
     }
@@ -319,6 +332,15 @@ public sealed class KVBindBuilder<TEntity>
         }
 
         _definition.Migrations.Add(KVMigration.Define(toVersion, configure));
+    }
+
+    // Inherited members are a root concept: a child inherits root members from its parent's snapshot.
+    private void EnsureInheritedAllowed(bool isInherited, string member)
+    {
+        if (isInherited && !string.IsNullOrEmpty(_definition.SubSegmentPath))
+        {
+            throw new InvalidOperationException($"Inherited members can only be declared on the root definition ('{member}').");
+        }
     }
 
     public void Validation(Action<KVGroupRuleBuilder<TEntity>> configure)

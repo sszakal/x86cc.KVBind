@@ -22,9 +22,19 @@ public class KVFieldOptionsBuilder<TValue>
 
     internal object? DefaultValue { get; private set; }
 
+    internal bool IsInherited { get; private set; }
+
     public KVFieldOptionsBuilder<TValue> Required()
     {
         IsRequired = true;
+        return this;
+    }
+
+    // Root-only: marks this field as inherited — read-only and sourced from the parent when the aggregate
+    // is bound with a parent snapshot. Editable on a parentless master.
+    public KVFieldOptionsBuilder<TValue> Inherited()
+    {
+        IsInherited = true;
         return this;
     }
 

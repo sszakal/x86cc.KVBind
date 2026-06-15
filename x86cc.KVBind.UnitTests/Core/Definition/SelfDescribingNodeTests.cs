@@ -1,4 +1,3 @@
-using System.Linq;
 using AwesomeAssertions;
 using x86cc.KVBind.Core;
 using x86cc.KVBind.Core.Definitions;

@@ -19,6 +19,10 @@ public class KVCollectionDefinition : KVDefinition
 
     public IReadOnlyDictionary<string, Type> NameToType => _tokenToType;
     
+    // Root-only marker: the whole collection is inherited (read-only, parent-sourced) when bound with a
+    // parent snapshot. See KVOverlay inheritance.
+    public bool IsInherited { get; set; }
+
     public bool NotEmpty { get; set; }
 
     public int? MinCount { get; set; }

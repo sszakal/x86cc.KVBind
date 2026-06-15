@@ -42,6 +42,26 @@ internal static class KVPath
                || path.StartsWith(ancestorPath + "/", StringComparison.Ordinal);
     }
 
+    // Span overload for the allocation-free read path (inheritance coverage check). Equivalent to the
+    // string version: path equals the ancestor or sits directly under "ancestor/".
+    public static bool IsSameOrDescendant(ReadOnlySpan<char> path, string ancestorPath)
+    {
+        if (string.IsNullOrWhiteSpace(ancestorPath))
+        {
+            return true;
+        }
+
+        var ancestor = ancestorPath.AsSpan();
+        if (path.Equals(ancestor, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return path.Length > ancestor.Length
+               && path[ancestor.Length] == '/'
+               && path[..ancestor.Length].Equals(ancestor, StringComparison.Ordinal);
+    }
+
     public static string? RelativeTo(string path, string parentPath)
     {
         if (string.IsNullOrWhiteSpace(parentPath))
