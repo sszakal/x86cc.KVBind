@@ -25,6 +25,8 @@ A root object has committed state, draft state, and a history of changes. You ca
 
 KVBind is also close to event sourcing for UI edits. It records user-intended changes over large forms or object graphs, while still maintaining an effective current projection for normal typed reads.
 
+<img width="561" height="701" alt="KVBind_diagram1" src="https://github.com/user-attachments/assets/79624fc1-95b4-4408-9731-65563abe87cf" />
+
 ## Quick Example
 
 Define your model as ordinary C# node types. Fields can be generated from partial `[KVBind]` properties, while collections and groups are regular runtime nodes.
