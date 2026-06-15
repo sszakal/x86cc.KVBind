@@ -17,8 +17,6 @@ KVBind gives you:
 
 https://github.com/user-attachments/assets/dbbd4264-4d86-4db5-8c68-da4fd882f18d
 
-<img width="550" height="700" alt="KVBind_Diagram1" src="https://github.com/user-attachments/assets/b992df19-6123-4116-863b-97d2e49fc743" />
-
 ## Mental Model
 
 Think of each KVBind aggregate as a small Git-like repository for an object graph.
@@ -26,6 +24,8 @@ Think of each KVBind aggregate as a small Git-like repository for an object grap
 A root object has committed state, draft state, and a history of changes. You can edit through typed C# properties or patch operations, inspect what changed, commit the draft, discard parts of it, and replay commits to reconstruct state over time.
 
 KVBind is also close to event sourcing for UI edits. It records user-intended changes over large forms or object graphs, while still maintaining an effective current projection for normal typed reads.
+
+<img width="561" height="701" alt="KVBind_diagram1" src="https://github.com/user-attachments/assets/79624fc1-95b4-4408-9731-65563abe87cf" />
 
 ## Quick Example
 
