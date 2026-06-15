@@ -2,6 +2,7 @@ using Marten;
 using System.Text.Json;
 using x86cc.KVBind.Core;
 using x86cc.KVBind.Core.Definitions;
+using x86cc.KVBind.Core.Migrations;
 using x86cc.KVBind.Core.Model;
 using x86cc.KVBind.Sample.Api.Persistence;
 
@@ -26,11 +27,11 @@ public sealed class InsuranceClaimAggregateService(
         // Identity is the consumer's responsibility now — KVBind constructs no longer carry an aggregate id.
         var claimId = Guid.NewGuid();
 
-        var snapshot = new KVSnapshot
-        {
-            CreatedBy = request.User,
-            ModifiedBy = request.User
-        };
+        // Mint the snapshot via the definition so it is born stamped at the current schema version — a new
+        // aggregate is already in the newest layout and must not be mistaken for legacy v0 data.
+        var snapshot = registry.Get<InsuranceClaim>().NewSnapshot();
+        snapshot.CreatedBy = request.User;
+        snapshot.ModifiedBy = request.User;
         var overlay = KVOverlay.Create(snapshot.Clone(), request.User);
         // CreateNew materializes declared defaults (e.g. Status = "draft") into the overlay.
         var root = BindNew(overlay);

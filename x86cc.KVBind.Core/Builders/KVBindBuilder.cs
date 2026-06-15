@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Reflection;
 using x86cc.KVBind.Core.Definitions;
+using x86cc.KVBind.Core.Migrations;
 
 namespace x86cc.KVBind.Core;
 
@@ -297,6 +298,27 @@ public sealed class KVBindBuilder<TEntity>
         nestedNodeDefinition.AddAnnotations(options.Annotations);
         nestedNodeDefinition.DefaultTypeToken = options.DefaultTypeTokenValue;
         _definition.NestedNodes.Add(nestedNodeDefinition);
+    }
+
+    /// <summary>
+    /// Registers a schema migration that brings persisted data up to <paramref name="toVersion"/>. Each
+    /// migration translates into one migration commit (see <see cref="KVMigrator"/>). Only valid on the root
+    /// definition; versions must be unique.
+    /// </summary>
+    public void Migration(int toVersion, Action<KVMigrationBuilder> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        if (!string.IsNullOrEmpty(_definition.SubSegmentPath))
+        {
+            throw new InvalidOperationException("Migrations can only be declared on the root definition.");
+        }
+
+        if (_definition.Migrations.Exists(migration => migration.ToVersion == toVersion))
+        {
+            throw new InvalidOperationException($"A migration to version {toVersion} is already declared.");
+        }
+
+        _definition.Migrations.Add(KVMigration.Define(toVersion, configure));
     }
 
     public void Validation(Action<KVGroupRuleBuilder<TEntity>> configure)
