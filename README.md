@@ -17,7 +17,7 @@ KVBind gives you:
 
 https://github.com/user-attachments/assets/dbbd4264-4d86-4db5-8c68-da4fd882f18d
 
-<img width="1122" height="1402" alt="KVBind_Diagram1" src="https://github.com/user-attachments/assets/b992df19-6123-4116-863b-97d2e49fc743" />
+<img width="550" height="700" alt="KVBind_Diagram1" src="https://github.com/user-attachments/assets/b992df19-6123-4116-863b-97d2e49fc743" />
 
 ## Mental Model
 
