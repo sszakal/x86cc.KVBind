@@ -17,6 +17,15 @@ public sealed class KVNestedNodeOptionsBuilder<TBase>
 
     internal IReadOnlyDictionary<string, object?> Annotations => _annotations;
 
+    internal bool IsInherited { get; private set; }
+
+    // Root-only: the whole nested node is inherited — read-only and parent-sourced when bound with a parent.
+    public KVNestedNodeOptionsBuilder<TBase> Inherited()
+    {
+        IsInherited = true;
+        return this;
+    }
+
     public KVNestedNodeOptionsBuilder<TBase> DisplayName(string displayName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);

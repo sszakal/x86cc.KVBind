@@ -36,16 +36,37 @@ public static class KVMigrator
             .OrderBy(migration => migration.ToVersion)
             .ToList();
 
-        return BuildFromPending(snapshot, pending, user, timestamp);
+        // No definition here → no knowledge of inherited members, so nothing is stripped.
+        return BuildFromPending(snapshot, pending, user, timestamp, inheritedPrefixes: []);
+    }
+
+    // True when a snapshot carries the child mark (its inherited members are owned by the parent).
+    private static bool IsChild(KVSnapshot snapshot) => snapshot.Data.ContainsKey(KVOverlay.ChildMarkKey);
+
+    // Drops every delta key under an inherited prefix — a child must never migrate (e.g. backfill) the
+    // fields it always reads from its parent. No-op when the list is empty (master, or definition-less call).
+    private static void StripInheritedPaths(KVDictionary delta, IReadOnlyList<string> inheritedPrefixes)
+    {
+        if (inheritedPrefixes.Count == 0 || delta.Count == 0)
+            return;
+
+        foreach (var key in delta.Keys.ToList())
+            foreach (var prefix in inheritedPrefixes)
+                if (KVPath.IsSameOrDescendant(key, prefix))
+                {
+                    delta.Remove(key);
+                    break;
+                }
     }
 
     // Builds commits from an already-ordered pending list. Each commit chains off the previous so a later
-    // migration sees the earlier one's output.
+    // migration sees the earlier one's output. For a child snapshot, inherited-path writes are stripped.
     private static IReadOnlyList<KVCommit> BuildFromPending(
         KVSnapshot snapshot,
         IReadOnlyList<KVMigration> pending,
         string user,
-        DateTimeOffset? timestamp)
+        DateTimeOffset? timestamp,
+        IReadOnlyList<string> inheritedPrefixes)
     {
         if (pending.Count == 0)
             return Array.Empty<KVCommit>();
@@ -53,12 +74,15 @@ public static class KVMigrator
         var stamp = timestamp ?? DateTimeOffset.UtcNow;
         var working = snapshot.Clone();
         var commits = new List<KVCommit>(pending.Count);
+        var stripPrefixes = IsChild(snapshot) ? inheritedPrefixes : [];
 
         foreach (var migration in pending)
         {
             var delta = new KVDictionary();
             foreach (var step in migration.Steps)
                 step.BuildInto(working.Data, delta, KVMigrationContext.None);
+
+            StripInheritedPaths(delta, stripPrefixes);
 
             var commit = new KVCommit
             {
@@ -126,7 +150,8 @@ public static class KVMigrator
         var sorted = definition.MigrationsByVersion;
         var start = FirstVersionAbove(sorted, snapshot.SchemaVersion);
         var pending = new ArraySegment<KVMigration>(sorted, start, sorted.Length - start);
-        return BuildFromPending(snapshot, pending, user, timestamp);
+        // A child snapshot must not migrate its inherited members (always read from the parent).
+        return BuildFromPending(snapshot, pending, user, timestamp, definition.InheritedPrefixes);
     }
 
     /// <summary>Applies the pending migrations registered on a root definition to <paramref name="snapshot"/>.</summary>
@@ -148,7 +173,7 @@ public static class KVMigrator
     /// in one round-trip per migration, not per aggregate. Each subject's snapshot is advanced in place and its
     /// commits returned for persistence; subjects already current contribute no commits and trigger no prepare.
     /// </summary>
-    public static async Task<IReadOnlyList<KVMigrationResult>> MigrateBatchAsync(
+    public static Task<IReadOnlyList<KVMigrationResult>> MigrateBatchAsync(
         IReadOnlyList<KVMigrationSubject> subjects,
         IEnumerable<KVMigration> migrations,
         string user = MigrationUser,
@@ -157,7 +182,18 @@ public static class KVMigrator
     {
         ArgumentNullException.ThrowIfNull(subjects);
         ArgumentNullException.ThrowIfNull(migrations);
+        // No definition here → nothing is stripped.
+        return MigrateBatchCoreAsync(subjects, migrations, inheritedPrefixes: [], user, timestamp, cancellationToken);
+    }
 
+    private static async Task<IReadOnlyList<KVMigrationResult>> MigrateBatchCoreAsync(
+        IReadOnlyList<KVMigrationSubject> subjects,
+        IEnumerable<KVMigration> migrations,
+        IReadOnlyList<string> inheritedPrefixes,
+        string user,
+        DateTimeOffset? timestamp,
+        CancellationToken cancellationToken)
+    {
         var ordered = migrations.OrderBy(migration => migration.ToVersion).ToList();
         var stamp = timestamp ?? DateTimeOffset.UtcNow;
         var commitsByKey = subjects.ToDictionary(subject => subject.Key, _ => new List<KVCommit>());
@@ -180,6 +216,9 @@ public static class KVMigrator
                 var delta = new KVDictionary();
                 foreach (var step in migration.Steps)
                     step.BuildInto(subject.Snapshot.Data, delta, context);
+
+                // Per subject: a child must not migrate its inherited members.
+                StripInheritedPaths(delta, IsChild(subject.Snapshot) ? inheritedPrefixes : []);
 
                 var commit = new KVCommit
                 {
@@ -233,6 +272,6 @@ public static class KVMigrator
 
         var start = FirstVersionAbove(sorted, minVersion);
         var slice = new ArraySegment<KVMigration>(sorted, start, sorted.Length - start);
-        return MigrateBatchAsync(subjects, slice, user, timestamp, cancellationToken);
+        return MigrateBatchCoreAsync(subjects, slice, definition.InheritedPrefixes, user, timestamp, cancellationToken);
     }
 }

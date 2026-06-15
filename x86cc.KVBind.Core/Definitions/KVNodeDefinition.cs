@@ -56,6 +56,36 @@ public class KVNodeDefinition : KVDefinition
     public List<KVValidationRegistration> ValidationRegistrations { get; } = new();
     internal List<KVChangeReactionDescriptor> ChangeReactions { get; } = new();
     public bool? IsResettable { get; set; }
+
+    // Root-only marker on a field group: the whole group is inherited (read-only, parent-sourced) when
+    // bound with a parent snapshot. See KVOverlay inheritance.
+    public bool IsInherited { get; set; }
+
+    private string[]? _inheritedPrefixes;
+
+    // The SubSegmentPaths of all inherited root members (fields, groups, collections, nested nodes), cached
+    // once. The overlay uses these as prefixes to route inherited reads to the parent and block writes.
+    public IReadOnlyList<string> InheritedPrefixes
+    {
+        get
+        {
+            if (_inheritedPrefixes is null)
+            {
+                var prefixes = new List<string>();
+                foreach (var fieldDefinition in Fields)
+                    if (fieldDefinition.IsInherited) prefixes.Add(fieldDefinition.SubSegmentPath);
+                foreach (var groupDefinition in Nodes)
+                    if (groupDefinition.IsInherited) prefixes.Add(groupDefinition.SubSegmentPath);
+                foreach (var collectionDefinition in Collections)
+                    if (collectionDefinition.IsInherited) prefixes.Add(collectionDefinition.SubSegmentPath);
+                foreach (var nestedNodeDefinition in NestedNodes)
+                    if (nestedNodeDefinition.IsInherited) prefixes.Add(nestedNodeDefinition.SubSegmentPath);
+                _inheritedPrefixes = prefixes.ToArray();
+            }
+
+            return _inheritedPrefixes;
+        }
+    }
     public Func<KVNode, KVNode> GetChildNode { get; init; } = _ => throw new NotImplementedException();
 
     // Lookups by SubSegmentPath, replacing allocating O(n) List.Find on warm paths (read, patch resolution,

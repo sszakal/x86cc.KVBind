@@ -26,6 +26,15 @@ public sealed class KVCollectionOptionsBuilder<TParent, TModel>
 
     internal IReadOnlyDictionary<string, object?> Annotations => _annotations;
 
+    internal bool IsInherited { get; private set; }
+
+    // Root-only: the whole collection is inherited — read-only and parent-sourced when bound with a parent.
+    public KVCollectionOptionsBuilder<TParent, TModel> Inherited()
+    {
+        IsInherited = true;
+        return this;
+    }
+
     public KVCollectionOptionsBuilder<TParent, TModel> DisplayName(string displayName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);

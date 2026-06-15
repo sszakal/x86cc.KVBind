@@ -1,4 +1,3 @@
-using System;
 using AwesomeAssertions;
 using x86cc.KVBind.Core;
 

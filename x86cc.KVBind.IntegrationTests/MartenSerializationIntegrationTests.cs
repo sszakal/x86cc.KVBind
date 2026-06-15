@@ -1,5 +1,4 @@
 using AwesomeAssertions;
-using Marten;
 using x86cc.KVBind.Core;
 using x86cc.KVBind.Core.Model;
 using x86cc.KVBind.IntegrationTests.Fixtures;

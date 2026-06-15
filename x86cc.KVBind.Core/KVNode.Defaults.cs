@@ -1,5 +1,4 @@
 using System.Linq;
-using x86cc.KVBind.Core.Abstractions;
 
 namespace x86cc.KVBind.Core;
 
@@ -13,19 +12,27 @@ public abstract partial class KVNode
     {
         EnsureBound();
 
+        // When inheritance is active (a child bound with a parent), inherited root members are read-only and
+        // owned by the parent — skip them so we never try to write a default into a read-only path. On a
+        // parentless master (no inheritance) the same members are editable and default normally.
+        var hasInheritance = Model.Overlay.HasInheritance;
+
         foreach (var field in Definition.Fields)
         {
+            if (hasInheritance && field.IsInherited) continue;
             if (field.HasDefault && !IsFieldSet(field.SubSegmentPath))
                 SetFieldForPatch(field.SubSegmentPath, field.DefaultValue);
         }
 
         foreach (var nodeDef in Definition.Nodes)
         {
+            if (hasInheritance && nodeDef.IsInherited) continue;
             nodeDef.GetChildNode(this).ApplyDefaultsRecursive();
         }
 
         foreach (var collDef in Definition.Collections)
         {
+            if (hasInheritance && collDef.IsInherited) continue;
             var collection = collDef.GetCollection(this);
             if (collDef.DefaultSeed is not null && collection.GetActiveItemIds().Count == 0)
                 collDef.DefaultSeed(collection);
@@ -39,6 +46,7 @@ public abstract partial class KVNode
 
         foreach (var nestedDef in Definition.NestedNodes)
         {
+            if (hasInheritance && nestedDef.IsInherited) continue;
             if (string.IsNullOrEmpty(nestedDef.DefaultTypeToken))
                 continue;
 

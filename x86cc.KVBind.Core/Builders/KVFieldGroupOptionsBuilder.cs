@@ -11,6 +11,8 @@ public sealed class KVFieldGroupOptionsBuilder
 
     internal bool? IsResettable { get; private set; }
 
+    internal bool IsInherited { get; private set; }
+
     internal string? DisplayNameValue { get; private set; }
 
     public KVFieldGroupOptionsBuilder DisplayName(string displayName)
@@ -30,6 +32,13 @@ public sealed class KVFieldGroupOptionsBuilder
     public KVFieldGroupOptionsBuilder Resettable(bool isResettable = true)
     {
         IsResettable = isResettable;
+        return this;
+    }
+
+    // Root-only: the whole group is inherited — read-only and parent-sourced when bound with a parent.
+    public KVFieldGroupOptionsBuilder Inherited()
+    {
+        IsInherited = true;
         return this;
     }
 }
