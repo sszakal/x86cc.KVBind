@@ -47,7 +47,7 @@
             <th class="cursor-pointer py-3 select-none" (click)="sortBy('status')">Status @if (sortKey === 'status') { <span>{{ sortDir === 'asc' ? '▲' : '▼' }}</span> }</th>
             <th class="cursor-pointer py-3 select-none" (click)="sortBy('priority')">Priority @if (sortKey === 'priority') { <span>{{ sortDir === 'asc' ? '▲' : '▼' }}</span> }</th>
             <th class="py-3">Description</th>
-            <th class="cursor-pointer py-3 text-right select-none" (click)="sortBy('claimedTotal')">Total @if (sortKey === 'claimedTotal') { <span>{{ sortDir === 'asc' ? '▲' : '▼' }}</span> }</th>
+            <th class="cursor-pointer py-3 pr-6 text-right select-none" (click)="sortBy('claimedTotal')">Total @if (sortKey === 'claimedTotal') { <span>{{ sortDir === 'asc' ? '▲' : '▼' }}</span> }</th>
             <th class="cursor-pointer py-3 select-none" (click)="sortBy('modified')">Modified @if (sortKey === 'modified') { <span>{{ sortDir === 'asc' ? '▲' : '▼' }}</span> }</th>
             <th class="py-3 text-right">Actions</th>
           </tr>
