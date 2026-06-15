@@ -22,6 +22,11 @@ public sealed class KVSnapshot
 
     public string ModifiedBy { get; set; } = string.Empty;
 
+    // Layout/schema version the persisted data conforms to. Advanced only by migration commits (see
+    // KVCommit.MigrationToVersion). Compared against the code's CurrentSchemaVersion to decide migration:
+    // less = migrate forward, equal = current, greater = data is newer than this binary (must refuse).
+    public int SchemaVersion { get; set; }
+
     public KVDictionary Data { get; set; } = new();
 
     public KVSnapshot Clone()
@@ -35,6 +40,7 @@ public sealed class KVSnapshot
             CreatedBy = CreatedBy,
             Modified = Modified,
             ModifiedBy = ModifiedBy,
+            SchemaVersion = SchemaVersion,
             Data = new KVDictionary(Data)
         };
     }
@@ -96,6 +102,10 @@ public sealed class KVSnapshot
             else
                 Data[path] = value;
         }
+
+        // A migration commit advances the schema version — even with no data changes (a pure version bump).
+        if (commit.MigrationToVersion is int migratedTo)
+            SchemaVersion = migratedTo;
 
         LastCommitId = commit.CommitId;
         LastCommitTimestamp = commit.Timestamp;
