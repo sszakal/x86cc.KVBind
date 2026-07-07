@@ -1,19 +1,30 @@
 # KVBind
 
-Typed C# bindings for canonical key-value document data.
+KVBind is a Git-inspired runtime for versioned business object graphs.
 
-KVBind is a typed C# runtime for editing large schema-driven object graphs as canonical key-value data. It gives each aggregate a Git-like editing model: committed snapshots, user draft overlays, replayable commits, patch operations, validation, and change reactions.
+It lets you build large document-like aggregates as ordinary strongly typed C# classes while storing their state in a canonical versioned model. From that single representation, KVBind provides draft editing, replayable commits, diffing, patch APIs, validation, schema evolution, and runtime change notifications without requiring each application to implement them separately.
 
-It is intended for large forms and document-like aggregates where users may spend time drafting changes before committing them and APIs need precise patch operations.
+KVBind is particularly suited to systems where business documents evolve over time and every change matters:
 
-KVBind gives you:
+- Contract management
+- Land Registry
+- Insurance policies and claims 
+- Medical Records
+- Regulatory filings 
+- Government Registers
+- Engineering Documents
+- Rights and licencing
+- Product lifecycle management
 
-- draft editing over committed object state
-- easy change detection and semantic diffs
-- patch-based editing for API workflows
-- replayable commits that can reconstruct an aggregate over time
-- definition-driven validation and dependency behavior
-- generated C# property accessors over a shared runtime
+Typical characteristics:
+
+* deeply nested object graphs
+* long editing sessions
+* draft workflows
+* audit requirements
+* concurrent editing
+* partial updates
+* evolving schemas
 
 https://github.com/user-attachments/assets/dbbd4264-4d86-4db5-8c68-da4fd882f18d
 
