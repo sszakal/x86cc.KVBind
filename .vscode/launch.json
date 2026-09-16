@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "KVBind Sample AppHost (http)",
+      "type": "dotnet",
+      "request": "launch",
+      "projectPath": "${workspaceFolder}/samples/x86cc.KVBind.Sample.AppHost/x86cc.KVBind.Sample.AppHost.csproj",
+      "launchSettingsFilePath": "${workspaceFolder}/samples/x86cc.KVBind.Sample.AppHost/Properties/launchSettings.json",
+      "launchSettingsProfile": "http" 
+    },
+    {
+      "name": "KVBind Sample AppHost (https)",
+      "type": "dotnet",
+      "request": "launch",
+      "projectPath": "${workspaceFolder}/samples/x86cc.KVBind.Sample.AppHost/x86cc.KVBind.Sample.AppHost.csproj",
+      "launchSettingsFilePath": "${workspaceFolder}/samples/x86cc.KVBind.Sample.AppHost/Properties/launchSettings.json",
+      "launchSettingsProfile": "https" 
+    }
+  ]
+}
