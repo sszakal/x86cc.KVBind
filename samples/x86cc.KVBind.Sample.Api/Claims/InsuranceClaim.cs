@@ -22,7 +22,7 @@ public partial class InsuranceClaim : KVRootNode
     [KVBind(nameof(Tags))]
     public partial string[]? Tags { get; set; }
 
-    public decimal ClaimedTotal => DamagedItems.Sum(item => item.EstimatedAmount);
+    public decimal ClaimedTotal => this.DamagedItems.Sum(item => item.EstimatedAmount);
 
     [KVBind(nameof(Policy))]
     public ClaimPolicy Policy { get; } = new();
@@ -39,10 +39,9 @@ public partial class InsuranceClaim : KVRootNode
     // Switch to the stricter submit profile once the claim leaves draft state.
     // root.Validate() automatically picks the right ruleset based on current status.
     protected override KVValidationProfile GetValidationProfile() =>
-        Status is "in_review" or "approved" or "rejected" or "closed"
+        this.Status is "in_review" or "approved" or "rejected" or "closed"
             ? new SubmitClaimValidationProfile()
             : KVDefaultValidationProfile.Instance;
-
 }
 
 public partial class ClaimPolicy : KVFieldGroupNode

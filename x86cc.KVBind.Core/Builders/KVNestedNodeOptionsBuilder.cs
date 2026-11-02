@@ -7,71 +7,72 @@ namespace x86cc.KVBind.Core;
 public sealed class KVNestedNodeOptionsBuilder<TBase>
     where TBase : KVNestedNode
 {
-    private readonly List<KVNestedNodeTypeDefinition> _typeDefinitions = [];
+    private readonly List<KVNestedNodeTypeDefinition> typeDefinitions = [];
 
-    internal IReadOnlyList<KVNestedNodeTypeDefinition> TypeDefinitions => _typeDefinitions;
+    private readonly Dictionary<string, object?> annotations = new(StringComparer.Ordinal);
+
+    internal IReadOnlyList<KVNestedNodeTypeDefinition> TypeDefinitions => this.typeDefinitions;
 
     internal string? DisplayNameValue { get; private set; }
 
-    private readonly Dictionary<string, object?> _annotations = new(StringComparer.Ordinal);
-
-    internal IReadOnlyDictionary<string, object?> Annotations => _annotations;
+    internal IReadOnlyDictionary<string, object?> Annotations => this.annotations;
 
     internal bool IsInherited { get; private set; }
+
+    internal string? DefaultTypeTokenValue { get; private set; }
 
     // Root-only: the whole nested node is inherited — read-only and parent-sourced when bound with a parent.
     public KVNestedNodeOptionsBuilder<TBase> Inherited()
     {
-        IsInherited = true;
+        this.IsInherited = true;
         return this;
     }
 
     public KVNestedNodeOptionsBuilder<TBase> DisplayName(string displayName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
-        DisplayNameValue = displayName;
+        this.DisplayNameValue = displayName;
         return this;
     }
 
     public KVNestedNodeOptionsBuilder<TBase> Annotate(string key, object? value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
-        _annotations[key] = value;
+        this.annotations[key] = value;
         return this;
     }
 
-    internal string? DefaultTypeTokenValue { get; private set; }
-
     // A fresh aggregate initializes this slot to this subtype (ApplyDefaults). Uses the subtype's default
     // token (typeof(TSubtype).Name) — declare a matching Bind<TSubtype>().
-    public KVNestedNodeOptionsBuilder<TBase> DefaultType<TSubtype>() where TSubtype : TBase
+    public KVNestedNodeOptionsBuilder<TBase> DefaultType<TSubtype>()
+        where TSubtype : TBase
     {
-        DefaultTypeTokenValue = typeof(TSubtype).Name;
+        this.DefaultTypeTokenValue = typeof(TSubtype).Name;
         return this;
     }
 
     public KVNestedNodeOptionsBuilder<TBase> DefaultType(string typeToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(typeToken);
-        DefaultTypeTokenValue = typeToken;
+        this.DefaultTypeTokenValue = typeToken;
         return this;
     }
 
     public KVNestedNodeOptionsBuilder<TBase> Bind<TSubtype>(Action<KVBindBuilder<TSubtype>> configure)
         where TSubtype : TBase, new()
     {
-        return Bind(typeof(TSubtype).Name, configure);
+        return this.Bind(typeof(TSubtype).Name, configure);
     }
 
     // Self-describing subtype: the subtype carries its own definition via IKVNodeDefinition, so no inline
     // configuration is needed (enforced at compile time).
     public KVNestedNodeOptionsBuilder<TBase> Bind<TSubtype>()
         where TSubtype : TBase, IKVNodeDefinition, new()
-        => Bind<TSubtype>(typeof(TSubtype).Name);
+        => this.Bind<TSubtype>(typeof(TSubtype).Name);
 
     public KVNestedNodeOptionsBuilder<TBase> Bind<TSubtype>(string typeToken)
         where TSubtype : TBase, IKVNodeDefinition, new()
-        => Bind<TSubtype>(typeToken, TSubtype.Definition);
+        => this.Bind<TSubtype>(typeToken, TSubtype.Definition);
 
     public KVNestedNodeOptionsBuilder<TBase> Bind<TSubtype>(string typeToken, Action<KVBindBuilder<TSubtype>> configure)
         where TSubtype : TBase, new()
@@ -84,12 +85,12 @@ public sealed class KVNestedNodeOptionsBuilder<TBase>
             throw new InvalidOperationException($"Nested node type '{typeof(TSubtype).FullName}' cannot inherit KVRootNode.");
         }
 
-        if (_typeDefinitions.Exists(definition => definition.ModelType == typeof(TSubtype)))
+        if (this.typeDefinitions.Exists(definition => definition.ModelType == typeof(TSubtype)))
         {
             throw new InvalidOperationException($"Nested node type '{typeof(TSubtype).FullName}' is already declared.");
         }
 
-        if (_typeDefinitions.Exists(definition => string.Equals(definition.TypeToken, typeToken, StringComparison.Ordinal)))
+        if (this.typeDefinitions.Exists(definition => string.Equals(definition.TypeToken, typeToken, StringComparison.Ordinal)))
         {
             throw new InvalidOperationException($"Nested node token '{typeToken}' is already declared.");
         }
@@ -97,7 +98,7 @@ public sealed class KVNestedNodeOptionsBuilder<TBase>
         var builder = new KVBindBuilder<TSubtype>();
         configure(builder);
 
-        _typeDefinitions.Add(new KVNestedNodeTypeDefinition
+        this.typeDefinitions.Add(new KVNestedNodeTypeDefinition
         {
             ModelType = typeof(TSubtype),
             TypeToken = typeToken,
@@ -119,13 +120,13 @@ public sealed class KVNestedNodeOptionsBuilder<TBase>
         if (typeof(KVRootNode).IsAssignableFrom(typeof(TSubtype)))
             throw new InvalidOperationException($"Nested node type '{typeof(TSubtype).FullName}' cannot inherit KVRootNode.");
 
-        if (_typeDefinitions.Exists(d => d.ModelType == typeof(TSubtype)))
+        if (this.typeDefinitions.Exists(d => d.ModelType == typeof(TSubtype)))
             throw new InvalidOperationException($"Nested node type '{typeof(TSubtype).FullName}' is already declared.");
 
-        if (_typeDefinitions.Exists(d => string.Equals(d.TypeToken, typeToken, StringComparison.Ordinal)))
+        if (this.typeDefinitions.Exists(d => string.Equals(d.TypeToken, typeToken, StringComparison.Ordinal)))
             throw new InvalidOperationException($"Nested node token '{typeToken}' is already declared.");
 
-        _typeDefinitions.Add(new KVNestedNodeTypeDefinition
+        this.typeDefinitions.Add(new KVNestedNodeTypeDefinition
         {
             ModelType = typeof(TSubtype),
             TypeToken = typeToken,

@@ -9,7 +9,7 @@ public class FieldGroupBindingTests : KVModelTestBase
 {
     public FieldGroupBindingTests()
     {
-        RegisterModelDefinition<FieldGroupTestModel>(builder =>
+        this.RegisterModelDefinition<FieldGroupTestModel>(builder =>
         {
             builder.FieldGroup(x => x.FirstFieldGroup!, fieldGroup =>
             {
@@ -21,7 +21,7 @@ public class FieldGroupBindingTests : KVModelTestBase
                 fieldGroup.Field(x => x.Field1);
                 fieldGroup.Field(x => x.Field2);
             });
-            
+
             builder.FieldGroup(x => x.NestedFieldGroups!, fieldGroup =>
             {
                 fieldGroup.FieldGroup(x => x.FirstFieldGroup!, fieldGroup =>
@@ -43,7 +43,7 @@ public class FieldGroupBindingTests : KVModelTestBase
     public void FieldGroupBinding_WhenGroupFieldsAreSet_StoresDraftValuesAtCanonicalPaths()
     {
         var model = new KVModelRoot();
-        var rootNode = CreateRoot<FieldGroupTestModel>(model);
+        var rootNode = this.CreateRoot<FieldGroupTestModel>(model);
 
         rootNode.FirstFieldGroup.Should().NotBeNull();
         rootNode.SecondFieldGroup.Should().NotBeNull();
@@ -55,29 +55,29 @@ public class FieldGroupBindingTests : KVModelTestBase
         rootNode.NestedFieldGroups.FirstFieldGroup.Field2 = "6";
         rootNode.NestedFieldGroups.SecondFieldGroup!.Field1 = "7";
         rootNode.NestedFieldGroups.SecondFieldGroup.Field2 = "8";
-        
+
         model.Overlay.Changes.Should().ContainKey("FirstFieldGroup/Field1").WhoseValue.Should().Be("1");
         model.Overlay.Changes.Should().ContainKey("SecondFieldGroup/Field2").WhoseValue.Should().Be("4");
         model.Overlay.Changes.Should().ContainKey("NestedFieldGroups/FirstFieldGroup/Field1").WhoseValue.Should().Be("5");
         model.Overlay.Changes.Should().ContainKey("NestedFieldGroups/SecondFieldGroup/Field2").WhoseValue.Should().Be("8");
-    }   
-    
+    }
+
     [Fact]
     public void FieldGroupBinding_WhenValuesExist_ReadsNestedGroupValues()
     {
         var model = new KVModelRoot();
-        var rootNode = CreateRoot<FieldGroupTestModel>(model);
+        var rootNode = this.CreateRoot<FieldGroupTestModel>(model);
 
         model.Set("FirstFieldGroup/Field1", "1");
         model.Set("FirstFieldGroup/Field2", "2");
         model.Set("SecondFieldGroup/Field1", "3");
         model.Set("SecondFieldGroup/Field2", "4");
-        
-        model.Set("NestedFieldGroups/FirstFieldGroup/Field1", "5");                                                                                                                                                                                                                     
-        model.Set("NestedFieldGroups/FirstFieldGroup/Field2", "6");                                                                                                                                                                                                                     
-        model.Set("NestedFieldGroups/SecondFieldGroup/Field1", "7");                                                                                                                                                                                                                    
-        model.Set("NestedFieldGroups/SecondFieldGroup/Field2", "8");     
-        
+
+        model.Set("NestedFieldGroups/FirstFieldGroup/Field1", "5");
+        model.Set("NestedFieldGroups/FirstFieldGroup/Field2", "6");
+        model.Set("NestedFieldGroups/SecondFieldGroup/Field1", "7");
+        model.Set("NestedFieldGroups/SecondFieldGroup/Field2", "8");
+
         InlineSnapshot.Validate(rootNode, """
             FirstFieldGroup:
               Field1: 1
@@ -99,11 +99,11 @@ public class FieldGroupBindingTests : KVModelTestBase
 public partial class FieldGroupTestModel : KVRootNode
 {
     [KVBind(nameof(FirstFieldGroup))]
-    public FieldGroupTestNode? FirstFieldGroup { get; } = new(); 
-    
+    public FieldGroupTestNode? FirstFieldGroup { get; } = new();
+
     [KVBind(nameof(SecondFieldGroup))]
     public FieldGroupTestNode? SecondFieldGroup { get; } = new();
-    
+
     [KVBind(nameof(NestedFieldGroups))]
     public AnotherNestedFieldGroupNode? NestedFieldGroups { get; } = new();
 
@@ -114,8 +114,8 @@ public partial class FieldGroupTestModel : KVRootNode
 public partial class FieldGroupTestNode : KVFieldGroupNode
 {
     [KVBind("Field1")]
-    public partial string Field1 { get; set; } 
-    
+    public partial string Field1 { get; set; }
+
     [KVBind("Field2")]
     public partial string Field2 { get; set; }
 }
@@ -123,9 +123,8 @@ public partial class FieldGroupTestNode : KVFieldGroupNode
 public partial class AnotherNestedFieldGroupNode : KVFieldGroupNode
 {
     [KVBind("FirstFieldGroup")]
-    public FieldGroupTestNode? FirstFieldGroup { get; } = new(); 
-    
+    public FieldGroupTestNode? FirstFieldGroup { get; } = new();
+
     [KVBind("SecondFieldGroup")]
     public FieldGroupTestNode? SecondFieldGroup { get; } = new();
-
 }

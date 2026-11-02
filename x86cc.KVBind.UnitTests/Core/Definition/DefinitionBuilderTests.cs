@@ -24,7 +24,7 @@ public class DefinitionBuilderTests
         });
 
         var definition = builder.Build();
-        
+
         InlineSnapshot.Validate(ProjectDefinition(definition), """
             Fields:
               - SubSegmentPath: Title
@@ -66,7 +66,7 @@ public class DefinitionBuilderTests
         });
 
         var definition = builder.Build();
-        
+
         InlineSnapshot.Validate(ProjectDefinition(definition), """
             Fields: []
             Nodes:
@@ -115,7 +115,7 @@ public class DefinitionBuilderTests
         });
 
         var definition = builder.Build();
-        
+
         InlineSnapshot.Validate(ProjectDefinition(definition), """
             Fields:
               - SubSegmentPath: Title
@@ -163,6 +163,83 @@ public class DefinitionBuilderTests
         title.Annotations["ui:width"].Should().Be(2); // object? preserves the int, not "2"
 
         definition.Collections.Single().Annotations["ui:role"].Should().Be("section");
+    }
+
+    [Fact]
+    public void DefinitionBuilder_WhenCanonicalKeyDiffersFromPropertyName_UsesCanonicalKeyAsSubSegmentPath()
+    {
+        // Previously ResolveSelectorKey always used Member.Name (the C# property name),
+        // so [KVBind("canonical_key")] on a property named "PropertyName" would mismatch
+        // against the source-generated GetField<T>("canonical_key") call at runtime.
+        var builder = new KVBindBuilder<CanonicalKeyTestModel>();
+        builder.Field(x => x.ClaimNumber);
+
+        var definition = builder.Build();
+
+        // SubSegmentPath must match what the source generator passes to GetField/SetField.
+        definition.Fields.Should().ContainSingle(f => f.SubSegmentPath == "claim_number");
+        definition.Fields.Should().NotContain(f => f.SubSegmentPath == "ClaimNumber");
+    }
+
+    [Fact]
+    public void DefinitionBuilder_WhenCanonicalKeyDiffersFromPropertyName_FieldAccessRoundTrips()
+    {
+        var builder = new KVBindBuilder<CanonicalKeyTestModel>();
+        builder.Field(x => x.ClaimNumber);
+        var definition = builder.Build();
+
+        var model = new KVModelRoot();
+        var root = KVRootNode.Create<CanonicalKeyTestModel>(model, definition);
+
+        root.ClaimNumber = "CLM-001";
+
+        root.ClaimNumber.Should().Be("CLM-001");
+
+        // Value stored under canonical key, not the C# property name
+        model.Overlay.Changes.Should().ContainKey("claim_number");
+        model.Overlay.Changes.Should().NotContainKey("ClaimNumber");
+    }
+
+    [Fact]
+    public void DefinitionBuilder_DisplayName_FromBuilder_IsCapturedAcrossDefinitionKinds()
+    {
+        var builder = new KVBindBuilder<BuilderRootNode>();
+        builder.Field(x => x.Title, field => field.DisplayName("The Title"));
+        builder.FieldGroup(x => x.General, define: _ => { }, configure: options => options.DisplayName("General Section"));
+        builder.Collection(x => x.Items, collection =>
+        {
+            collection.DisplayName("Line Items");
+            collection.Item<BuilderItemNode>(item => item.Field(x => x.Code, field => field.DisplayName("Item Code")));
+        });
+
+        var definition = builder.Build();
+
+        definition.Fields.Single(f => f.SubSegmentPath == "Title").DisplayName.Should().Be("The Title");
+        definition.Nodes.Single(n => n.SubSegmentPath == "General").DisplayName.Should().Be("General Section");
+
+        var collectionDefinition = definition.Collections.Single(c => c.SubSegmentPath == "Items");
+        collectionDefinition.DisplayName.Should().Be("Line Items");
+        collectionDefinition.ItemDefinitionsByToken.Values
+            .First().NodeDefinition.Fields.Single(f => f.SubSegmentPath == "Code")
+            .DisplayName.Should().Be("Item Code");
+    }
+
+    [Fact]
+    public void DefinitionBuilder_DisplayName_FallsBackToKVBindAttribute()
+    {
+        var builder = new KVBindBuilder<DisplayNameAttributeModel>();
+        builder.Field(x => x.Code);
+
+        builder.Build().Fields.Single().DisplayName.Should().Be("Pretty Code");
+    }
+
+    [Fact]
+    public void DefinitionBuilder_DisplayName_BuilderWinsOverAttribute()
+    {
+        var builder = new KVBindBuilder<DisplayNameAttributeModel>();
+        builder.Field(x => x.Code, field => field.DisplayName("Explicit"));
+
+        builder.Build().Fields.Single().DisplayName.Should().Be("Explicit");
     }
 
     private static object ProjectDefinition(KVNodeDefinition definition)
@@ -230,89 +307,13 @@ public class DefinitionBuilderTests
         };
     }
 
-    [Fact]
-    public void DefinitionBuilder_WhenCanonicalKeyDiffersFromPropertyName_UsesCanonicalKeyAsSubSegmentPath()
-    {
-        // Previously ResolveSelectorKey always used Member.Name (the C# property name),
-        // so [KVBind("canonical_key")] on a property named "PropertyName" would mismatch
-        // against the source-generated GetField<T>("canonical_key") call at runtime.
-        var builder = new KVBindBuilder<CanonicalKeyTestModel>();
-        builder.Field(x => x.ClaimNumber);
-
-        var definition = builder.Build();
-
-        // SubSegmentPath must match what the source generator passes to GetField/SetField.
-        definition.Fields.Should().ContainSingle(f => f.SubSegmentPath == "claim_number");
-        definition.Fields.Should().NotContain(f => f.SubSegmentPath == "ClaimNumber");
-    }
-
-    [Fact]
-    public void DefinitionBuilder_WhenCanonicalKeyDiffersFromPropertyName_FieldAccessRoundTrips()
-    {
-        var builder = new KVBindBuilder<CanonicalKeyTestModel>();
-        builder.Field(x => x.ClaimNumber);
-        var definition = builder.Build();
-
-        var model = new KVModelRoot();
-        var root = KVRootNode.Create<CanonicalKeyTestModel>(model, definition);
-
-        root.ClaimNumber = "CLM-001";
-
-        root.ClaimNumber.Should().Be("CLM-001");
-        // Value stored under canonical key, not the C# property name
-        model.Overlay.Changes.Should().ContainKey("claim_number");
-        model.Overlay.Changes.Should().NotContainKey("ClaimNumber");
-    }
-
-    [Fact]
-    public void DefinitionBuilder_DisplayName_FromBuilder_IsCapturedAcrossDefinitionKinds()
-    {
-        var builder = new KVBindBuilder<BuilderRootNode>();
-        builder.Field(x => x.Title, field => field.DisplayName("The Title"));
-        builder.FieldGroup(x => x.General, define: _ => { }, configure: options => options.DisplayName("General Section"));
-        builder.Collection(x => x.Items, collection =>
-        {
-            collection.DisplayName("Line Items");
-            collection.Item<BuilderItemNode>(item => item.Field(x => x.Code, field => field.DisplayName("Item Code")));
-        });
-
-        var definition = builder.Build();
-
-        definition.Fields.Single(f => f.SubSegmentPath == "Title").DisplayName.Should().Be("The Title");
-        definition.Nodes.Single(n => n.SubSegmentPath == "General").DisplayName.Should().Be("General Section");
-
-        var collectionDefinition = definition.Collections.Single(c => c.SubSegmentPath == "Items");
-        collectionDefinition.DisplayName.Should().Be("Line Items");
-        collectionDefinition.ItemDefinitionsByToken.Values
-            .First().NodeDefinition.Fields.Single(f => f.SubSegmentPath == "Code")
-            .DisplayName.Should().Be("Item Code");
-    }
-
-    [Fact]
-    public void DefinitionBuilder_DisplayName_FallsBackToKVBindAttribute()
-    {
-        var builder = new KVBindBuilder<DisplayNameAttributeModel>();
-        builder.Field(x => x.Code);
-
-        builder.Build().Fields.Single().DisplayName.Should().Be("Pretty Code");
-    }
-
-    [Fact]
-    public void DefinitionBuilder_DisplayName_BuilderWinsOverAttribute()
-    {
-        var builder = new KVBindBuilder<DisplayNameAttributeModel>();
-        builder.Field(x => x.Code, field => field.DisplayName("Explicit"));
-
-        builder.Build().Fields.Single().DisplayName.Should().Be("Explicit");
-    }
-
     private sealed class DisplayNameAttributeModel : KVRootNode
     {
         [KVBind("Code", DisplayName = "Pretty Code")]
         public string? Code
         {
-            get => GetField<string?>("Code");
-            set => SetField("Code", value);
+            get => this.GetField<string?>("Code");
+            set => this.SetField("Code", value);
         }
     }
 
@@ -321,8 +322,8 @@ public class DefinitionBuilderTests
         [KVBind("claim_number")]
         public string? ClaimNumber
         {
-            get => GetField<string?>("claim_number");
-            set => SetField("claim_number", value);
+            get => this.GetField<string?>("claim_number");
+            set => this.SetField("claim_number", value);
         }
     }
 
@@ -334,8 +335,8 @@ public class DefinitionBuilderTests
 
         public string? Title
         {
-            get => GetField<string?>("Title");
-            set => SetField("Title", value);
+            get => this.GetField<string?>("Title");
+            set => this.SetField("Title", value);
         }
     }
 
@@ -349,14 +350,14 @@ public class DefinitionBuilderTests
     {
         public string? Code
         {
-            get => GetField<string?>("Code");
-            set => SetField("Code", value);
+            get => this.GetField<string?>("Code");
+            set => this.SetField("Code", value);
         }
 
         public decimal Amount
         {
-            get => GetField<decimal>("Amount");
-            set => SetField("Amount", value);
+            get => this.GetField<decimal>("Amount");
+            set => this.SetField("Amount", value);
         }
     }
 
@@ -364,8 +365,8 @@ public class DefinitionBuilderTests
     {
         public string? SpecialCode
         {
-            get => GetField<string?>("SpecialCode");
-            set => SetField("SpecialCode", value);
+            get => this.GetField<string?>("SpecialCode");
+            set => this.SetField("SpecialCode", value);
         }
     }
 }

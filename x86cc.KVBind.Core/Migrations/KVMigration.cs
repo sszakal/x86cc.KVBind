@@ -51,9 +51,9 @@ public sealed class KVMigrationBuilder
     public KVMigrationBuilder Prepare(Func<IReadOnlyList<KVMigrationSubject>, CancellationToken, Task<object?>> prepare)
     {
         ArgumentNullException.ThrowIfNull(prepare);
-        if (PrepareDelegate is not null)
+        if (this.PrepareDelegate is not null)
             throw new InvalidOperationException("A migration can declare at most one Prepare phase.");
-        PrepareDelegate = prepare;
+        this.PrepareDelegate = prepare;
         return this;
     }
 
@@ -62,7 +62,7 @@ public sealed class KVMigrationBuilder
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(value);
-        Steps.Add(new BackfillStep(target, value, overwrite));
+        this.Steps.Add(new BackfillStep(target, value, overwrite));
         return this;
     }
 
@@ -70,7 +70,7 @@ public sealed class KVMigrationBuilder
     public KVMigrationBuilder Remove(KVTarget target)
     {
         ArgumentNullException.ThrowIfNull(target);
-        Steps.Add(new RemoveStep(target));
+        this.Steps.Add(new RemoveStep(target));
         return this;
     }
 
@@ -79,7 +79,7 @@ public sealed class KVMigrationBuilder
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentException.ThrowIfNullOrWhiteSpace(toSegment);
-        Steps.Add(new RenameFieldStep(target, toSegment));
+        this.Steps.Add(new RenameFieldStep(target, toSegment));
         return this;
     }
 
@@ -91,7 +91,7 @@ public sealed class KVMigrationBuilder
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fromPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(toPath);
-        Steps.Add(new RenameSegmentStep(fromPath, toPath));
+        this.Steps.Add(new RenameSegmentStep(fromPath, toPath));
         return this;
     }
 
@@ -104,7 +104,7 @@ public sealed class KVMigrationBuilder
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentException.ThrowIfNullOrWhiteSpace(toSegment);
-        Steps.Add(new RenameSubtreeStep(target, toSegment));
+        this.Steps.Add(new RenameSubtreeStep(target, toSegment));
         return this;
     }
 
@@ -119,7 +119,7 @@ public sealed class KVMigrationBuilder
         ArgumentException.ThrowIfNullOrWhiteSpace(toType);
         var reshapeBuilder = new KVNodeReshapeBuilder();
         reshape?.Invoke(reshapeBuilder);
-        Steps.Add(new ReplaceNestedTypeStep(target, toType, reshapeBuilder.Ops));
+        this.Steps.Add(new ReplaceNestedTypeStep(target, toType, reshapeBuilder.Ops));
         return this;
     }
 }

@@ -6,26 +6,6 @@ using x86cc.KVBind.Core.Model;
 
 namespace x86cc.KVBind.Core;
 
-public sealed record KVCompiledValidationRule(
-    Func<KVValidationProfile, bool> ProfileMatches,
-    Action<KVNode, string, string, List<KVValidationError>> Evaluate);
-
-public abstract record KVValidationProfile;
-
-public sealed record KVDefaultValidationProfile : KVValidationProfile
-{
-    public static KVDefaultValidationProfile Instance { get; } = new();
-
-    private KVDefaultValidationProfile()
-    {
-    }
-}
-
-public sealed record KVValidationRegistration(
-    string ScopePath,
-    bool IncludeDescendants,
-    IReadOnlyList<KVCompiledValidationRule> Rules);
-
 public enum KVCollectionAggregateComparison
 {
     LessThan,
@@ -34,16 +14,41 @@ public enum KVCollectionAggregateComparison
     GreaterThanOrEqual
 }
 
-public sealed record KVCollectionAggregateRule(string FieldKey, decimal Threshold, KVCollectionAggregateComparison Comparison, string ErrorCode);
-
 internal interface IKVFieldValidationRuleFactory<TValue>
 {
     IReadOnlyList<KVCompiledValidationRule> Build();
 }
 
+internal interface IKVCollectionValidationRuleFactory
+{
+    IReadOnlyList<KVCompiledValidationRule> Build();
+}
+
+public sealed record KVCompiledValidationRule(
+    Func<KVValidationProfile, bool> ProfileMatches,
+    Action<KVNode, string, string, List<KVValidationError>> Evaluate);
+
+public abstract record KVValidationProfile;
+
+public sealed record KVDefaultValidationProfile : KVValidationProfile
+{
+    private KVDefaultValidationProfile()
+    {
+    }
+
+    public static KVDefaultValidationProfile Instance { get; } = new();
+}
+
+public sealed record KVValidationRegistration(
+    string ScopePath,
+    bool IncludeDescendants,
+    IReadOnlyList<KVCompiledValidationRule> Rules);
+
+public sealed record KVCollectionAggregateRule(string FieldKey, decimal Threshold, KVCollectionAggregateComparison Comparison, string ErrorCode);
+
 public sealed class KVFieldValidationProfileBuilder<TValue> : IKVFieldValidationRuleFactory<TValue>
 {
-    private readonly List<KVCompiledValidationRule> _rules = [];
+    private readonly List<KVCompiledValidationRule> rules = [];
 
     public KVFieldValidationProfileBuilder<TValue> For<TProfile>(Action<KVFieldValueRuleBuilder<TValue>> configure)
         where TProfile : KVValidationProfile
@@ -52,7 +57,7 @@ public sealed class KVFieldValidationProfileBuilder<TValue> : IKVFieldValidation
 
         var rules = new KVFieldValueRuleBuilder<TValue>();
         configure(rules);
-        _rules.Add(new KVCompiledValidationRule(
+        this.rules.Add(new KVCompiledValidationRule(
             current => current is TProfile,
             (node, path, currentCanonicalPath, errors) =>
             {
@@ -65,18 +70,18 @@ public sealed class KVFieldValidationProfileBuilder<TValue> : IKVFieldValidation
 
     IReadOnlyList<KVCompiledValidationRule> IKVFieldValidationRuleFactory<TValue>.Build()
     {
-        return _rules;
+        return this.rules;
     }
 }
 
 public sealed class KVFieldValueRuleBuilder<TValue>
 {
-    private bool _required;
-    private int? _maxLength;
+    private bool required;
+    private int? maxLength;
 
     public KVFieldValueRuleBuilder<TValue> Required()
     {
-        _required = true;
+        this.required = true;
         return this;
     }
 
@@ -87,13 +92,13 @@ public sealed class KVFieldValueRuleBuilder<TValue>
             throw new ArgumentOutOfRangeException(nameof(maxLength), "MaxLength must be greater than zero.");
         }
 
-        _maxLength = maxLength;
+        this.maxLength = maxLength;
         return this;
     }
 
     internal void Evaluate(string path, object? value, List<KVValidationError> errors)
     {
-        if (_required)
+        if (this.required)
         {
             if (value is null || (value is string requiredText && string.IsNullOrWhiteSpace(requiredText)))
             {
@@ -102,22 +107,17 @@ public sealed class KVFieldValueRuleBuilder<TValue>
             }
         }
 
-        if (_maxLength.HasValue && value is string text && text.Length > _maxLength.Value)
+        if (this.maxLength.HasValue && value is string text && text.Length > this.maxLength.Value)
         {
-            errors.Add(new KVValidationError(path, "max_length", $"'{path}' must be at most {_maxLength.Value} characters."));
+            errors.Add(new KVValidationError(path, "max_length", $"'{path}' must be at most {this.maxLength.Value} characters."));
         }
     }
-}
-
-internal interface IKVCollectionValidationRuleFactory
-{
-    IReadOnlyList<KVCompiledValidationRule> Build();
 }
 
 public sealed class IkvCollectionValidationProfileBuilder<TModel> : IKVCollectionValidationRuleFactory
     where TModel : KVCollectionItemNode, new()
 {
-    private readonly List<KVCompiledValidationRule> _rules = [];
+    private readonly List<KVCompiledValidationRule> rules = [];
 
     public IkvCollectionValidationProfileBuilder<TModel> For<TProfile>(Action<KVCollectionRuleBuilder<TModel>> configure)
         where TProfile : KVValidationProfile
@@ -126,7 +126,7 @@ public sealed class IkvCollectionValidationProfileBuilder<TModel> : IKVCollectio
 
         var rules = new KVCollectionRuleBuilder<TModel>();
         configure(rules);
-        _rules.Add(new KVCompiledValidationRule(
+        this.rules.Add(new KVCompiledValidationRule(
             current => current is TProfile,
             (node, path, currentCanonicalPath, errors) => rules.Evaluate(path, node, currentCanonicalPath, errors)));
         return this;
@@ -134,32 +134,35 @@ public sealed class IkvCollectionValidationProfileBuilder<TModel> : IKVCollectio
 
     IReadOnlyList<KVCompiledValidationRule> IKVCollectionValidationRuleFactory.Build()
     {
-        return _rules;
+        return this.rules;
     }
 }
 
 public sealed class KVCollectionRuleBuilder<TModel>
     where TModel : KVCollectionItemNode, new()
 {
-    private bool _notEmpty;
-    private int? _minCount;
-    private int? _maxCount;
-    private readonly List<KVCollectionAggregateRule> _aggregateRules = [];
+    private readonly List<KVCollectionAggregateRule> aggregateRules = [];
 
-    internal bool NotEmptyRule => _notEmpty;
+    private bool notEmpty;
 
-    internal int? MinCountValue => _minCount;
+    private int? minCount;
 
-    internal int? MaxCountValue => _maxCount;
+    private int? maxCount;
 
-    internal IReadOnlyList<KVCollectionAggregateRule> AggregateRules => _aggregateRules;
+    internal bool NotEmptyRule => this.notEmpty;
+
+    internal int? MinCountValue => this.minCount;
+
+    internal int? MaxCountValue => this.maxCount;
+
+    internal IReadOnlyList<KVCollectionAggregateRule> AggregateRules => this.aggregateRules;
 
     public KVCollectionRuleBuilder<TModel> NotEmpty()
     {
-        _notEmpty = true;
-        if (!_minCount.HasValue || _minCount.Value < 1)
+        this.notEmpty = true;
+        if (!this.minCount.HasValue || this.minCount.Value < 1)
         {
-            _minCount = 1;
+            this.minCount = 1;
         }
 
         return this;
@@ -172,7 +175,7 @@ public sealed class KVCollectionRuleBuilder<TModel>
             throw new ArgumentOutOfRangeException(nameof(minCount), "MinCount cannot be negative.");
         }
 
-        _minCount = minCount;
+        this.minCount = minCount;
         return this;
     }
 
@@ -183,7 +186,7 @@ public sealed class KVCollectionRuleBuilder<TModel>
             throw new ArgumentOutOfRangeException(nameof(maxCount), "MaxCount cannot be negative.");
         }
 
-        _maxCount = maxCount;
+        this.maxCount = maxCount;
         return this;
     }
 
@@ -212,7 +215,7 @@ public sealed class KVCollectionRuleBuilder<TModel>
 
     internal IReadOnlyList<KVCompiledValidationRule> BuildGlobalRules()
     {
-        if (!_notEmpty && !_minCount.HasValue && !_maxCount.HasValue && _aggregateRules.Count == 0)
+        if (!this.notEmpty && !this.minCount.HasValue && !this.maxCount.HasValue && this.aggregateRules.Count == 0)
         {
             return [];
         }
@@ -221,7 +224,7 @@ public sealed class KVCollectionRuleBuilder<TModel>
         [
             new KVCompiledValidationRule(
                 _ => true,
-                (node, path, currentCanonicalPath, errors) => Evaluate(path, node, currentCanonicalPath, errors))
+                (node, path, currentCanonicalPath, errors) => this.Evaluate(path, node, currentCanonicalPath, errors))
         ];
     }
 
@@ -233,22 +236,22 @@ public sealed class KVCollectionRuleBuilder<TModel>
         var children = collectionNode?.GetActiveItemIds() ?? [];
         var count = children.Count;
 
-        if (_notEmpty && count == 0)
+        if (this.notEmpty && count == 0)
         {
             errors.Add(new KVValidationError(path, "not_empty", $"'{path}' collection cannot be empty."));
         }
 
-        if (_minCount.HasValue && count < _minCount.Value)
+        if (this.minCount.HasValue && count < this.minCount.Value)
         {
-            errors.Add(new KVValidationError(path, "min_count", $"'{path}' collection must contain at least {_minCount.Value} item(s)."));
+            errors.Add(new KVValidationError(path, "min_count", $"'{path}' collection must contain at least {this.minCount.Value} item(s)."));
         }
 
-        if (_maxCount.HasValue && count > _maxCount.Value)
+        if (this.maxCount.HasValue && count > this.maxCount.Value)
         {
-            errors.Add(new KVValidationError(path, "max_count", $"'{path}' collection must contain at most {_maxCount.Value} item(s)."));
+            errors.Add(new KVValidationError(path, "max_count", $"'{path}' collection must contain at most {this.maxCount.Value} item(s)."));
         }
 
-        foreach (var aggregateRule in _aggregateRules)
+        foreach (var aggregateRule in this.aggregateRules)
         {
             decimal sum = 0m;
             foreach (var child in children)
@@ -275,6 +278,12 @@ public sealed class KVCollectionRuleBuilder<TModel>
         }
     }
 
+    internal KVCollectionRuleBuilder<TModel> AddAggregateRule(KVCollectionAggregateRule rule)
+    {
+        this.aggregateRules.Add(rule);
+        return this;
+    }
+
     private static bool Compare(decimal value, decimal threshold, KVCollectionAggregateComparison comparison)
     {
         return comparison switch
@@ -286,52 +295,46 @@ public sealed class KVCollectionRuleBuilder<TModel>
             _ => false
         };
     }
-
-    internal KVCollectionRuleBuilder<TModel> AddAggregateRule(KVCollectionAggregateRule rule)
-    {
-        _aggregateRules.Add(rule);
-        return this;
-    }
 }
 
 public sealed class KVCollectionAggregateRuleBuilder<TModel>
     where TModel : KVCollectionItemNode, new()
 {
-    private readonly KVCollectionRuleBuilder<TModel> _owner;
-    private readonly string _fieldKey;
+    private readonly KVCollectionRuleBuilder<TModel> owner;
+    private readonly string fieldKey;
 
     internal KVCollectionAggregateRuleBuilder(KVCollectionRuleBuilder<TModel> owner, string fieldKey)
     {
-        _owner = owner;
-        _fieldKey = fieldKey;
+        this.owner = owner;
+        this.fieldKey = fieldKey;
     }
 
     public KVCollectionRuleBuilder<TModel> LessThan(decimal threshold)
-        => Add(threshold, KVCollectionAggregateComparison.LessThan, "aggregate_less_than");
+        => this.Add(threshold, KVCollectionAggregateComparison.LessThan, "aggregate_less_than");
 
     public KVCollectionRuleBuilder<TModel> LessThanOrEqual(decimal threshold)
-        => Add(threshold, KVCollectionAggregateComparison.LessThanOrEqual, "aggregate_less_than_or_equal");
+        => this.Add(threshold, KVCollectionAggregateComparison.LessThanOrEqual, "aggregate_less_than_or_equal");
 
     public KVCollectionRuleBuilder<TModel> GreaterThan(decimal threshold)
-        => Add(threshold, KVCollectionAggregateComparison.GreaterThan, "aggregate_greater_than");
+        => this.Add(threshold, KVCollectionAggregateComparison.GreaterThan, "aggregate_greater_than");
 
     public KVCollectionRuleBuilder<TModel> GreaterThanOrEqual(decimal threshold)
-        => Add(threshold, KVCollectionAggregateComparison.GreaterThanOrEqual, "aggregate_greater_than_or_equal");
+        => this.Add(threshold, KVCollectionAggregateComparison.GreaterThanOrEqual, "aggregate_greater_than_or_equal");
 
     private KVCollectionRuleBuilder<TModel> Add(decimal threshold, KVCollectionAggregateComparison comparison, string code)
     {
-        return _owner.AddAggregateRule(new KVCollectionAggregateRule(_fieldKey, threshold, comparison, code));
+        return this.owner.AddAggregateRule(new KVCollectionAggregateRule(this.fieldKey, threshold, comparison, code));
     }
 }
 
 public sealed class KVGroupValidationProfileBuilder<TNode>
 {
-    private readonly Func<LambdaExpression, string> _resolveFieldKey;
-    private readonly List<KVCompiledValidationRule> _rules = [];
+    private readonly Func<LambdaExpression, string> resolveFieldKey;
+    private readonly List<KVCompiledValidationRule> rules = [];
 
     internal KVGroupValidationProfileBuilder(Func<LambdaExpression, string> resolveFieldKey)
     {
-        _resolveFieldKey = resolveFieldKey;
+        this.resolveFieldKey = resolveFieldKey;
     }
 
     public KVGroupValidationProfileBuilder<TNode> For<TProfile>(Action<KVGroupRuleBuilder<TNode>> configure)
@@ -339,9 +342,9 @@ public sealed class KVGroupValidationProfileBuilder<TNode>
     {
         ArgumentNullException.ThrowIfNull(configure);
 
-        var rules = new KVGroupRuleBuilder<TNode>(_resolveFieldKey);
+        var rules = new KVGroupRuleBuilder<TNode>(this.resolveFieldKey);
         configure(rules);
-        _rules.Add(new KVCompiledValidationRule(
+        this.rules.Add(new KVCompiledValidationRule(
             current => current is TProfile,
             (node, _, currentCanonicalPath, errors) => rules.Evaluate(node, currentCanonicalPath, errors)));
         return this;
@@ -349,26 +352,26 @@ public sealed class KVGroupValidationProfileBuilder<TNode>
 
     internal IReadOnlyList<KVCompiledValidationRule> Build()
     {
-        return _rules;
+        return this.rules;
     }
 }
 
 public sealed class KVGroupRuleBuilder<TNode>
 {
-    private readonly Func<LambdaExpression, string> _resolveFieldKey;
-    private readonly List<Action<KVGroupValueAccessor<TNode>, List<KVValidationError>>> _steps = [];
+    private readonly Func<LambdaExpression, string> resolveFieldKey;
+    private readonly List<Action<KVGroupValueAccessor<TNode>, List<KVValidationError>>> steps = [];
 
     internal KVGroupRuleBuilder(Func<LambdaExpression, string> resolveFieldKey)
     {
-        _resolveFieldKey = resolveFieldKey;
+        this.resolveFieldKey = resolveFieldKey;
     }
 
     public KVGroupRuleBuilder<TNode> Required<TValue>(Expression<Func<TNode, TValue>> fieldSelector)
     {
         ArgumentNullException.ThrowIfNull(fieldSelector);
 
-        var fieldKey = _resolveFieldKey(fieldSelector);
-        _steps.Add((accessor, errors) =>
+        var fieldKey = this.resolveFieldKey(fieldSelector);
+        this.steps.Add((accessor, errors) =>
         {
             var value = accessor.GetRaw(fieldKey);
             if (value is null || (value is string text && string.IsNullOrWhiteSpace(text)))
@@ -389,8 +392,8 @@ public sealed class KVGroupRuleBuilder<TNode>
             throw new ArgumentOutOfRangeException(nameof(maxLength), "MaxLength must be greater than zero.");
         }
 
-        var fieldKey = _resolveFieldKey(fieldSelector);
-        _steps.Add((accessor, errors) =>
+        var fieldKey = this.resolveFieldKey(fieldSelector);
+        this.steps.Add((accessor, errors) =>
         {
             var value = accessor.GetRaw(fieldKey);
             if (value is string text && text.Length > maxLength)
@@ -410,9 +413,9 @@ public sealed class KVGroupRuleBuilder<TNode>
         ArgumentNullException.ThrowIfNull(condition);
         ArgumentNullException.ThrowIfNull(configure);
 
-        var nested = new KVGroupRuleBuilder<TNode>(_resolveFieldKey);
+        var nested = new KVGroupRuleBuilder<TNode>(this.resolveFieldKey);
         configure(nested);
-        _steps.Add((accessor, errors) =>
+        this.steps.Add((accessor, errors) =>
         {
             if (condition(accessor))
             {
@@ -426,13 +429,13 @@ public sealed class KVGroupRuleBuilder<TNode>
     public KVGroupRuleBuilder<TNode> Custom(Action<KVGroupValueAccessor<TNode>, List<KVValidationError>> validate)
     {
         ArgumentNullException.ThrowIfNull(validate);
-        _steps.Add(validate);
+        this.steps.Add(validate);
         return this;
     }
 
     internal IReadOnlyList<KVCompiledValidationRule> BuildGlobalRules()
     {
-        if (_steps.Count == 0)
+        if (this.steps.Count == 0)
         {
             return [];
         }
@@ -441,19 +444,19 @@ public sealed class KVGroupRuleBuilder<TNode>
         [
             new KVCompiledValidationRule(
                 _ => true,
-                (node, _, currentCanonicalPath, errors) => Evaluate(node, currentCanonicalPath, errors))
+                (node, _, currentCanonicalPath, errors) => this.Evaluate(node, currentCanonicalPath, errors))
         ];
     }
 
     internal void Evaluate(KVNode node, string currentCanonicalPath, List<KVValidationError> errors)
     {
-        var accessor = new KVGroupValueAccessor<TNode>(node, currentCanonicalPath, _resolveFieldKey);
-        Evaluate(accessor, errors);
+        var accessor = new KVGroupValueAccessor<TNode>(node, currentCanonicalPath, this.resolveFieldKey);
+        this.Evaluate(accessor, errors);
     }
 
     private void Evaluate(KVGroupValueAccessor<TNode> accessor, List<KVValidationError> errors)
     {
-        foreach (var step in _steps)
+        foreach (var step in this.steps)
         {
             step(accessor, errors);
         }
@@ -462,23 +465,25 @@ public sealed class KVGroupRuleBuilder<TNode>
 
 public sealed class KVGroupValueAccessor<TNode>
 {
-    private readonly KVNode _node;
-    private readonly string _currentCanonicalPath;
-    private readonly Func<LambdaExpression, string> _resolveFieldKey;
+    private readonly KVNode node;
+
+    private readonly string currentCanonicalPath;
+
+    private readonly Func<LambdaExpression, string> resolveFieldKey;
 
     internal KVGroupValueAccessor(KVNode node, string currentCanonicalPath, Func<LambdaExpression, string> resolveFieldKey)
     {
-        _node = node;
-        _currentCanonicalPath = currentCanonicalPath;
-        _resolveFieldKey = resolveFieldKey;
+        this.node = node;
+        this.currentCanonicalPath = currentCanonicalPath;
+        this.resolveFieldKey = resolveFieldKey;
     }
 
     public TValue? Get<TValue>(Expression<Func<TNode, TValue>> fieldSelector)
     {
         ArgumentNullException.ThrowIfNull(fieldSelector);
-        var fieldKey = _resolveFieldKey(fieldSelector);
-        var storagePath = ResolveStoragePath(fieldKey);
-        var raw = _node.Model.Get<object?>(storagePath);
+        var fieldKey = this.resolveFieldKey(fieldSelector);
+        var storagePath = this.ResolveStoragePath(fieldKey);
+        var raw = this.node.Model.Get<object?>(storagePath);
         if (raw is null)
         {
             return default;
@@ -489,24 +494,18 @@ public sealed class KVGroupValueAccessor<TNode>
             return typed;
         }
 
-        throw new InvalidOperationException($"Field '{ResolveCanonicalPath(fieldKey)}' contains value type '{raw.GetType().FullName}', which cannot be cast to '{typeof(TValue).FullName}'.");
+        throw new InvalidOperationException($"Field '{this.ResolveCanonicalPath(fieldKey)}' contains value type '{raw.GetType().FullName}', which cannot be cast to '{typeof(TValue).FullName}'.");
     }
 
     public bool HasValue<TValue>(Expression<Func<TNode, TValue>> fieldSelector)
     {
-        var value = Get(fieldSelector);
+        var value = this.Get(fieldSelector);
         return value switch
         {
             null => false,
             string text => !string.IsNullOrWhiteSpace(text),
             _ => true
         };
-    }
-
-    internal object? GetRaw(string fieldKey)
-    {
-        var storagePath = ResolveStoragePath(fieldKey);
-        return _node.Model.Get<object?>(storagePath);
     }
 
     public object? Get(string fieldKey)
@@ -516,7 +515,7 @@ public sealed class KVGroupValueAccessor<TNode>
             throw new ArgumentException("Field key is required.", nameof(fieldKey));
         }
 
-        return GetRaw(fieldKey);
+        return this.GetRaw(fieldKey);
     }
 
     public IReadOnlyList<string> GetCollectionChildIds(string collectionPath)
@@ -526,34 +525,40 @@ public sealed class KVGroupValueAccessor<TNode>
             throw new ArgumentException("Collection path is required.", nameof(collectionPath));
         }
 
-        var collectionKey = ResolveStoragePath(collectionPath);
-        var collectionDef = _node.Definition.FindCollection(collectionKey);
+        var collectionKey = this.ResolveStoragePath(collectionPath);
+        var collectionDef = this.node.Definition.FindCollection(collectionKey);
         if (collectionDef is null) return [];
 
-        var collectionNode = collectionDef.GetCollection(_node);
+        var collectionNode = collectionDef.GetCollection(this.node);
         return collectionNode?.GetActiveItemIds() ?? [];
+    }
+
+    internal object? GetRaw(string fieldKey)
+    {
+        var storagePath = this.ResolveStoragePath(fieldKey);
+        return this.node.Model.Get<object?>(storagePath);
     }
 
     internal string ResolveCanonicalPath(string fieldKey)
     {
         var normalizedFieldKey = KVPath.NormalizeRelative(fieldKey);
 
-        if (string.IsNullOrWhiteSpace(_currentCanonicalPath))
+        if (string.IsNullOrWhiteSpace(this.currentCanonicalPath))
         {
             return normalizedFieldKey;
         }
 
-        if (string.Equals(normalizedFieldKey, _currentCanonicalPath, StringComparison.Ordinal)
-            || KVPath.IsSameOrDescendant(normalizedFieldKey, _currentCanonicalPath))
+        if (string.Equals(normalizedFieldKey, this.currentCanonicalPath, StringComparison.Ordinal)
+            || KVPath.IsSameOrDescendant(normalizedFieldKey, this.currentCanonicalPath))
         {
             return normalizedFieldKey;
         }
 
-        return KVPath.Combine(_currentCanonicalPath, normalizedFieldKey);
+        return KVPath.Combine(this.currentCanonicalPath, normalizedFieldKey);
     }
 
     private string ResolveStoragePath(string fieldKey)
     {
-        return _node.ResolveStoragePathForCanonicalPath(ResolveCanonicalPath(fieldKey), _currentCanonicalPath);
+        return this.node.ResolveStoragePathForCanonicalPath(this.ResolveCanonicalPath(fieldKey), this.currentCanonicalPath);
     }
 }

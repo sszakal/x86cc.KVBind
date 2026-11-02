@@ -16,16 +16,16 @@ public interface IKVMigrationStep
 /// <summary>Read view over the source rooted at a target field — lets a backfill read sibling fields.</summary>
 public sealed class KVMigrationFieldView
 {
-    private readonly KVDictionary _source;
-    private readonly string _parent;
+    private readonly KVDictionary source;
+    private readonly string parent;
 
     internal KVMigrationFieldView(KVDictionary source, string path, KVMigrationContext context)
     {
-        _source = source;
-        Path = path;
-        Context = context;
+        this.source = source;
+        this.Path = path;
+        this.Context = context;
         var slash = path.LastIndexOf('/');
-        _parent = slash < 0 ? string.Empty : path[..slash];
+        this.parent = slash < 0 ? string.Empty : path[..slash];
     }
 
     /// <summary>The absolute path of the field being backfilled.</summary>
@@ -35,18 +35,18 @@ public sealed class KVMigrationFieldView
     public KVMigrationContext Context { get; }
 
     /// <summary>True when the field already holds a (non-deleted) value.</summary>
-    public bool Exists => _source.TryGetValue(Path, out var value) && value != KVValue.Tombstone;
+    public bool Exists => this.source.TryGetValue(this.Path, out var value) && value != KVValue.Tombstone;
 
     /// <summary>Reads a sibling field's value (relative to this field's parent), or null if absent.</summary>
     public object? Sibling(string segment)
     {
-        var path = _parent.Length == 0 ? segment : _parent + "/" + segment;
-        return _source.TryGetValue(path, out var value) ? value?.Value : null;
+        var path = this.parent.Length == 0 ? segment : this.parent + "/" + segment;
+        return this.source.TryGetValue(path, out var value) ? value?.Value : null;
     }
 
     /// <summary>Reads any value by absolute path, or null if absent.</summary>
     public object? Absolute(string path)
-        => _source.TryGetValue(path, out var value) ? value?.Value : null;
+        => this.source.TryGetValue(path, out var value) ? value?.Value : null;
 }
 
 // Sets a value at every matched path. By default only fills absent fields (backfill); overwrite=true also
@@ -94,8 +94,11 @@ internal sealed class RemoveStep(KVTarget target) : IKVMigrationStep
 
         var prefix = path + "/";
         foreach (var key in source.Keys)
+        {
             if (key.StartsWith(prefix, StringComparison.Ordinal))
                 return true;
+        }
+
         return false;
     }
 }

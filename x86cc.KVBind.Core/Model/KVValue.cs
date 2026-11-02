@@ -11,15 +11,6 @@ public abstract class KVValue : IEquatable<KVValue>
     // Sentinel representing a deleted path — used instead of a separate Removed set.
     public static readonly KVValue Tombstone = new KVTombstoneValue();
 
-    private sealed class KVTombstoneValue : KVValue
-    {
-        public override object? Value => null;
-        public override bool Equals(object? obj) => obj is KVTombstoneValue;
-        public override int GetHashCode() => nameof(KVTombstoneValue).GetHashCode(StringComparison.Ordinal);
-        public override string ToString() => "(deleted)";
-    }
-
-
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public abstract object? Value { get; }
@@ -45,27 +36,27 @@ public abstract class KVValue : IEquatable<KVValue>
             return false;
         }
 
-        if (Value is null || other.Value is null)
+        if (this.Value is null || other.Value is null)
         {
-            return Value is null && other.Value is null;
+            return this.Value is null && other.Value is null;
         }
 
         // Same-runtime-type rule (unchanged), then structural equality on the wrapped values.
-        return Value.GetType() == other.Value.GetType()
-               && StructuralEquals(Value, other.Value);
+        return this.Value.GetType() == other.Value.GetType()
+               && StructuralEquals(this.Value, other.Value);
     }
 
     public override bool Equals(object? obj)
     {
-        return obj is KVValue other ? Equals(other) : Equals(Value, obj);
+        return obj is KVValue other ? this.Equals(other) : Equals(this.Value, obj);
     }
 
     public override int GetHashCode()
     {
-        return Value is null ? 0 : HashCode.Combine(Value.GetType(), StructuralHash(Value));
+        return this.Value is null ? 0 : HashCode.Combine(this.Value.GetType(), StructuralHash(this.Value));
     }
 
-    public override string? ToString() => Value?.ToString();
+    public override string? ToString() => this.Value?.ToString();
 
     // Structural equality of two wrapped values known to share a runtime type. Strings and value types
     // use their own (value) equality; arrays/collections compare element-wise; reference-type POCOs fall
@@ -126,7 +117,7 @@ public abstract class KVValue : IEquatable<KVValue>
                 return s.GetHashCode(StringComparison.Ordinal);
 
             case IEnumerable e:
-                var hash = new HashCode();
+                var hash = default(HashCode);
                 foreach (var element in e)
                     hash.Add(element is null ? 0 : StructuralHash(element));
                 return hash.ToHashCode();
@@ -137,15 +128,26 @@ public abstract class KVValue : IEquatable<KVValue>
                     : JsonSerializer.Serialize(v, v.GetType(), JsonOptions).GetHashCode(StringComparison.Ordinal);
         }
     }
+
+    private sealed class KVTombstoneValue : KVValue
+    {
+        public override object? Value => null;
+
+        public override bool Equals(object? obj) => obj is KVTombstoneValue;
+
+        public override int GetHashCode() => nameof(KVTombstoneValue).GetHashCode(StringComparison.Ordinal);
+
+        public override string ToString() => "(deleted)";
+    }
 }
 
 public sealed class KVValue<T>(T? value) : KVValue
 {
     // Box value types once at construction so repeated Value reads (the field-read hot path)
     // return the same boxed reference instead of re-boxing on every access.
-    private readonly object? _boxed = value;
+    private readonly object? boxed = value;
 
     public T? TypedValue { get; } = value;
 
-    public override object? Value => _boxed;
+    public override object? Value => this.boxed;
 }

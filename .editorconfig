@@ -1,0 +1,69 @@
+[*.cs]
+# -------------------------------------------------------------
+# StyleCop Global Settings
+# -------------------------------------------------------------
+# Set a default baseline for all StyleCop rules at once
+dotnet_analyzer_diagnostic.category-StyleCop.severity = warning
+
+# -------------------------------------------------------------
+# Individual Rule Configurations
+# -------------------------------------------------------------
+
+# SA1633: File must have a header (Turn off if you don't use file headers)
+dotnet_diagnostic.SA1633.severity = none
+
+# SA1200: Using directives must be placed correctly (Downgrade to a subtle hint)
+dotnet_diagnostic.SA1200.severity = suggestion
+
+# SA1101: Prefix local calls with 'this.' (Force it as a build error)
+dotnet_diagnostic.SA1101.severity = error
+
+# Default severity for analyzer diagnostics with category 'StyleCop.CSharp.DocumentationRules'
+dotnet_analyzer_diagnostic.category-StyleCop.CSharp.DocumentationRules.severity = none
+
+# SA1503: Braces should not be omitted
+dotnet_diagnostic.SA1503.severity = none
+
+# SA1413: Use trailing comma in multi-line initializers
+dotnet_diagnostic.SA1413.severity = none
+
+# SA1010: Opening square brackets should be spaced correctly
+dotnet_diagnostic.SA1010.severity = none
+
+# SA1206: Declaration keywords should follow order
+dotnet_diagnostic.SA1206.severity = none
+
+# SA1009: Closing parenthesis should be spaced correctly
+dotnet_diagnostic.SA1009.severity = none
+
+# IDE0058: Expression value is never used
+dotnet_diagnostic.IDE0058.severity = none
+
+# SA1512: Single-line comments should not be followed by blank line
+dotnet_diagnostic.SA1512.severity = none
+
+# S3878: Arrays should not be created for params parameters
+dotnet_diagnostic.S3878.severity = none
+
+# SA1106: Code should not contain empty statements
+dotnet_diagnostic.SA1106.severity = none
+
+# S3267: Loops should be simplified with "LINQ" expressions
+dotnet_diagnostic.S3267.severity = none
+
+# SA1300: Element should begin with an uppercase letter (the root namespace x86cc is lowercase by design)
+dotnet_diagnostic.SA1300.severity = none
+
+# SA1402: File may only contain a single type
+dotnet_diagnostic.SA1402.severity = none
+
+# SA0001: XML comment analysis is disabled (documentation rules are off)
+dotnet_diagnostic.SA0001.severity = none
+
+[x86cc.KVBind.UnitTests/**.cs]
+# SA1118: Parameter should not span multiple lines (InlineSnapshot.Validate rewrites its raw-string argument in place)
+dotnet_diagnostic.SA1118.severity = none
+
+[x86cc.KVBind.Benchmarks/**.cs]
+# SA1401: Fields should be private (public fields are part of the native models being benchmarked)
+dotnet_diagnostic.SA1401.severity = none

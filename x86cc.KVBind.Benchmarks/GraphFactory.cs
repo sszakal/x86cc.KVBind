@@ -35,8 +35,10 @@ public static class GraphFactory
                     Fill(level3, k);
                     level2.Collection.Add(level3);
                 }
+
                 level1.Collection.Add(level2);
             }
+
             root.Collection.Add(level1);
         }
 
@@ -79,7 +81,7 @@ public static class GraphFactory
     public static void Fill(IComponent c, int seed)
     {
         c.BooleanField = (seed & 1) == 0;
-        c.CharField = (char)('A' + seed % 26);
+        c.CharField = (char)('A' + (seed % 26));
         c.IntField = seed;
         c.FloatField = seed + 0.5f;
         c.DoubleField = seed + 0.25d;

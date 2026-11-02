@@ -7,7 +7,7 @@ public class GroupConditionalValidationTests : KVModelTestBase
 {
     public GroupConditionalValidationTests()
     {
-        RegisterModelDefinition<GroupValidationRootModel>(builder =>
+        this.RegisterModelDefinition<GroupValidationRootModel>(builder =>
         {
             builder.Field(x => x.Title);
             builder.FieldGroup(x => x.Details, details =>
@@ -15,7 +15,7 @@ public class GroupConditionalValidationTests : KVModelTestBase
                 details.Field(x => x.Mode);
                 details.Field(x => x.Country);
                 details.Field(x => x.TaxId);
-                details.Validation(profiles => 
+                details.Validation(profiles =>
                     profiles.For<FullValidationProfile>(rules =>
                     rules.When(
                         accessor => string.Equals(accessor.Get(x => x.Country), "US", StringComparison.Ordinal),
@@ -27,13 +27,13 @@ public class GroupConditionalValidationTests : KVModelTestBase
     [Fact]
     public void PatchValidation_WhenGroupConditionMatches_AppliesNestedProfileRule()
     {
-        var root = CreateRoot<GroupValidationRootModel>();
+        var root = this.CreateRoot<GroupValidationRootModel>();
         root.Details.Mode = ValidationMode.Full;
 
         root.CommitSetup();
         var batch = root.Patch(
             KVPatchOperation.Set("/Details/Country", "US"),
-            KVPatchOperation.Set("/Details/TaxId", ""));
+            KVPatchOperation.Set("/Details/TaxId", string.Empty));
 
         var validation = batch.Validate();
 
@@ -43,13 +43,13 @@ public class GroupConditionalValidationTests : KVModelTestBase
     [Fact]
     public void PatchValidation_WhenGroupConditionDoesNotMatch_DoesNotAddConditionalErrors()
     {
-        var root = CreateRoot<GroupValidationRootModel>();
+        var root = this.CreateRoot<GroupValidationRootModel>();
         root.Details.Mode = ValidationMode.Full;
 
         root.CommitSetup();
         var batch = root.Patch(
             KVPatchOperation.Set("/Details/Country", "FR"),
-            KVPatchOperation.Set("/Details/TaxId", ""));
+            KVPatchOperation.Set("/Details/TaxId", string.Empty));
 
         var validation = batch.Validate();
 
@@ -59,10 +59,10 @@ public class GroupConditionalValidationTests : KVModelTestBase
     [Fact]
     public void CommitValidation_WhenProfileDoesNotMatch_DoesNotAddConditionalErrors()
     {
-        var root = CreateRoot<GroupValidationRootModel>();
+        var root = this.CreateRoot<GroupValidationRootModel>();
         root.Details.Mode = ValidationMode.Quick;
         root.Details.Country = "US";
-        root.Details.TaxId = "";
+        root.Details.TaxId = string.Empty;
 
         root.CommitSetup();
         var validation = root.Validate();
@@ -73,10 +73,10 @@ public class GroupConditionalValidationTests : KVModelTestBase
     [Fact]
     public void PatchValidation_WhenScopeOutsideGroup_RunsFullValidation()
     {
-        var root = CreateRoot<GroupValidationRootModel>();
+        var root = this.CreateRoot<GroupValidationRootModel>();
         root.Details.Mode = ValidationMode.Full;
         root.Details.Country = "US";
-        root.Details.TaxId = "";
+        root.Details.TaxId = string.Empty;
 
         root.CommitSetup();
         var batch = root.Patch(KVPatchOperation.Set("/Title", "new"));
@@ -97,7 +97,7 @@ public partial class GroupValidationRootModel : KVRootNode
 
     protected override KVValidationProfile GetValidationProfile()
     {
-        return Details.Mode == ValidationMode.Full ? FullValidationProfile.Instance : QuickValidationProfile.Instance;
+        return this.Details.Mode == ValidationMode.Full ? FullValidationProfile.Instance : QuickValidationProfile.Instance;
     }
 }
 

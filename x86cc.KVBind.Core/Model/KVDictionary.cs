@@ -11,7 +11,13 @@ namespace x86cc.KVBind.Core.Model;
 // Dictionary<string, KVValue>.
 public sealed class KVDictionary : Dictionary<string, KVValue>
 {
-    public KVDictionary() : base(StringComparer.Ordinal) { }
+    public KVDictionary()
+        : base(StringComparer.Ordinal)
+    {
+    }
 
-    public KVDictionary(IEnumerable<KeyValuePair<string, KVValue>> source) : base(source, StringComparer.Ordinal) { }
+    public KVDictionary(IEnumerable<KeyValuePair<string, KVValue>> source)
+        : base(source, StringComparer.Ordinal)
+    {
+    }
 }

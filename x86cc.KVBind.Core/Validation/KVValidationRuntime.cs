@@ -172,7 +172,6 @@ internal static class KVValidationRuntime
             : BuildPath(currentCanonicalPath, scope);
     }
 
-
     private static bool Compare(decimal value, decimal threshold, KVCollectionAggregateComparison comparison)
     {
         return comparison switch

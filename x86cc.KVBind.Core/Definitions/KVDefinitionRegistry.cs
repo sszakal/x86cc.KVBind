@@ -6,12 +6,14 @@ namespace x86cc.KVBind.Core.Definitions;
 
 public interface IKVDefinitionRegistry
 {
-    KVNodeDefinition Get<TModel>() where TModel : KVRootNode;
+    KVNodeDefinition Get<TModel>()
+        where TModel : KVRootNode;
 }
 
 public interface IKVModelDefinitionBuilder
 {
     Type ModelType { get; }
+
     KVNodeDefinition Build();
 }
 
@@ -22,12 +24,12 @@ public interface IKVNodeDefinition
     static abstract KVNodeDefinition Definition { get; }
 }
 
-public class KVDefinitionRegistry: IKVDefinitionRegistry
+public class KVDefinitionRegistry : IKVDefinitionRegistry
 {
     private static readonly MethodInfo StaticDefinitionOfMethod =
         typeof(KVDefinitionRegistry).GetMethod(nameof(StaticDefinitionOf), BindingFlags.NonPublic | BindingFlags.Static)!;
 
-    private readonly ConcurrentDictionary<Type, KVNodeDefinition> _definitions = new();
+    private readonly ConcurrentDictionary<Type, KVNodeDefinition> definitions = new();
 
     public KVDefinitionRegistry(IKVModelDefinitionBuilder[] kvModelDefinitionBuilders)
     {
@@ -40,22 +42,23 @@ public class KVDefinitionRegistry: IKVDefinitionRegistry
                 throw new InvalidOperationException($"KV root definition type '{builder.ModelType.FullName}' must inherit KVRootNode.");
             }
 
-            if (!_definitions.TryAdd(builder.ModelType, builder.Build()))
+            if (!this.definitions.TryAdd(builder.ModelType, builder.Build()))
             {
                 throw new InvalidOperationException($"KV definition for model type '{builder.ModelType.FullName}' is already registered.");
             }
         }
     }
 
-    public KVNodeDefinition Get<TModel>() where TModel : KVRootNode
+    public KVNodeDefinition Get<TModel>()
+        where TModel : KVRootNode
     {
         // Explicit registrations win; otherwise fall back to a model that carries its own definition
         // via IKVNodeDefinition, caching the resolved definition for subsequent lookups.
-        if (_definitions.TryGetValue(typeof(TModel), out var definition))
+        if (this.definitions.TryGetValue(typeof(TModel), out var definition))
             return definition;
 
         if (typeof(TModel).IsAssignableTo(typeof(IKVNodeDefinition)))
-            return _definitions.GetOrAdd(typeof(TModel), ResolveStaticDefinition);
+            return this.definitions.GetOrAdd(typeof(TModel), ResolveStaticDefinition);
 
         throw new InvalidOperationException($"KV definition for model type '{typeof(TModel).FullName}' is not registered.");
     }

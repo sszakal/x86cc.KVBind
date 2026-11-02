@@ -42,7 +42,7 @@ public class SnapshotReplayTests : DeepGraphTestBase
             PreviousCommitId = baseSnapshot.LastCommitId,
             User = "editor",
             Timestamp = new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero),
-            Changes = new KVDictionary {["Title"] = "Changed" }
+            Changes = new KVDictionary { ["Title"] = "Changed" }
         };
         var second = new KVCommit
         {
@@ -72,7 +72,7 @@ public class SnapshotReplayTests : DeepGraphTestBase
             CommitId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
             User = "editor",
             Timestamp = new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero),
-            Changes = new KVDictionary {["Title"] = "Changed" }
+            Changes = new KVDictionary { ["Title"] = "Changed" }
         };
         var brokenSecond = new KVCommit
         {
@@ -80,7 +80,7 @@ public class SnapshotReplayTests : DeepGraphTestBase
             PreviousCommitId = Guid.Parse("44444444-4444-4444-4444-444444444444"),
             User = "editor",
             Timestamp = new DateTimeOffset(2026, 6, 1, 12, 1, 0, TimeSpan.Zero),
-            Changes = new KVDictionary {["Other"] = "Should not apply" }
+            Changes = new KVDictionary { ["Other"] = "Should not apply" }
         };
 
         var act = () => snapshot.Apply([first, brokenSecond]);
@@ -96,25 +96,25 @@ public class SnapshotReplayTests : DeepGraphTestBase
     {
         var commits = new List<KVCommit>();
         var model = new KVModelRoot();
-        var root = CreateRoot<DeepNestedCollectionRoot>(model);
+        var root = this.CreateRoot<DeepNestedCollectionRoot>(model);
         var leafPath = CreateDeepLeaf(root, out var leaf);
 
         leaf.LeafField = "leaf-1";
         root.Patch(KVPatchOperation.Init($"/{leafPath}/Animal", "DOG"));
         root.Patch(KVPatchOperation.Set($"/{leafPath}/Animal/DogName", "Rex"));
-        CommitAndContinue(root, model, commits);
+        this.CommitAndContinue(root, model, commits);
 
         leaf = GetDeepLeaf(root);
         leaf.LeafField = "leaf-2";
-        CommitAndContinue(root, model, commits);
+        this.CommitAndContinue(root, model, commits);
 
         root.Patch(KVPatchOperation.Init($"/{leafPath}/Animal", "CAT"));
         root.Patch(KVPatchOperation.Set($"/{leafPath}/Animal/CatName", "Mittens"));
-        CommitAndContinue(root, model, commits);
+        this.CommitAndContinue(root, model, commits);
 
         var sibling = GetLevel3(root).Level4Collection.Create(Guid.Parse("55555555-5555-5555-5555-555555555555"));
         sibling.LeafField = "sibling";
-        CommitAndContinue(root, model, commits);
+        this.CommitAndContinue(root, model, commits);
 
         var replayed = new KVSnapshot();
         replayed.Apply(commits);
@@ -132,15 +132,15 @@ public class SnapshotReplayTests : DeepGraphTestBase
     {
         var commits = new List<KVCommit>();
         var model = new KVModelRoot();
-        var root = CreateRoot<DeepNestedCollectionRoot>(model);
+        var root = this.CreateRoot<DeepNestedCollectionRoot>(model);
         CreateDeepLeaf(root, out var leaf);
 
         leaf.LeafField = "leaf-1";
-        CommitAndContinue(root, model, commits);
+        this.CommitAndContinue(root, model, commits);
 
         leaf = GetDeepLeaf(root);
         leaf.LeafField = "leaf-2";
-        CommitAndContinue(root, model, commits);
+        this.CommitAndContinue(root, model, commits);
 
         var replayed = new KVSnapshot();
         var act = () => replayed.Apply(commits.Skip(1));

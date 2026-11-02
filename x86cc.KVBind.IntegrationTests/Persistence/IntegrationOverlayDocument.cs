@@ -28,14 +28,14 @@ public sealed class IntegrationOverlayDocument
 
     public KVOverlay ToOverlay()
     {
-        var overlay = KVOverlay.Create(Snapshot.Clone(), User);
-        overlay.Changes = new KVDictionary(Changes);
+        var overlay = KVOverlay.Create(this.Snapshot.Clone(), this.User);
+        overlay.Changes = new KVDictionary(this.Changes);
         return overlay;
     }
 
     public void UpdateFrom(KVOverlay overlay)
     {
-        Snapshot = overlay.Snapshot.Clone();
-        Changes = new KVDictionary(overlay.Changes);
+        this.Snapshot = overlay.Snapshot.Clone();
+        this.Changes = new KVDictionary(overlay.Changes);
     }
 }

@@ -10,7 +10,7 @@ public class DeepGraphPatchTests : DeepGraphTestBase
     public void DeepGraphPatch_WhenOperationsCreateDeepGraph_AppliesSequentiallyInOneRequest()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<DeepNestedCollectionRoot>(model);
+        var root = this.CreateRoot<DeepNestedCollectionRoot>(model);
 
         var result = root.Patch(
             KVPatchOperation.Add("/Level1Collection", new KVAddPatchPayload(TestIds.Level1)),
@@ -31,12 +31,12 @@ public class DeepGraphPatchTests : DeepGraphTestBase
     public void DeepGraphPatch_WhenMiddleCollectionItemIsRemoved_RemovesDescendantSubtree()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<DeepNestedCollectionRoot>(model);
+        var root = this.CreateRoot<DeepNestedCollectionRoot>(model);
         CreateDeepLeaf(root, out var leaf);
         leaf.LeafField = "base";
         root.Patch(KVPatchOperation.Init($"/{DeepLeafPath}/Animal", "DOG"));
         root.Patch(KVPatchOperation.Set($"/{DeepLeafPath}/Animal/DogName", "Rex"));
-        CommitAndContinue(root, model, new List<KVCommit>());
+        this.CommitAndContinue(root, model, new List<KVCommit>());
 
         root.Patch(KVPatchOperation.Remove($"/{Level2Path}"));
 
@@ -50,12 +50,12 @@ public class DeepGraphPatchTests : DeepGraphTestBase
     public void DeepGraphPatch_WhenDeepPathIsDiscarded_RevertsLeafToSnapshot()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<DeepNestedCollectionRoot>(model);
+        var root = this.CreateRoot<DeepNestedCollectionRoot>(model);
         CreateDeepLeaf(root, out var leaf);
         leaf.LeafField = "base";
         root.Patch(KVPatchOperation.Init($"/{DeepLeafPath}/Animal", "DOG"));
         root.Patch(KVPatchOperation.Set($"/{DeepLeafPath}/Animal/DogName", "Rex"));
-        CommitAndContinue(root, model, new List<KVCommit>());
+        this.CommitAndContinue(root, model, new List<KVCommit>());
 
         leaf = GetDeepLeaf(root);
         leaf.LeafField = "draft";

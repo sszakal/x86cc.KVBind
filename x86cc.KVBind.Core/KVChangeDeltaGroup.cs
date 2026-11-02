@@ -12,15 +12,15 @@ public sealed class KVChangeDeltaGroup(IReadOnlyList<KVChangeDelta> deltas, IRea
     public IReadOnlyList<KVChangeDelta> Flatten()
     {
         var values = new List<KVChangeDelta>();
-        Collect(values);
+        this.Collect(values);
         values.Sort((left, right) => string.CompareOrdinal(left.Path, right.Path));
         return values;
     }
 
     private void Collect(List<KVChangeDelta> values)
     {
-        values.AddRange(Deltas);
-        foreach (var child in Children)
+        values.AddRange(this.Deltas);
+        foreach (var child in this.Children)
         {
             child.Collect(values);
         }

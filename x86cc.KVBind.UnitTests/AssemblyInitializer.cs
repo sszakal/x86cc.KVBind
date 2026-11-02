@@ -3,7 +3,7 @@ using Meziantou.Framework.InlineSnapshotTesting;
 using Meziantou.Framework.InlineSnapshotTesting.Serialization;
 using x86cc.KVBind.Core;
 
-static class AssemblyInitializer
+internal static class AssemblyInitializer
 {
     [System.Runtime.CompilerServices.ModuleInitializer]
     public static void Initialize()
@@ -11,8 +11,8 @@ static class AssemblyInitializer
         InlineSnapshotSettings.Default = InlineSnapshotSettings.Default with
         {
             SnapshotUpdateStrategy = SnapshotUpdateStrategy.Default,
-            
-            MergeTools = [ MergeTool.BeyondCompare ],
+
+            MergeTools = [MergeTool.BeyondCompare],
             SnapshotSerializer = new HumanReadableSnapshotSerializer(settings =>
             {
                 settings.IncludeFields = false;
@@ -21,22 +21,22 @@ static class AssemblyInitializer
                 settings.IgnoreMember<KVCollectionDefinition>(x => x.GetCollection);
                 settings.IgnoreMember<KVCompiledValidationRule>(x => x.ProfileMatches);
                 settings.IgnoreMember<KVCompiledValidationRule>(x => x.Evaluate);
-                settings.Converters.Add(new Func<Type, HumanReadableSerializerOptions,string>((x, _) => x.Name));
-                settings.Converters.Add(new Func<List<KVCompiledValidationRule>, HumanReadableSerializerOptions,string>((x, _) => x.Count.ToString()));
-                
-                settings.AddPropertyAttribute(                                                                                                                                                                                                                                                  
-                    property =>                                                                                                                                                                                                                                                                            
-                        typeof(KVNode).IsAssignableFrom(property.DeclaringType)                                                                                                                                                                                                                                 
-                                      && property.Name is nameof(KVNode.Parent) 
-                                          or nameof(KVNode.Model)                                                                                                                                                                                                                     
-                                          or nameof(KVNode.Definition),                                                                                                                                                                                                                     
+                settings.Converters.Add(new Func<Type, HumanReadableSerializerOptions, string>((x, _) => x.Name));
+                settings.Converters.Add(new Func<List<KVCompiledValidationRule>, HumanReadableSerializerOptions, string>((x, _) => x.Count.ToString()));
+
+                settings.AddPropertyAttribute(
+                    property =>
+                        typeof(KVNode).IsAssignableFrom(property.DeclaringType)
+                                      && property.Name is nameof(KVNode.Parent)
+                                          or nameof(KVNode.Model)
+                                          or nameof(KVNode.Definition),
                     new HumanReadableIgnoreAttribute());
-                
+
                 settings.AddPropertyAttribute(
                     property =>
                         property.DeclaringType?.IsGenericType == true
                         && property.DeclaringType.GetGenericTypeDefinition() == typeof(KVCollectionNode<>)
-                        && property.Name is nameof(KVCollectionNode<>.Parent) 
+                        && property.Name is nameof(KVCollectionNode<>.Parent)
                             or nameof(KVCollectionNode<>.Model)
                             or nameof(KVCollectionNode<>.Definition),
                     new HumanReadableIgnoreAttribute());

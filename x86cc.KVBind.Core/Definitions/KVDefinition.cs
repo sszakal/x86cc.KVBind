@@ -8,7 +8,7 @@ public class KVDefinition
     private static readonly IReadOnlyDictionary<string, object?> EmptyAnnotations =
         new Dictionary<string, object?>();
 
-    private Dictionary<string, object?>? _annotations;
+    private Dictionary<string, object?>? annotations;
 
     public required string SubSegmentPath { get; init; }
 
@@ -24,18 +24,18 @@ public class KVDefinition
     /// (<c>"ui:control" = "multiselect"</c>). KVBind stores and carries these through but never interprets
     /// them; the keys and meaning are entirely the consumer's. Empty unless annotated.
     /// </summary>
-    public IReadOnlyDictionary<string, object?> Annotations => _annotations ?? EmptyAnnotations;
+    public IReadOnlyDictionary<string, object?> Annotations => this.annotations ?? EmptyAnnotations;
 
     internal void Annotate(string key, object? value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
-        (_annotations ??= new Dictionary<string, object?>(StringComparer.Ordinal))[key] = value;
+        (this.annotations ??= new Dictionary<string, object?>(StringComparer.Ordinal))[key] = value;
     }
 
     internal void AddAnnotations(IReadOnlyDictionary<string, object?> source)
     {
         if (source.Count == 0) return;
-        _annotations ??= new Dictionary<string, object?>(StringComparer.Ordinal);
-        foreach (var (key, value) in source) _annotations[key] = value;
+        this.annotations ??= new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var (key, value) in source) this.annotations[key] = value;
     }
 }

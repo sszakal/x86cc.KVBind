@@ -5,75 +5,6 @@ namespace x86cc.KVBind.UnitTests.Core;
 
 public class RebaseTests
 {
-    private static KVSnapshot Snapshot(params (string Path, string Value)[] data)
-    {
-        var snapshot = new KVSnapshot();
-        foreach (var (path, value) in data)
-            snapshot.Data[path] = value;
-        return snapshot;
-    }
-
-    // For tests that mix string and KVValue entries (e.g. $items as string[]).
-    private static KVSnapshot SnapshotV(params (string Path, KVValue Value)[] data)
-    {
-        var snapshot = new KVSnapshot();
-        foreach (var (path, value) in data)
-            snapshot.Data[path] = value;
-        return snapshot;
-    }
-
-    private static KVValue Items(params string[] ids) => KVValue.FromObject(ids);
-
-    private static string? Effective(KVOverlay overlay, string path) =>
-        overlay.TryGet(path, out var value) ? value?.Value as string : null;
-
-    private static string[] EffectiveItems(KVOverlay overlay, string path)
-    {
-        if (!overlay.TryGet(path, out var value) || value is null) return [];
-        return KVMerge.ExtractItemIds(value).OrderBy(x => x, StringComparer.Ordinal).ToArray();
-    }
-
-    // Test bridge: rebase against a target snapshot by deriving the single upstream commit that takes the
-    // overlay's base to that target. Lets existing snapshot-based setups drive the commit-based BeginRebase.
-    private static KVRebaseOutcome Rebase(KVOverlay overlay, KVSnapshot target)
-    {
-        var commit = DiffToCommit(overlay.Snapshot, target);
-        return overlay.BeginRebase(target, commit is null ? [] : [commit]);
-    }
-
-    private static KVCommit? DiffToCommit(KVSnapshot from, KVSnapshot to)
-    {
-        var commit = new KVCommit
-        {
-            CommitId = Guid.NewGuid(),
-            PreviousCommitId = from.LastCommitId,
-            Timestamp = DateTimeOffset.UtcNow,
-        };
-        foreach (var key in from.Data.Keys.Concat(to.Data.Keys).Distinct(StringComparer.Ordinal))
-        {
-            from.Data.TryGetValue(key, out var fv);
-            to.Data.TryGetValue(key, out var tv);
-            if (KVMerge.ValueEquals(fv, tv)) continue;
-            commit.Changes[key] = tv ?? KVValue.Tombstone;
-        }
-        return commit.Changes.Count == 0 ? null : commit;
-    }
-
-    // Builds a real commit with the given changes (string value, Items(...) array, or KVValue.Tombstone),
-    // used for tests that need genuine prefix tombstones rather than the per-leaf diff bridge.
-    private static KVCommit Commit(KVSnapshot baseSnapshot, params (string Path, KVValue Value)[] changes)
-    {
-        var commit = new KVCommit
-        {
-            CommitId = Guid.NewGuid(),
-            PreviousCommitId = baseSnapshot.LastCommitId,
-            Timestamp = DateTimeOffset.UtcNow,
-        };
-        foreach (var (path, value) in changes)
-            commit.Changes[path] = value;
-        return commit;
-    }
-
     // ── Incoming review (non-conflicting upstream changes) ───────────────────
 
     [Fact]
@@ -385,6 +316,7 @@ public class RebaseTests
 
         Effective(overlay, "Claimant/$type").Should().Be("PERSON");
         Effective(overlay, "Claimant/FullName").Should().Be("John");
+
         // The target's COMPANY field must not bleed through onto our PERSON node.
         overlay.IsRemoved("Claimant/CompanyName").Should().BeTrue();
         Effective(overlay, "Claimant/CompanyName").Should().BeNull();
@@ -459,7 +391,7 @@ public class RebaseTests
         incoming.RequiresResolution.Should().BeFalse();
 
         overlay.FinishRebase(); // accept the default
-        EffectiveItems(overlay, "Col/$items").Should().BeEquivalentTo(new[] { "a", "x", "y" });
+        EffectiveItems(overlay, "Col/$items").Should().BeEquivalentTo(["a", "x", "y"]);
         Effective(overlay, "Col/x/Name").Should().Be("item x");
         Effective(overlay, "Col/y/Name").Should().Be("item y");
     }
@@ -739,9 +671,11 @@ public class RebaseTests
         overlay.Set("Desc", "my draft");
 
         var c1 = Commit(v1, ("Title", "B"));
-        var afterC1 = v1.Clone(); afterC1.Apply(c1);
+        var afterC1 = v1.Clone();
+        afterC1.Apply(c1);
         var c2 = Commit(afterC1, ("Title", "A")); // undo
-        var target = afterC1.Clone(); target.Apply(c2);
+        var target = afterC1.Clone();
+        target.Apply(c2);
 
         var outcome = overlay.BeginRebase(target, [c1, c2]);
 
@@ -761,9 +695,11 @@ public class RebaseTests
         overlay.Set("Desc", "my draft");
 
         var c1 = Commit(v1, ("Title", "B"), ("Foo", "1"));
-        var afterC1 = v1.Clone(); afterC1.Apply(c1);
+        var afterC1 = v1.Clone();
+        afterC1.Apply(c1);
         var c2 = Commit(afterC1, ("Title", "A"));
-        var target = afterC1.Clone(); target.Apply(c2);
+        var target = afterC1.Clone();
+        target.Apply(c2);
 
         overlay.BeginRebase(target, [c1, c2]).Should().Be(KVRebaseOutcome.CanAutomerge);
         overlay.Conflicts.Should().ContainSingle();
@@ -783,7 +719,8 @@ public class RebaseTests
         overlay.Set("Claimant/FullName", "My edit");
 
         var c1 = Commit(v1, ("Claimant", KVValue.Tombstone)); // prefix tombstone, one entry
-        var target = v1.Clone(); target.Apply(c1);
+        var target = v1.Clone();
+        target.Apply(c1);
 
         overlay.BeginRebase(target, [c1]).Should().Be(KVRebaseOutcome.HasUnresolvedConflicts);
         overlay.Conflicts.Should().Contain(c =>
@@ -795,7 +732,8 @@ public class RebaseTests
     {
         var v1 = Snapshot(("Title", "A"));
         var c1 = Commit(v1, ("Title", "B"));
-        var afterC1 = v1.Clone(); afterC1.Apply(c1);
+        var afterC1 = v1.Clone();
+        afterC1.Apply(c1);
         var c2 = Commit(afterC1, ("Title", "A"));
 
         var theirs = KVOverlay.FromCommits(v1, [c1, c2]);
@@ -815,5 +753,75 @@ public class RebaseTests
         var act = () => Rebase(overlay, v2);
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*already in progress*");
+    }
+
+    private static KVSnapshot Snapshot(params (string Path, string Value)[] data)
+    {
+        var snapshot = new KVSnapshot();
+        foreach (var (path, value) in data)
+            snapshot.Data[path] = value;
+        return snapshot;
+    }
+
+    // For tests that mix string and KVValue entries (e.g. $items as string[]).
+    private static KVSnapshot SnapshotV(params (string Path, KVValue Value)[] data)
+    {
+        var snapshot = new KVSnapshot();
+        foreach (var (path, value) in data)
+            snapshot.Data[path] = value;
+        return snapshot;
+    }
+
+    private static KVValue Items(params string[] ids) => KVValue.FromObject(ids);
+
+    private static string? Effective(KVOverlay overlay, string path) =>
+        overlay.TryGet(path, out var value) ? value?.Value as string : null;
+
+    private static string[] EffectiveItems(KVOverlay overlay, string path)
+    {
+        if (!overlay.TryGet(path, out var value) || value is null) return [];
+        return KVMerge.ExtractItemIds(value).OrderBy(x => x, StringComparer.Ordinal).ToArray();
+    }
+
+    // Test bridge: rebase against a target snapshot by deriving the single upstream commit that takes the
+    // overlay's base to that target. Lets existing snapshot-based setups drive the commit-based BeginRebase.
+    private static KVRebaseOutcome Rebase(KVOverlay overlay, KVSnapshot target)
+    {
+        var commit = DiffToCommit(overlay.Snapshot, target);
+        return overlay.BeginRebase(target, commit is null ? [] : [commit]);
+    }
+
+    private static KVCommit? DiffToCommit(KVSnapshot from, KVSnapshot to)
+    {
+        var commit = new KVCommit
+        {
+            CommitId = Guid.NewGuid(),
+            PreviousCommitId = from.LastCommitId,
+            Timestamp = DateTimeOffset.UtcNow,
+        };
+        foreach (var key in from.Data.Keys.Concat(to.Data.Keys).Distinct(StringComparer.Ordinal))
+        {
+            from.Data.TryGetValue(key, out var fv);
+            to.Data.TryGetValue(key, out var tv);
+            if (KVMerge.ValueEquals(fv, tv)) continue;
+            commit.Changes[key] = tv ?? KVValue.Tombstone;
+        }
+
+        return commit.Changes.Count == 0 ? null : commit;
+    }
+
+    // Builds a real commit with the given changes (string value, Items(...) array, or KVValue.Tombstone),
+    // used for tests that need genuine prefix tombstones rather than the per-leaf diff bridge.
+    private static KVCommit Commit(KVSnapshot baseSnapshot, params (string Path, KVValue Value)[] changes)
+    {
+        var commit = new KVCommit
+        {
+            CommitId = Guid.NewGuid(),
+            PreviousCommitId = baseSnapshot.LastCommitId,
+            Timestamp = DateTimeOffset.UtcNow,
+        };
+        foreach (var (path, value) in changes)
+            commit.Changes[path] = value;
+        return commit;
     }
 }

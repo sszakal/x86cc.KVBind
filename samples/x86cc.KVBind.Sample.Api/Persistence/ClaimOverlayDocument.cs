@@ -24,7 +24,7 @@ public sealed class ClaimOverlayDocument
 
     public List<KVConflict> Conflicts { get; set; } = [];
 
-    public Guid? BaseCommitId => Snapshot.LastCommitId;
+    public Guid? BaseCommitId => this.Snapshot.LastCommitId;
 
     public static ClaimOverlayDocument Create(Guid claimId, string user, KVOverlay overlay)
     {
@@ -50,21 +50,22 @@ public sealed class ClaimOverlayDocument
 
     public KVOverlay ToOverlay()
     {
-        var overlay = KVOverlay.Create(Snapshot.Clone(), User);
+        var overlay = KVOverlay.Create(this.Snapshot.Clone(), this.User);
+
         // Defensive copy so overlay edits don't mutate this (Marten-tracked) document before UpdateFrom.
-        overlay.Changes = new KVDictionary(Changes);
-        if (IsRebasing && RebaseTarget is not null)
-            overlay.RestoreRebaseState(RebaseTarget.Clone(), Conflicts);
+        overlay.Changes = new KVDictionary(this.Changes);
+        if (this.IsRebasing && this.RebaseTarget is not null)
+            overlay.RestoreRebaseState(this.RebaseTarget.Clone(), this.Conflicts);
         return overlay;
     }
 
     public void UpdateFrom(KVOverlay overlay)
     {
-        Snapshot = overlay.Snapshot.Clone();
-        Changes = new KVDictionary(overlay.Changes);
-        IsRebasing = overlay.IsRebasing;
-        RebaseTarget = overlay.RebaseTarget?.Clone();
-        Conflicts = [.. overlay.Conflicts];
-        UpdatedAt = DateTimeOffset.UtcNow;
+        this.Snapshot = overlay.Snapshot.Clone();
+        this.Changes = new KVDictionary(overlay.Changes);
+        this.IsRebasing = overlay.IsRebasing;
+        this.RebaseTarget = overlay.RebaseTarget?.Clone();
+        this.Conflicts = [.. overlay.Conflicts];
+        this.UpdatedAt = DateTimeOffset.UtcNow;
     }
 }

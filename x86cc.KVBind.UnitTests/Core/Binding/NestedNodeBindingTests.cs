@@ -8,7 +8,7 @@ public class NestedNodeBindingTests : KVModelTestBase
 {
     public NestedNodeBindingTests()
     {
-        RegisterModelDefinition<NestedNodeRoot>(builder =>
+        this.RegisterModelDefinition<NestedNodeRoot>(builder =>
         {
             builder.NestedNode(x => x.Animal, nested =>
             {
@@ -21,7 +21,7 @@ public class NestedNodeBindingTests : KVModelTestBase
     [Fact]
     public void NestedNode_WhenTypeIsMissing_ReturnsNullButInitializesSlotModel()
     {
-        var root = CreateRoot<NestedNodeRoot>();
+        var root = this.CreateRoot<NestedNodeRoot>();
 
         root.Animal.Should().BeNull();
     }
@@ -29,7 +29,7 @@ public class NestedNodeBindingTests : KVModelTestBase
     [Fact]
     public void NestedNode_WhenInitialized_SetsTypeAndBindsActiveNode()
     {
-        var root = CreateRoot<NestedNodeRoot>();
+        var root = this.CreateRoot<NestedNodeRoot>();
 
         root.CommitSetup();
         root.Patch(KVPatchOperation.Init("/Animal", "DOG"));
@@ -44,7 +44,7 @@ public class NestedNodeBindingTests : KVModelTestBase
     [Fact]
     public void NestedNode_WhenInitialized_AllowsActiveNodeFieldEdits()
     {
-        var root = CreateRoot<NestedNodeRoot>();
+        var root = this.CreateRoot<NestedNodeRoot>();
 
         root.CommitSetup();
         root.Patch(KVPatchOperation.Init("/Animal", "DOG"));
@@ -57,7 +57,7 @@ public class NestedNodeBindingTests : KVModelTestBase
     [Fact]
     public void NestedNode_WhenFieldIsSetBeforeInitialization_Throws()
     {
-        var root = CreateRoot<NestedNodeRoot>();
+        var root = this.CreateRoot<NestedNodeRoot>();
 
         root.CommitSetup();
         var act = () => root.Patch(KVPatchOperation.Set("/Animal/DogName", "Rex"));
@@ -68,7 +68,7 @@ public class NestedNodeBindingTests : KVModelTestBase
     [Fact]
     public void NestedNode_WhenTypeIsReplaced_ClearsPreviousSubtreeAndClearDraftRestoresSnapshot()
     {
-        var root = CreateRoot<NestedNodeRoot>();
+        var root = this.CreateRoot<NestedNodeRoot>();
         root.CommitSetup();
         root.Patch(KVPatchOperation.Init("/Animal", "CAT"));
         root.Patch(KVPatchOperation.Set("/Animal/CatName", "Mittens"));
@@ -92,7 +92,7 @@ public class NestedNodeBindingTests : KVModelTestBase
     [Fact]
     public void NestedNode_WhenDropped_ClearsSlotAndClearDraftRestoresSnapshot()
     {
-        var root = CreateRoot<NestedNodeRoot>();
+        var root = this.CreateRoot<NestedNodeRoot>();
         root.CommitSetup();
         root.Patch(KVPatchOperation.Init("/Animal", "CAT"));
         root.Patch(KVPatchOperation.Set("/Animal/CatName", "Mittens"));
@@ -113,7 +113,7 @@ public class NestedNodeBindingTests : KVModelTestBase
     [Fact]
     public void NestedNode_WhenTypeIsReplaced_DetachesPreviousRuntimeReference()
     {
-        var root = CreateRoot<NestedNodeRoot>();
+        var root = this.CreateRoot<NestedNodeRoot>();
         root.CommitSetup();
         root.Patch(KVPatchOperation.Init("/Animal", "CAT"));
         var cat = root.Animal.Should().BeOfType<CatNestedNode>().Subject;
@@ -127,7 +127,7 @@ public class NestedNodeBindingTests : KVModelTestBase
     [Fact]
     public void NestedNode_WhenValidated_TraversesActiveNode()
     {
-        var root = CreateRoot<NestedNodeRoot>();
+        var root = this.CreateRoot<NestedNodeRoot>();
         root.CommitSetup();
         root.Patch(KVPatchOperation.Init("/Animal", "DOG"));
 
@@ -161,29 +161,6 @@ public partial class CatNestedNode : AnimalNestedNode
 
 public class RecursiveNestedNodeTests
 {
-    // SelfReference exposes the definition being built without locking the builder,
-    // enabling self-referential declarations. Activation is lazy so the circular
-    // reference in the definition graph is safe.
-    private static KVNodeDefinition BuildTreeNodeDefinition()
-    {
-        var nodeBuilder = new KVBindBuilder<BranchNode>();
-        nodeBuilder.Field(x => x.Value);
-        nodeBuilder.NestedNode(x => x.Child, child =>
-            child.Bind<BranchNode>("BRANCH", nodeBuilder.SelfReference));
-        return nodeBuilder.Build();
-    }
-
-    private static TreeRoot CreateRoot()
-    {
-        var nodeDef = BuildTreeNodeDefinition();
-        var rootBuilder = new KVBindBuilder<TreeRoot>();
-        rootBuilder.NestedNode(x => x.Root, root => root.Bind<BranchNode>("BRANCH", nodeDef));
-        var rootDef = rootBuilder.Build();
-
-        var model = new KVModelRoot(KVOverlay.Create(new KVSnapshot(), "test"));
-        return KVRootNode.Create<TreeRoot>(model, rootDef);
-    }
-
     [Fact]
     public void RecursiveGraph_WhenRootINITed_Level1ExistsAndLevel2IsNull()
     {
@@ -351,6 +328,29 @@ public class RecursiveNestedNodeTests
         l1.Value.Should().Be("L1");
         l2.Value.Should().Be("L2");
         l3.Value.Should().Be("L3");
+    }
+
+    // SelfReference exposes the definition being built without locking the builder,
+    // enabling self-referential declarations. Activation is lazy so the circular
+    // reference in the definition graph is safe.
+    private static KVNodeDefinition BuildTreeNodeDefinition()
+    {
+        var nodeBuilder = new KVBindBuilder<BranchNode>();
+        nodeBuilder.Field(x => x.Value);
+        nodeBuilder.NestedNode(x => x.Child, child =>
+            child.Bind<BranchNode>("BRANCH", nodeBuilder.SelfReference));
+        return nodeBuilder.Build();
+    }
+
+    private static TreeRoot CreateRoot()
+    {
+        var nodeDef = BuildTreeNodeDefinition();
+        var rootBuilder = new KVBindBuilder<TreeRoot>();
+        rootBuilder.NestedNode(x => x.Root, root => root.Bind<BranchNode>("BRANCH", nodeDef));
+        var rootDef = rootBuilder.Build();
+
+        var model = new KVModelRoot(KVOverlay.Create(new KVSnapshot(), "test"));
+        return KVRootNode.Create<TreeRoot>(model, rootDef);
     }
 }
 

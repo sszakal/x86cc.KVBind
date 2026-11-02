@@ -79,10 +79,10 @@ public sealed class KVPatchOperation
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ValidateValue(operation, value);
 
-        Operation = operationType;
-        OperationCode = operation.ToUpperInvariant();
-        Path = path;
-        Value = value;
+        this.Operation = operationType;
+        this.OperationCode = operation.ToUpperInvariant();
+        this.Path = path;
+        this.Value = value;
     }
 
     public KVPatchOperationType? Operation { get; }
@@ -125,6 +125,7 @@ public sealed class KVPatchOperation
                 {
                     throw new InvalidOperationException($"Patch operation '{operation}' does not accept values.");
                 }
+
                 break;
             case KVPatchOperations.Add:
                 if (value is not KVAddPatchPayload payload)
@@ -136,18 +137,21 @@ public sealed class KVPatchOperation
                 {
                     throw new InvalidOperationException("ADD patch operations require a non-empty item id.");
                 }
+
                 break;
             case KVPatchOperations.Move:
                 if (value is not int and not KVMovePatchPayload)
                 {
                     throw new InvalidOperationException("MOVE patch operations require an integer target index or KVMovePatchPayload value.");
                 }
+
                 break;
             case KVPatchOperations.Init:
                 if (value is not string token || string.IsNullOrWhiteSpace(token))
                 {
                     throw new InvalidOperationException("INIT patch operations require a non-empty nested-node type token value.");
                 }
+
                 break;
         }
     }

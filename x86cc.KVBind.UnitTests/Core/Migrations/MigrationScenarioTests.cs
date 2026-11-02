@@ -21,31 +21,8 @@ namespace x86cc.KVBind.UnitTests.Core.Migrations;
 public class MigrationScenarioTests
 {
     private const string Cat = "CAT";
+
     private const string Dog = "DOG";
-
-    // A v1 shelter: kennel k1 holds a Cat, kennel k2 holds a Dog.
-    private static KVSnapshot ShelterV1()
-    {
-        var snapshot = new KVSnapshot { SchemaVersion = 1, LastCommitId = Guid.NewGuid() };
-        snapshot.Data["Owner"] = "Acme";
-        snapshot.Data["LegacyFlag"] = "obsolete";
-        snapshot.Data["Contact/Phone"] = "555-0100";
-
-        snapshot.Data["Kennels/$items"] = KVValue.FromObject(new[] { "k1", "k2" });
-
-        snapshot.Data["Kennels/k1/Code"] = "K1";
-        snapshot.Data["Kennels/k1/Occupant/$type"] = Cat;
-        snapshot.Data["Kennels/k1/Occupant/Name"] = "Felix";
-        snapshot.Data["Kennels/k1/Occupant/Whiskers"] = KVValue.FromObject(12);
-
-        snapshot.Data["Kennels/k2/Code"] = "K2";
-        snapshot.Data["Kennels/k2/Occupant/$type"] = Dog;
-        snapshot.Data["Kennels/k2/Occupant/Name"] = "Rex";
-        snapshot.Data["Kennels/k2/Occupant/Breed"] = "lab";
-        return snapshot;
-    }
-
-    private static object? V(KVSnapshot s, string path) => s.Data.TryGetValue(path, out var v) ? v?.Value : null;
 
     // ── Scenario: field removed ───────────────────────────────────────────────
     [Fact]
@@ -175,8 +152,16 @@ public class MigrationScenarioTests
                 item.Field(x => x.Code);
                 item.NestedNode(x => x.Occupant, nested =>
                 {
-                    nested.Bind<CatNode>(Cat, cat => { cat.Field(x => x.Name); cat.Field(x => x.Whiskers); });
-                    nested.Bind<DogNode>(Dog, dog => { dog.Field(x => x.Name); dog.Field(x => x.Breed); });
+                    nested.Bind<CatNode>(Cat, cat =>
+                    {
+                        cat.Field(x => x.Name);
+                        cat.Field(x => x.Whiskers);
+                    });
+                    nested.Bind<DogNode>(Dog, dog =>
+                    {
+                        dog.Field(x => x.Name);
+                        dog.Field(x => x.Breed);
+                    });
                 });
             }));
 
@@ -184,7 +169,7 @@ public class MigrationScenarioTests
             KVTarget.Root.Seg("Kennels").AnyItem().Seg("Occupant").OfType(Cat),
             toType: Dog,
             reshape: r => r
-                .Drop("Whiskers")               // Cat-only field removed
+                .Drop("Whiskers") // Cat-only field removed
                 .Set("Breed", _ => "unknown")));  // Dog-only field added; Name (common) left untouched
 
         var definition = builder.Build();
@@ -222,10 +207,35 @@ public class MigrationScenarioTests
         commits.Select(c => c.MigrationToVersion).Should().Equal(2, 3, 4);
         s.SchemaVersion.Should().Be(4);
         s.Data.Should().NotContainKey("LegacyFlag");
+
         // v4 backfilled onto the v3-renamed path — proves the chain sees each prior migration's output.
         V(s, "Kennels/k1/Pet/Vaccinated").Should().Be(true);
         V(s, "Kennels/k1/Pet/Name").Should().Be("Felix");
     }
+
+    // A v1 shelter: kennel k1 holds a Cat, kennel k2 holds a Dog.
+    private static KVSnapshot ShelterV1()
+    {
+        var snapshot = new KVSnapshot { SchemaVersion = 1, LastCommitId = Guid.NewGuid() };
+        snapshot.Data["Owner"] = "Acme";
+        snapshot.Data["LegacyFlag"] = "obsolete";
+        snapshot.Data["Contact/Phone"] = "555-0100";
+
+        snapshot.Data["Kennels/$items"] = KVValue.FromObject(new[] { "k1", "k2" });
+
+        snapshot.Data["Kennels/k1/Code"] = "K1";
+        snapshot.Data["Kennels/k1/Occupant/$type"] = Cat;
+        snapshot.Data["Kennels/k1/Occupant/Name"] = "Felix";
+        snapshot.Data["Kennels/k1/Occupant/Whiskers"] = KVValue.FromObject(12);
+
+        snapshot.Data["Kennels/k2/Code"] = "K2";
+        snapshot.Data["Kennels/k2/Occupant/$type"] = Dog;
+        snapshot.Data["Kennels/k2/Occupant/Name"] = "Rex";
+        snapshot.Data["Kennels/k2/Occupant/Breed"] = "lab";
+        return snapshot;
+    }
+
+    private static object? V(KVSnapshot s, string path) => s.Data.TryGetValue(path, out var v) ? v?.Value : null;
 }
 
 // ── Test model (manual accessors — no source generator) ───────────────────────────────────────────
@@ -235,8 +245,8 @@ public sealed class ShelterRoot : KVRootNode
 
     public string? Owner
     {
-        get => GetField<string?>(nameof(Owner));
-        set => SetField(nameof(Owner), value);
+        get => this.GetField<string?>(nameof(this.Owner));
+        set => this.SetField(nameof(this.Owner), value);
     }
 }
 
@@ -244,14 +254,14 @@ public sealed class KennelItem : KVCollectionItemNode
 {
     public string? Code
     {
-        get => GetField<string?>(nameof(Code));
-        set => SetField(nameof(Code), value);
+        get => this.GetField<string?>(nameof(this.Code));
+        set => this.SetField(nameof(this.Code), value);
     }
 
     public AnimalNode? Occupant
     {
-        get => GetNestedNode<AnimalNode>(nameof(Occupant));
-        set => SetNestedNode(nameof(Occupant), value);
+        get => this.GetNestedNode<AnimalNode>(nameof(this.Occupant));
+        set => this.SetNestedNode(nameof(this.Occupant), value);
     }
 }
 
@@ -259,8 +269,8 @@ public abstract class AnimalNode : KVNestedNode
 {
     public string? Name
     {
-        get => GetField<string?>(nameof(Name));
-        set => SetField(nameof(Name), value);
+        get => this.GetField<string?>(nameof(this.Name));
+        set => this.SetField(nameof(this.Name), value);
     }
 }
 
@@ -268,8 +278,8 @@ public sealed class CatNode : AnimalNode
 {
     public int Whiskers
     {
-        get => GetField<int>(nameof(Whiskers));
-        set => SetField(nameof(Whiskers), value);
+        get => this.GetField<int>(nameof(this.Whiskers));
+        set => this.SetField(nameof(this.Whiskers), value);
     }
 }
 
@@ -277,7 +287,7 @@ public sealed class DogNode : AnimalNode
 {
     public string? Breed
     {
-        get => GetField<string?>(nameof(Breed));
-        set => SetField(nameof(Breed), value);
+        get => this.GetField<string?>(nameof(this.Breed));
+        set => this.SetField(nameof(this.Breed), value);
     }
 }

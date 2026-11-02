@@ -6,9 +6,9 @@ namespace x86cc.KVBind.Core;
 
 public class KVFieldOptionsBuilder<TValue>
 {
-    private readonly List<KVExplicitAllowedValue> _explicitAllowedValues = [];
-    private readonly List<IKVFieldValidationRuleFactory<TValue>> _validationFactories = [];
-    private readonly Dictionary<string, object?> _annotations = new(StringComparer.Ordinal);
+    private readonly List<KVExplicitAllowedValue> explicitAllowedValues = [];
+    private readonly List<IKVFieldValidationRuleFactory<TValue>> validationFactories = [];
+    private readonly Dictionary<string, object?> annotations = new(StringComparer.Ordinal);
 
     internal KVAllowedValuesDefinition? AllowedValuesDefinition { get; private set; }
 
@@ -16,7 +16,7 @@ public class KVFieldOptionsBuilder<TValue>
 
     internal string? DisplayNameValue { get; private set; }
 
-    internal IReadOnlyDictionary<string, object?> Annotations => _annotations;
+    internal IReadOnlyDictionary<string, object?> Annotations => this.annotations;
 
     internal bool HasDefault { get; private set; }
 
@@ -26,7 +26,7 @@ public class KVFieldOptionsBuilder<TValue>
 
     public KVFieldOptionsBuilder<TValue> Required()
     {
-        IsRequired = true;
+        this.IsRequired = true;
         return this;
     }
 
@@ -34,41 +34,41 @@ public class KVFieldOptionsBuilder<TValue>
     // is bound with a parent snapshot. Editable on a parentless master.
     public KVFieldOptionsBuilder<TValue> Inherited()
     {
-        IsInherited = true;
+        this.IsInherited = true;
         return this;
     }
 
     // Create-time default, written into the overlay by ApplyDefaults when the field is unset.
     public KVFieldOptionsBuilder<TValue> Default(TValue value)
     {
-        HasDefault = true;
-        DefaultValue = value;
+        this.HasDefault = true;
+        this.DefaultValue = value;
         return this;
     }
 
     public KVFieldOptionsBuilder<TValue> DisplayName(string displayName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
-        DisplayNameValue = displayName;
+        this.DisplayNameValue = displayName;
         return this;
     }
 
     public KVFieldOptionsBuilder<TValue> Annotate(string key, object? value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
-        _annotations[key] = value;
+        this.annotations[key] = value;
         return this;
     }
 
     public KVFieldOptionsBuilder<TValue> AllowedValues(params TValue[] values)
     {
-        return AllowedValues((IEnumerable<TValue>)values);
+        return this.AllowedValues((IEnumerable<TValue>)values);
     }
 
     public KVFieldOptionsBuilder<TValue> AllowedValues(IEnumerable<TValue> values)
     {
         ArgumentNullException.ThrowIfNull(values);
-        AllowedValuesDefinition = KVAllowedValuesDefinition.Create(values.ToArray());
+        this.AllowedValuesDefinition = KVAllowedValuesDefinition.Create(values.ToArray());
         return this;
     }
 
@@ -81,7 +81,7 @@ public class KVFieldOptionsBuilder<TValue>
         ArgumentNullException.ThrowIfNull(values);
         ArgumentNullException.ThrowIfNull(tokenSelector);
 
-        AllowedValuesDefinition = KVAllowedValuesDefinition.Create(values.ToArray(), tokenSelector, labelSelector);
+        this.AllowedValuesDefinition = KVAllowedValuesDefinition.Create(values.ToArray(), tokenSelector, labelSelector);
         return this;
     }
 
@@ -102,7 +102,7 @@ public class KVFieldOptionsBuilder<TValue>
             throw new ArgumentException("Allowed value label is required.", nameof(label));
         }
 
-        AddExplicitAllowedValue(new KVExplicitAllowedValue(id, label, value, Template: null, Placeholders: null));
+        this.AddExplicitAllowedValue(new KVExplicitAllowedValue(id, label, value, Template: null, Placeholders: null));
         return this;
     }
 
@@ -131,7 +131,7 @@ public class KVFieldOptionsBuilder<TValue>
 
         var component = new KVAllowedValueComponentBuilder();
         configure(component);
-        AddExplicitAllowedValue(new KVExplicitAllowedValue(id, label, value, component.TemplateValue, component.BuildPlaceholders()));
+        this.AddExplicitAllowedValue(new KVExplicitAllowedValue(id, label, value, component.TemplateValue, component.BuildPlaceholders()));
         return this;
     }
 
@@ -144,7 +144,7 @@ public class KVFieldOptionsBuilder<TValue>
         ArgumentNullException.ThrowIfNull(values);
         ArgumentNullException.ThrowIfNull(tokenSelector);
 
-        AllowedValuesDefinition = KVAllowedValuesDefinition.CreateForElements(values.ToArray(), tokenSelector, labelSelector);
+        this.AllowedValuesDefinition = KVAllowedValuesDefinition.CreateForElements(values.ToArray(), tokenSelector, labelSelector);
         return this;
     }
 
@@ -165,7 +165,7 @@ public class KVFieldOptionsBuilder<TValue>
             throw new ArgumentException("Allowed value label is required.", nameof(label));
         }
 
-        AddExplicitAllowedElementValue<TElement>(new KVExplicitAllowedValue(id, label, value, Template: null, Placeholders: null));
+        this.AddExplicitAllowedElementValue<TElement>(new KVExplicitAllowedValue(id, label, value, Template: null, Placeholders: null));
         return this;
     }
 
@@ -194,7 +194,7 @@ public class KVFieldOptionsBuilder<TValue>
 
         var component = new KVAllowedValueComponentBuilder();
         configure(component);
-        AddExplicitAllowedElementValue<TElement>(new KVExplicitAllowedValue(id, label, value, component.TemplateValue, component.BuildPlaceholders()));
+        this.AddExplicitAllowedElementValue<TElement>(new KVExplicitAllowedValue(id, label, value, component.TemplateValue, component.BuildPlaceholders()));
         return this;
     }
 
@@ -204,19 +204,19 @@ public class KVFieldOptionsBuilder<TValue>
 
         var builder = new KVFieldValidationProfileBuilder<TValue>();
         configure(builder);
-        AddValidationFactory(builder);
+        this.AddValidationFactory(builder);
         return this;
     }
 
     internal IReadOnlyList<KVCompiledValidationRule> BuildValidationRules()
     {
-        if (_validationFactories.Count == 0)
+        if (this.validationFactories.Count == 0)
         {
             return [];
         }
 
         var compiled = new List<KVCompiledValidationRule>();
-        foreach (var factory in _validationFactories)
+        foreach (var factory in this.validationFactories)
         {
             compiled.AddRange(factory.Build());
         }
@@ -226,28 +226,28 @@ public class KVFieldOptionsBuilder<TValue>
 
     internal void AddValidationFactory(IKVFieldValidationRuleFactory<TValue> factory)
     {
-        _validationFactories.Add(factory);
+        this.validationFactories.Add(factory);
     }
 
     private void AddExplicitAllowedValue(KVExplicitAllowedValue value)
     {
-        if (_explicitAllowedValues.Any(existing => string.Equals(existing.Id, value.Id, StringComparison.Ordinal)))
+        if (this.explicitAllowedValues.Any(existing => string.Equals(existing.Id, value.Id, StringComparison.Ordinal)))
         {
             return;
         }
 
-        _explicitAllowedValues.Add(value);
-        AllowedValuesDefinition = KVAllowedValuesDefinition.CreateExplicit(_explicitAllowedValues.ToArray());
+        this.explicitAllowedValues.Add(value);
+        this.AllowedValuesDefinition = KVAllowedValuesDefinition.CreateExplicit(this.explicitAllowedValues.ToArray());
     }
 
     private void AddExplicitAllowedElementValue<TElement>(KVExplicitAllowedValue value)
     {
-        if (_explicitAllowedValues.Any(existing => string.Equals(existing.Id, value.Id, StringComparison.Ordinal)))
+        if (this.explicitAllowedValues.Any(existing => string.Equals(existing.Id, value.Id, StringComparison.Ordinal)))
         {
             return;
         }
 
-        _explicitAllowedValues.Add(value);
-        AllowedValuesDefinition = KVAllowedValuesDefinition.CreateExplicitForElements<TElement>(_explicitAllowedValues.ToArray());
+        this.explicitAllowedValues.Add(value);
+        this.AllowedValuesDefinition = KVAllowedValuesDefinition.CreateExplicitForElements<TElement>(this.explicitAllowedValues.ToArray());
     }
 }

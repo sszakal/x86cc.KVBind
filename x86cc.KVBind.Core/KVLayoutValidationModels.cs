@@ -20,19 +20,18 @@ public sealed class KVLayoutValidationResult
 {
     public KVLayoutValidationResult(IReadOnlyList<KVLayoutDiagnostic> diagnostics)
     {
-        Diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
+        this.Diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
     }
 
     public IReadOnlyList<KVLayoutDiagnostic> Diagnostics { get; }
 
-    public bool IsValid => Diagnostics.All(static diagnostic => diagnostic.Severity != KVLayoutDiagnosticSeverity.Error);
+    public bool IsValid => this.Diagnostics.All(static diagnostic => diagnostic.Severity != KVLayoutDiagnosticSeverity.Error);
 
-    public IReadOnlyList<KVLayoutDiagnostic> Errors => Diagnostics
+    public IReadOnlyList<KVLayoutDiagnostic> Errors => this.Diagnostics
         .Where(static diagnostic => diagnostic.Severity == KVLayoutDiagnosticSeverity.Error)
         .ToArray();
 
-    public IReadOnlyList<KVLayoutDiagnostic> Warnings => Diagnostics
+    public IReadOnlyList<KVLayoutDiagnostic> Warnings => this.Diagnostics
         .Where(static diagnostic => diagnostic.Severity == KVLayoutDiagnosticSeverity.Warning)
         .ToArray();
-    
 }

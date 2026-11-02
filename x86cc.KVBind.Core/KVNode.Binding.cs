@@ -7,26 +7,30 @@ public abstract partial class KVNode
 {
     internal void BindRuntime(KVModel model, KVNodeDefinition definition, KVNodeBase? parent = null)
     {
-        Bind(model, definition, parent);
+        this.Bind(model, definition, parent);
     }
+
+    internal void RebindCurrentContextForPatch() => this.Bind(this.Model, this.Definition, this.Parent);
 
     protected virtual void Bind(KVModel model, KVNodeDefinition definition, KVNodeBase? parent = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(definition);
 
-        if (!_isDetached && IsBound && (!ReferenceEquals(Parent, parent) || !ReferenceEquals(Definition, definition)))
+        if (!this.isDetached && this.IsBound && (!ReferenceEquals(this.Parent, parent) || !ReferenceEquals(this.Definition, definition)))
+        {
             throw new InvalidOperationException(
-                $"'{GetType().Name}' is already bound to a different context. " +
+                $"'{this.GetType().Name}' is already bound to a different context. " +
                 "Each KVNode instance is tied to exactly one parent context.");
+        }
 
-        DetachActiveNestedNodes();
-        _nestedSlotModels?.Clear();
+        this.DetachActiveNestedNodes();
+        this.nestedSlotModels?.Clear();
 
-        _isDetached = false;
-        Parent = parent;
-        Model = model;
-        Definition = definition;
+        this.isDetached = false;
+        this.Parent = parent;
+        this.Model = model;
+        this.Definition = definition;
 
         foreach (var nodeDefinition in definition.Nodes)
         {
@@ -51,42 +55,45 @@ public abstract partial class KVNode
         {
             if (string.IsNullOrWhiteSpace(nestedNodeDefinition.SubSegmentPath))
                 throw new InvalidOperationException("Nested node definitions must define SubSegmentPath.");
-            (_nestedSlotModels ??= new(StringComparer.Ordinal))[nestedNodeDefinition.SubSegmentPath] = model.CreateChildModel(nestedNodeDefinition.SubSegmentPath);
+            (this.nestedSlotModels ??= new(StringComparer.Ordinal))[nestedNodeDefinition.SubSegmentPath] = model.CreateChildModel(nestedNodeDefinition.SubSegmentPath);
         }
     }
 
-    internal void RebindCurrentContextForPatch() => Bind(Model, Definition, Parent);
-
     private void EnsureBound()
     {
-        if (_isDetached)
+        if (this.isDetached)
+        {
             throw new InvalidOperationException(
-                $"'{GetType().Name}' has been detached because its parent was rebound " +
+                $"'{this.GetType().Name}' has been detached because its parent was rebound " +
                 "(e.g., after Clear() or Discard()). " +
                 "Re-read this node from its parent property to get the current bound instance.");
-        if (!IsBound)
+        }
+
+        if (!this.IsBound)
+        {
             throw new InvalidOperationException(
-                $"'{GetType().Name}' is not bound. " +
+                $"'{this.GetType().Name}' is not bound. " +
                 "Do not instantiate KVNode subclasses directly with 'new'. " +
                 "Use KVRootNode.Create<T>() for root nodes or collection.Create() for items.");
+        }
     }
 
     private void DetachRuntime()
     {
-        if (_isDetached) return;
-        DetachActiveNestedNodes();
-        _nestedSlotModels?.Clear();
-        _isDetached = true;
-        Parent = null;
-        Model = null!;
-        Definition = null!;
+        if (this.isDetached) return;
+        this.DetachActiveNestedNodes();
+        this.nestedSlotModels?.Clear();
+        this.isDetached = true;
+        this.Parent = null;
+        this.Model = null!;
+        this.Definition = null!;
     }
 
     private void DetachActiveNestedNodes()
     {
-        if (_activeNestedNodes is null) return;
-        foreach (var activeNode in _activeNestedNodes.Values)
+        if (this.activeNestedNodes is null) return;
+        foreach (var activeNode in this.activeNestedNodes.Values)
             activeNode.Node.DetachRuntime();
-        _activeNestedNodes.Clear();
+        this.activeNestedNodes.Clear();
     }
 }

@@ -3,11 +3,17 @@ using x86cc.KVBind.Core;
 
 namespace x86cc.KVBind.UnitTests.Core;
 
+public enum ValidationMode
+{
+    Quick,
+    Full
+}
+
 public class ProfileAndCollectionValidationTests : KVModelTestBase
 {
     public ProfileAndCollectionValidationTests()
     {
-        RegisterModelDefinition<ProfileValidationModel>(builder =>
+        this.RegisterModelDefinition<ProfileValidationModel>(builder =>
         {
             builder.Field(x => x.Status);
             builder.Field(x => x.Name, options =>
@@ -17,7 +23,7 @@ public class ProfileAndCollectionValidationTests : KVModelTestBase
             });
         });
 
-        RegisterModelDefinition<CollectionAdvancedValidationModel>(builder =>
+        this.RegisterModelDefinition<CollectionAdvancedValidationModel>(builder =>
         {
             builder.Field(x => x.Mode);
             builder.Collection(x => x.Items, options =>
@@ -29,7 +35,7 @@ public class ProfileAndCollectionValidationTests : KVModelTestBase
             });
         });
 
-        RegisterModelDefinition<CollectionBadAggregateValidationModel>(builder =>
+        this.RegisterModelDefinition<CollectionBadAggregateValidationModel>(builder =>
         {
             builder.Field(x => x.Mode);
             builder.Collection(x => x.Items, options =>
@@ -44,7 +50,7 @@ public class ProfileAndCollectionValidationTests : KVModelTestBase
     [Fact]
     public void ProfileValidation_WhenProfileMatches_EvaluatesFieldProfileRules()
     {
-        var model = CreateRoot<ProfileValidationModel>();
+        var model = this.CreateRoot<ProfileValidationModel>();
         model.Status = ValidationMode.Full;
         model.Name = "toolong";
 
@@ -57,7 +63,7 @@ public class ProfileAndCollectionValidationTests : KVModelTestBase
     [Fact]
     public void ProfileValidation_WhenProfileDoesNotMatch_SkipsFieldProfileRules()
     {
-        var model = CreateRoot<ProfileValidationModel>();
+        var model = this.CreateRoot<ProfileValidationModel>();
         model.Status = ValidationMode.Quick;
         model.Name = string.Empty;
 
@@ -70,7 +76,7 @@ public class ProfileAndCollectionValidationTests : KVModelTestBase
     [Fact]
     public void CollectionValidation_WhenCollectionRulesRun_ReturnsMaxCountError()
     {
-        var model = CreateRoot<CollectionAdvancedValidationModel>();
+        var model = this.CreateRoot<CollectionAdvancedValidationModel>();
         model.Mode = ValidationMode.Full;
 
         var a = model.Items.Create();
@@ -88,7 +94,7 @@ public class ProfileAndCollectionValidationTests : KVModelTestBase
     [Fact]
     public void CollectionValidation_WhenAggregateFieldIsNotNumeric_CurrentRuntimeDoesNotThrow()
     {
-        var model = CreateRoot<CollectionBadAggregateValidationModel>();
+        var model = this.CreateRoot<CollectionBadAggregateValidationModel>();
         model.Mode = ValidationMode.Full;
         var item = model.Items.Create();
         item.AmountText = "abc";
@@ -103,7 +109,7 @@ public class ProfileAndCollectionValidationTests : KVModelTestBase
     [Fact]
     public void PatchValidation_WhenCollectionItemFieldChanges_ReturnsCollectionAggregateError()
     {
-        var model = CreateRoot<CollectionAdvancedValidationModel>();
+        var model = this.CreateRoot<CollectionAdvancedValidationModel>();
         model.Mode = ValidationMode.Full;
         var item = model.Items.Create();
         item.Amount = 110m;
@@ -117,12 +123,6 @@ public class ProfileAndCollectionValidationTests : KVModelTestBase
     }
 }
 
-public enum ValidationMode
-{
-    Quick,
-    Full
-}
-
 public partial class ProfileValidationModel : KVRootNode
 {
     [KVBind("Status")]
@@ -133,7 +133,7 @@ public partial class ProfileValidationModel : KVRootNode
 
     protected override KVValidationProfile GetValidationProfile()
     {
-        return Status == ValidationMode.Full ? FullValidationProfile.Instance : QuickValidationProfile.Instance;
+        return this.Status == ValidationMode.Full ? FullValidationProfile.Instance : QuickValidationProfile.Instance;
     }
 }
 
@@ -147,7 +147,7 @@ public partial class CollectionAdvancedValidationModel : KVRootNode
 
     protected override KVValidationProfile GetValidationProfile()
     {
-        return Mode == ValidationMode.Full ? FullValidationProfile.Instance : QuickValidationProfile.Instance;
+        return this.Mode == ValidationMode.Full ? FullValidationProfile.Instance : QuickValidationProfile.Instance;
     }
 }
 
@@ -167,7 +167,7 @@ public partial class CollectionBadAggregateValidationModel : KVRootNode
 
     protected override KVValidationProfile GetValidationProfile()
     {
-        return Mode == ValidationMode.Full ? FullValidationProfile.Instance : QuickValidationProfile.Instance;
+        return this.Mode == ValidationMode.Full ? FullValidationProfile.Instance : QuickValidationProfile.Instance;
     }
 }
 
@@ -179,18 +179,18 @@ public partial class CollectionBadAggregateValidationItem : KVCollectionItemNode
 
 public sealed record QuickValidationProfile : KVValidationProfile
 {
-    public static QuickValidationProfile Instance { get; } = new();
-
     private QuickValidationProfile()
     {
     }
+
+    public static QuickValidationProfile Instance { get; } = new();
 }
 
 public sealed record FullValidationProfile : KVValidationProfile
 {
-    public static FullValidationProfile Instance { get; } = new();
-
     private FullValidationProfile()
     {
     }
+
+    public static FullValidationProfile Instance { get; } = new();
 }

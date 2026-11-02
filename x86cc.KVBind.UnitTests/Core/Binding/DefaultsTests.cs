@@ -7,7 +7,7 @@ public class DefaultsTests : KVModelTestBase
 {
     public DefaultsTests()
     {
-        RegisterModelDefinition<DefaultsRoot>(builder =>
+        this.RegisterModelDefinition<DefaultsRoot>(builder =>
         {
             builder.Field(x => x.Status, f => f.Default("draft"));
             builder.Field(x => x.Active, f => f.Default(true));
@@ -31,17 +31,10 @@ public class DefaultsTests : KVModelTestBase
         });
     }
 
-    private DefaultsRoot CreateWithDefaults()
-    {
-        var root = CreateRoot<DefaultsRoot>();
-        root.ApplyDefaults();
-        return root;
-    }
-
     [Fact]
     public void ApplyDefaults_FillsUnsetScalarFields()
     {
-        var root = CreateWithDefaults();
+        var root = this.CreateWithDefaults();
 
         root.Status.Should().Be("draft");
         root.Active.Should().BeTrue();
@@ -50,7 +43,7 @@ public class DefaultsTests : KVModelTestBase
     [Fact]
     public void ApplyDefaults_LeavesUndeclaredDefaultFieldUnset()
     {
-        var root = CreateWithDefaults();
+        var root = this.CreateWithDefaults();
 
         root.NoDefault.Should().BeNull();
     }
@@ -58,7 +51,7 @@ public class DefaultsTests : KVModelTestBase
     [Fact]
     public void ApplyDefaults_DoesNotOverwriteAnAlreadySetValue()
     {
-        var root = CreateRoot<DefaultsRoot>();
+        var root = this.CreateRoot<DefaultsRoot>();
         root.Status = "approved";
 
         root.ApplyDefaults();
@@ -69,7 +62,7 @@ public class DefaultsTests : KVModelTestBase
     [Fact]
     public void ApplyDefaults_RecursesIntoFieldGroups()
     {
-        var root = CreateWithDefaults();
+        var root = this.CreateWithDefaults();
 
         root.Settings.Theme.Should().Be("dark");
     }
@@ -77,7 +70,7 @@ public class DefaultsTests : KVModelTestBase
     [Fact]
     public void ApplyDefaults_SeedsEmptyCollectionAndDefaultsSeededItemFields()
     {
-        var root = CreateWithDefaults();
+        var root = this.CreateWithDefaults();
 
         var line = root.Lines.Should().ContainSingle().Subject;
         line.Label.Should().Be("untitled");
@@ -86,7 +79,7 @@ public class DefaultsTests : KVModelTestBase
     [Fact]
     public void ApplyDefaults_DoesNotSeedANonEmptyCollection()
     {
-        var root = CreateRoot<DefaultsRoot>();
+        var root = this.CreateRoot<DefaultsRoot>();
         var existing = root.Lines.Create();
         existing.Label = "kept";
 
@@ -99,7 +92,7 @@ public class DefaultsTests : KVModelTestBase
     [Fact]
     public void ApplyDefaults_InitializesNestedNodeToDefaultTypeAndAppliesItsFieldDefaults()
     {
-        var root = CreateWithDefaults();
+        var root = this.CreateWithDefaults();
 
         var person = root.Owner.Should().BeOfType<PersonOwner>().Subject;
         person.Name.Should().Be("anonymous");
@@ -108,12 +101,19 @@ public class DefaultsTests : KVModelTestBase
     [Fact]
     public void ApplyDefaults_LeavesAnAlreadyInitializedNestedNodeUntouched()
     {
-        var root = CreateRoot<DefaultsRoot>();
+        var root = this.CreateRoot<DefaultsRoot>();
         root.Patch(KVPatchOperation.Init("/Owner", "CompanyOwner"));
 
         root.ApplyDefaults();
 
         root.Owner.Should().BeOfType<CompanyOwner>();
+    }
+
+    private DefaultsRoot CreateWithDefaults()
+    {
+        var root = this.CreateRoot<DefaultsRoot>();
+        root.ApplyDefaults();
+        return root;
     }
 }
 

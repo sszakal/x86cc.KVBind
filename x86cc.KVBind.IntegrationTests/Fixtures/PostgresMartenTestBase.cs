@@ -7,7 +7,7 @@ namespace x86cc.KVBind.IntegrationTests.Fixtures;
 
 public abstract class PostgresMartenTestBase : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:17.6")
+    private readonly PostgreSqlContainer postgres = new PostgreSqlBuilder("postgres:17.6")
         .WithDatabase("kvbind_integration")
         .WithUsername("postgres")
         .WithPassword("postgres")
@@ -17,11 +17,12 @@ public abstract class PostgresMartenTestBase : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        await _postgres.StartAsync();
+        await this.postgres.StartAsync();
 
-        Store = DocumentStore.For(options =>
+        this.Store = DocumentStore.For(options =>
         {
-            options.Connection(_postgres.GetConnectionString());
+            options.Connection(this.postgres.GetConnectionString());
+
             // Match the API: pin STJ and the enum/casing conventions so tests serialize as production does.
             options.UseSystemTextJsonForSerialization(EnumStorage.AsString, Casing.CamelCase);
             options.Schema.For<IntegrationSnapshotDocument>().Identity(x => x.Id);
@@ -32,7 +33,7 @@ public abstract class PostgresMartenTestBase : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        Store.Dispose();
-        await _postgres.DisposeAsync();
+        this.Store.Dispose();
+        await this.postgres.DisposeAsync();
     }
 }

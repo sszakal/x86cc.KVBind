@@ -7,13 +7,22 @@ using System.Text.Json;
 
 namespace x86cc.KVBind.Core;
 
+internal readonly record struct KVAllowedValuePlaceholder(string Name, string Label, Type ValueType, bool IsRequired);
+
+internal readonly record struct KVExplicitAllowedValue(
+    string Id,
+    string Label,
+    object Value,
+    string? Template = null,
+    IReadOnlyList<KVAllowedValuePlaceholder>? Placeholders = null);
+
 internal sealed class KVAllowedValuesDefinition
 {
-    private readonly Func<object?, bool> _isAllowed;
-    private readonly Func<object?, object?> _normalizeForStorage;
-    private readonly Func<object?, object?> _denormalizeFromStorage;
-    private readonly IReadOnlyDictionary<string, KVExplicitAllowedValue>? _entriesById;
-    private readonly IReadOnlyDictionary<object, KVExplicitAllowedValue>? _entriesByValue;
+    private readonly Func<object?, bool> isAllowed;
+    private readonly Func<object?, object?> normalizeForStorage;
+    private readonly Func<object?, object?> denormalizeFromStorage;
+    private readonly IReadOnlyDictionary<string, KVExplicitAllowedValue>? entriesById;
+    private readonly IReadOnlyDictionary<object, KVExplicitAllowedValue>? entriesByValue;
 
     private KVAllowedValuesDefinition(
         Func<object?, bool> isAllowed,
@@ -22,11 +31,11 @@ internal sealed class KVAllowedValuesDefinition
         IReadOnlyDictionary<string, KVExplicitAllowedValue>? entriesById = null,
         IReadOnlyDictionary<object, KVExplicitAllowedValue>? entriesByValue = null)
     {
-        _isAllowed = isAllowed;
-        _normalizeForStorage = normalizeForStorage;
-        _denormalizeFromStorage = denormalizeFromStorage;
-        _entriesById = entriesById;
-        _entriesByValue = entriesByValue;
+        this.isAllowed = isAllowed;
+        this.normalizeForStorage = normalizeForStorage;
+        this.denormalizeFromStorage = denormalizeFromStorage;
+        this.entriesById = entriesById;
+        this.entriesByValue = entriesByValue;
     }
 
     public static KVAllowedValuesDefinition Create<TValue>(IEnumerable<TValue> values)
@@ -125,8 +134,8 @@ internal sealed class KVAllowedValuesDefinition
         }
 
         return new KVAllowedValuesDefinition(
-            isAllowed: value => value is TValue typed && valueToToken.ContainsKey(typed!)
-                              || value is TToken token && tokenToValue.ContainsKey(token),
+            isAllowed: value => (value is TValue typed && valueToToken.ContainsKey(typed!))
+                              || (value is TToken token && tokenToValue.ContainsKey(token)),
             normalizeForStorage: value => value is TValue typed
                 ? valueToToken[typed!]
                 : throw new InvalidOperationException("Value type mismatch for allowed values."),
@@ -157,8 +166,8 @@ internal sealed class KVAllowedValuesDefinition
 
         bool IsAllowedItem(object? value)
         {
-            return value is TElement typed && valueToToken.ContainsKey(typed!)
-                   || TryConvertToken<TToken>(value, out var token) && tokenToValue.ContainsKey(token);
+            return (value is TElement typed && valueToToken.ContainsKey(typed!))
+                   || (TryConvertToken<TToken>(value, out var token) && tokenToValue.ContainsKey(token));
         }
 
         TToken NormalizeItem(object? value)
@@ -237,22 +246,22 @@ internal sealed class KVAllowedValuesDefinition
 
     public bool IsAllowed(object? value)
     {
-        return _isAllowed(value);
+        return this.isAllowed(value);
     }
 
     public object? DenormalizeFromStorage(object? value)
     {
-        return _denormalizeFromStorage(value);
+        return this.denormalizeFromStorage(value);
     }
 
     public object? NormalizeForStorage(object? value)
     {
-        return _normalizeForStorage(value);
+        return this.normalizeForStorage(value);
     }
 
     public object? DenormalizeFromStorage(object? value, Type targetType)
     {
-        var denormalized = _denormalizeFromStorage(value);
+        var denormalized = this.denormalizeFromStorage(value);
         if (denormalized is not IReadOnlyList<object?> items)
         {
             return denormalized;
@@ -455,12 +464,3 @@ internal sealed class KVAllowedValuesDefinition
         return null;
     }
 }
-
-internal readonly record struct KVAllowedValuePlaceholder(string Name, string Label, Type ValueType, bool IsRequired);
-
-internal readonly record struct KVExplicitAllowedValue(
-    string Id,
-    string Label,
-    object Value,
-    string? Template = null,
-    IReadOnlyList<KVAllowedValuePlaceholder>? Placeholders = null);

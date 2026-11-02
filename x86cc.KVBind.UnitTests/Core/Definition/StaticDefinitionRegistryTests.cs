@@ -68,16 +68,17 @@ public class StaticDefinitionRegistryTests
     private sealed class InlineBuilder(Type modelType, KVNodeDefinition definition) : IKVModelDefinitionBuilder
     {
         public Type ModelType => modelType;
+
         public KVNodeDefinition Build() => definition;
     }
 }
 
 public partial class StaticDefModel : KVRootNode, IKVNodeDefinition
 {
+    public static KVNodeDefinition Definition { get; } = Build();
+
     [KVBind(nameof(Name))]
     public partial string? Name { get; set; }
-
-    public static KVNodeDefinition Definition { get; } = Build();
 
     private static KVNodeDefinition Build()
     {

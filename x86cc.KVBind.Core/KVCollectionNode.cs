@@ -9,23 +9,30 @@ namespace x86cc.KVBind.Core;
 // Non-generic base exposes delta computation without requiring the type parameter.
 public abstract class KVCollectionNodeBase : KVNodeBase, IKVCollectionNode
 {
-    internal abstract KVChangeDeltaGroup ComputeDeltas(string collectionPath);
-    public abstract IReadOnlyList<string> GetActiveItemIds();
-
     // Concrete settable properties — subclass sets via protected set.
     public KVModel Model { get; protected set; } = null!;
+
     public KVCollectionDefinition Definition { get; protected set; } = null!;
+
     public KVNodeBase? Parent { get; protected set; }
+
+    public abstract IReadOnlyList<string> GetActiveItemIds();
 
     public abstract void Bind(KVModel model, KVCollectionDefinition definition, KVNodeBase? parent = null);
 
     // IKVCollectionNode.GetById is explicitly implemented; subclasses provide GetByIdCore.
-    KVNode? IKVCollectionNode.GetById(string itemId) => GetByIdCore(itemId);
-    protected abstract KVNode? GetByIdCore(string itemId);
+    KVNode? IKVCollectionNode.GetById(string itemId) => this.GetByIdCore(itemId);
 
     public abstract KVNode Create(Guid itemId, string? typeToken = null);
+
     public abstract bool RemoveById(string itemId);
+
     public abstract bool MoveById(string itemId, int toIndex);
+
+    internal abstract KVChangeDeltaGroup ComputeDeltas(string collectionPath);
+
+    protected abstract KVNode? GetByIdCore(string itemId);
+
     protected abstract void Rebind();
 }
 
@@ -34,130 +41,69 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
 {
     private const string ItemsKey = "$items";
 
-    private readonly Dictionary<string, TItem> _items = new(StringComparer.Ordinal);
-    private readonly List<string> _orderedItemIds = [];
+    private readonly Dictionary<string, TItem> items = new(StringComparer.Ordinal);
 
-    protected bool IsBound => Model is not null && Definition is not null;
+    private readonly List<string> orderedItemIds = [];
 
-    internal override string GetCanonicalPath() => Model?.DataPath ?? string.Empty;
+    protected bool IsBound => this.Model is not null && this.Definition is not null;
 
-    private string ItemsPath => KVPath.Combine(Model.DataPath, ItemsKey);
+    private string ItemsPath => KVPath.Combine(this.Model.DataPath, ItemsKey);
 
     public override void Bind(KVModel model, KVCollectionDefinition definition, KVNodeBase? parent = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(definition);
 
-        Parent = parent;
-        Model = model;
-        Definition = definition;
+        this.Parent = parent;
+        this.Model = model;
+        this.Definition = definition;
 
-        _items.Clear();
-        _orderedItemIds.Clear();
+        this.items.Clear();
+        this.orderedItemIds.Clear();
 
         foreach (var itemId in ResolveItemIds(model))
         {
             var itemModel = model.CreateChildModel(itemId);
-            var itemDefinition = ResolveItemDefinition(itemModel, itemId);
+            var itemDefinition = this.ResolveItemDefinition(itemModel, itemId);
             var item = (TItem)Activator.CreateInstance(itemDefinition.ModelType)!;
             item.BindRuntime(itemModel, itemDefinition.NodeDefinition, this);
 
-            _items[itemId] = item;
-            _orderedItemIds.Add(itemId);
+            this.items[itemId] = item;
+            this.orderedItemIds.Add(itemId);
         }
     }
 
-    private static IEnumerable<string> ResolveItemIds(KVModel model)
-    {
-        var itemsPath = KVPath.Combine(model.DataPath, ItemsKey);
-        if (model.Overlay.TryGet(itemsPath, out var val) && val?.Value is string[] ids)
-            return ids;
-        return [];
-    }
+    public TItem Create() => this.Create(Guid.NewGuid());
 
-    public TItem Create() => Create(Guid.NewGuid());
+    public TItem Create(Guid itemId) => (TItem)this.CreateCore(this.Definition.GetItemDefinition(typeof(TItem)), NormalizeItemId(itemId));
 
-    public TItem Create(Guid itemId) => (TItem)CreateCore(Definition.GetItemDefinition(typeof(TItem)), NormalizeItemId(itemId));
+    public TSubtype Create<TSubtype>()
+        where TSubtype : TItem, new()
+        => this.Create<TSubtype>(Guid.NewGuid());
 
-    public TSubtype Create<TSubtype>() where TSubtype : TItem, new() => Create<TSubtype>(Guid.NewGuid());
-
-    public TSubtype Create<TSubtype>(Guid itemId) where TSubtype : TItem, new() => (TSubtype)CreateCore(Definition.GetItemDefinition(typeof(TSubtype)), NormalizeItemId(itemId));
+    public TSubtype Create<TSubtype>(Guid itemId)
+        where TSubtype : TItem, new()
+        => (TSubtype)this.CreateCore(this.Definition.GetItemDefinition(typeof(TSubtype)), NormalizeItemId(itemId));
 
     public override KVNode Create(Guid itemId, string? typeToken = null)
     {
-        var itemDefinition = string.IsNullOrWhiteSpace(typeToken) ? Definition.GetItemDefinition(typeof(TItem)) : Definition.GetItemDefinition(typeToken);
-        return CreateCore(itemDefinition, NormalizeItemId(itemId));
-    }
-
-    private KVNode CreateCore(KVCollectionItemDefinition itemDefinition, string itemId)
-    {
-        if (!IsValidItemId(itemId))
-        {
-            throw new InvalidOperationException("Collection item id cannot be empty or contain '/'.");
-        }
-
-        if (_items.ContainsKey(itemId))
-        {
-            throw new InvalidOperationException($"Collection item id '{itemId}' already exists.");
-        }
-
-        var item = (TItem)Activator.CreateInstance(itemDefinition.ModelType)!;
-        // Restore the path in case it was previously tombstoned (re-adding a deleted item).
-        var itemDataPath = KVPath.Combine(Model.DataPath, itemId);
-        Model.Overlay.RestorePath(itemDataPath);
-
-        var childModel = Model.CreateChildModel(itemId);
-        KVCollectionItemNode.SetItemType(childModel, itemDefinition.TypeToken);
-
-        item.BindRuntime(childModel, itemDefinition.NodeDefinition, this);
-
-        _items[itemId] = item;
-        _orderedItemIds.Add(itemId);
-        WriteItemsKey();
-        EmitCollectionChange(itemId, oldValue: null, newValue: item);
-        return item;
-    }
-
-    private KVCollectionItemDefinition ResolveItemDefinition(KVModel itemModel, string itemId)
-    {
-        var itemType = KVCollectionItemNode.GetItemType(itemModel);
-        if (!string.IsNullOrWhiteSpace(itemType))
-        {
-            return Definition.GetItemDefinition(itemType);
-        }
-
-        if (Definition.ItemDefinitionsByType.Count == 1)
-        {
-            foreach (var definition in Definition.ItemDefinitionsByType.Values)
-            {
-                KVCollectionItemNode.SetItemType(itemModel, definition.TypeToken);
-                return definition;
-            }
-        }
-
-        throw new InvalidOperationException($"Collection item '{itemId}' does not declare an item type token.");
-    }
-
-    private static bool IsValidItemId(string? itemId)
-    {
-        return !string.IsNullOrWhiteSpace(itemId) && !itemId.Contains('/');
+        var itemDefinition = string.IsNullOrWhiteSpace(typeToken) ? this.Definition.GetItemDefinition(typeof(TItem)) : this.Definition.GetItemDefinition(typeToken);
+        return this.CreateCore(itemDefinition, NormalizeItemId(itemId));
     }
 
     public TItem? GetById(string itemId)
     {
         if (string.IsNullOrWhiteSpace(itemId)) return null;
-        var itemDataPath = KVPath.Combine(Model.DataPath, itemId);
-        if (Model.Overlay.IsRemoved(itemDataPath)) return null;
-        return _items.GetValueOrDefault(itemId);
+        var itemDataPath = KVPath.Combine(this.Model.DataPath, itemId);
+        if (this.Model.Overlay.IsRemoved(itemDataPath)) return null;
+        return this.items.GetValueOrDefault(itemId);
     }
-
-    protected override KVNode? GetByIdCore(string itemId) => GetById(itemId);
 
     public string GetItemId(TItem item)
     {
         ArgumentNullException.ThrowIfNull(item);
 
-        foreach (var pair in _items)
+        foreach (var pair in this.items)
         {
             if (ReferenceEquals(pair.Value, item))
             {
@@ -172,37 +118,47 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
     {
         if (string.IsNullOrWhiteSpace(itemId)) return false;
 
-        if (!_items.Remove(itemId, out _)) return false;
+        if (!this.items.Remove(itemId, out _)) return false;
 
-        _orderedItemIds.Remove(itemId);
-        Model.Overlay.Remove(KVPath.Combine(Model.DataPath, itemId));
-        WriteItemsKey();
-        EmitCollectionChange(itemId, oldValue: itemId, newValue: null);
+        this.orderedItemIds.Remove(itemId);
+        this.Model.Overlay.Remove(KVPath.Combine(this.Model.DataPath, itemId));
+        this.WriteItemsKey();
+        this.EmitCollectionChange(itemId, oldValue: itemId, newValue: null);
         return true;
     }
 
     public override bool MoveById(string itemId, int toIndex)
     {
-        if (!_items.ContainsKey(itemId)) return false;
+        if (!this.items.ContainsKey(itemId)) return false;
 
-        if (toIndex < 0 || toIndex >= _orderedItemIds.Count)
+        if (toIndex < 0 || toIndex >= this.orderedItemIds.Count)
             throw new ArgumentOutOfRangeException(nameof(toIndex));
 
-        var currentIndex = _orderedItemIds.IndexOf(itemId);
+        var currentIndex = this.orderedItemIds.IndexOf(itemId);
         if (currentIndex < 0 || currentIndex == toIndex) return currentIndex >= 0;
 
-        _orderedItemIds.RemoveAt(currentIndex);
-        _orderedItemIds.Insert(toIndex, itemId);
-        WriteItemsKey();
+        this.orderedItemIds.RemoveAt(currentIndex);
+        this.orderedItemIds.Insert(toIndex, itemId);
+        this.WriteItemsKey();
         return true;
     }
 
-    public override IReadOnlyList<string> GetActiveItemIds() => _orderedItemIds.AsReadOnly();
+    public override IReadOnlyList<string> GetActiveItemIds() => this.orderedItemIds.AsReadOnly();
 
-    private void WriteItemsKey()
+    public virtual IEnumerator<TItem> GetEnumerator()
     {
-        Model.Overlay.Set(ItemsPath, new KVValue<string[]>(_orderedItemIds.ToArray()));
+        if (!this.IsBound) yield break;
+
+        foreach (var itemId in this.orderedItemIds)
+        {
+            if (this.items.TryGetValue(itemId, out var collectionItem))
+                yield return collectionItem;
+        }
     }
+
+    IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
+
+    internal override string GetCanonicalPath() => this.Model?.DataPath ?? string.Empty;
 
     internal override KVChangeDeltaGroup ComputeDeltas(string collectionPath)
     {
@@ -211,10 +167,10 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
 
         // Build snapshot item set for comparison.
         string[] snapIds = [];
-        if (Model.Overlay.TryGetSnapshotValue(ItemsPath, out var snapVal) && snapVal?.Value is string[] s)
+        if (this.Model.Overlay.TryGetSnapshotValue(this.ItemsPath, out var snapVal) && snapVal?.Value is string[] s)
             snapIds = s;
         var snapSet = new HashSet<string>(snapIds, StringComparer.Ordinal);
-        var draftSet = new HashSet<string>(_orderedItemIds, StringComparer.Ordinal);
+        var draftSet = new HashSet<string>(this.orderedItemIds, StringComparer.Ordinal);
 
         // Items in snapshot but not in draft → removed.
         foreach (var id in snapIds)
@@ -224,7 +180,7 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
         }
 
         // Active items — pass isNew so new items short-circuit to Added.
-        foreach (var (itemId, itemNode) in _items)
+        foreach (var (itemId, itemNode) in this.items)
         {
             var itemPath = KVPath.Combine(collectionPath, itemId);
             var isNew = !snapSet.Contains(itemId);
@@ -236,20 +192,22 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
         return new KVChangeDeltaGroup(deltas, children);
     }
 
-    public virtual IEnumerator<TItem> GetEnumerator()
-    {
-        if (!IsBound) yield break;
+    protected override KVNode? GetByIdCore(string itemId) => this.GetById(itemId);
 
-        foreach (var itemId in _orderedItemIds)
-        {
-            if (_items.TryGetValue(itemId, out var collectionItem))
-                yield return collectionItem;
-        }
+    protected override void Rebind() => this.Bind(this.Model, this.Definition, this.Parent);
+
+    private static IEnumerable<string> ResolveItemIds(KVModel model)
+    {
+        var itemsPath = KVPath.Combine(model.DataPath, ItemsKey);
+        if (model.Overlay.TryGet(itemsPath, out var val) && val?.Value is string[] ids)
+            return ids;
+        return [];
     }
 
-    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-
-    protected override void Rebind() => Bind(Model, Definition, Parent);
+    private static bool IsValidItemId(string? itemId)
+    {
+        return !string.IsNullOrWhiteSpace(itemId) && !itemId.Contains('/');
+    }
 
     private static string NormalizeItemId(Guid itemId)
     {
@@ -258,9 +216,64 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
         return itemId.ToString("D");
     }
 
+    private KVNode CreateCore(KVCollectionItemDefinition itemDefinition, string itemId)
+    {
+        if (!IsValidItemId(itemId))
+        {
+            throw new InvalidOperationException("Collection item id cannot be empty or contain '/'.");
+        }
+
+        if (this.items.ContainsKey(itemId))
+        {
+            throw new InvalidOperationException($"Collection item id '{itemId}' already exists.");
+        }
+
+        var item = (TItem)Activator.CreateInstance(itemDefinition.ModelType)!;
+
+        // Restore the path in case it was previously tombstoned (re-adding a deleted item).
+        var itemDataPath = KVPath.Combine(this.Model.DataPath, itemId);
+        this.Model.Overlay.RestorePath(itemDataPath);
+
+        var childModel = this.Model.CreateChildModel(itemId);
+        KVCollectionItemNode.SetItemType(childModel, itemDefinition.TypeToken);
+
+        item.BindRuntime(childModel, itemDefinition.NodeDefinition, this);
+
+        this.items[itemId] = item;
+        this.orderedItemIds.Add(itemId);
+        this.WriteItemsKey();
+        this.EmitCollectionChange(itemId, oldValue: null, newValue: item);
+        return item;
+    }
+
+    private KVCollectionItemDefinition ResolveItemDefinition(KVModel itemModel, string itemId)
+    {
+        var itemType = KVCollectionItemNode.GetItemType(itemModel);
+        if (!string.IsNullOrWhiteSpace(itemType))
+        {
+            return this.Definition.GetItemDefinition(itemType);
+        }
+
+        if (this.Definition.ItemDefinitionsByType.Count == 1)
+        {
+            foreach (var definition in this.Definition.ItemDefinitionsByType.Values)
+            {
+                KVCollectionItemNode.SetItemType(itemModel, definition.TypeToken);
+                return definition;
+            }
+        }
+
+        throw new InvalidOperationException($"Collection item '{itemId}' does not declare an item type token.");
+    }
+
+    private void WriteItemsKey()
+    {
+        this.Model.Overlay.Set(this.ItemsPath, new KVValue<string[]>(this.orderedItemIds.ToArray()));
+    }
+
     private void EmitCollectionChange(string itemId, object? oldValue, object? newValue)
     {
-        if (Parent is not KVNode parentNode) return;
-        parentNode.EmitChange(KVPath.Combine(Model.DataPath, itemId), oldValue, newValue);
+        if (this.Parent is not KVNode parentNode) return;
+        parentNode.EmitChange(KVPath.Combine(this.Model.DataPath, itemId), oldValue, newValue);
     }
 }

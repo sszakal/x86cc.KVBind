@@ -1,7 +1,7 @@
 using System;
-using System.Text.RegularExpressions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace x86cc.KVBind.Core.Model;
 
@@ -15,9 +15,6 @@ public sealed class KVValueJsonConverter : JsonConverter<KVValue>
     private static readonly Regex VersionSuffix = new(
         @", Version=[^,\[\]]+, Culture=[^,\[\]]+, PublicKeyToken=[^,\[\]]+",
         RegexOptions.Compiled);
-
-    private static string ShortTypeName(Type type) =>
-        VersionSuffix.Replace(type.AssemblyQualifiedName!, string.Empty);
 
     public override KVValue Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
@@ -46,6 +43,9 @@ public sealed class KVValueJsonConverter : JsonConverter<KVValue>
             JsonSerializer.Serialize(writer, value.Value, valueType, options);
         writer.WriteEndObject();
     }
+
+    private static string ShortTypeName(Type type) =>
+        VersionSuffix.Replace(type.AssemblyQualifiedName!, string.Empty);
 
     private static KVValue ReadObject(ref Utf8JsonReader reader)
     {

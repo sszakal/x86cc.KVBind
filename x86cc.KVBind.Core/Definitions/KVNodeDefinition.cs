@@ -6,29 +6,23 @@ namespace x86cc.KVBind.Core;
 
 public class KVNodeDefinition : KVDefinition
 {
-    private KVMigration[]? _migrationsByVersion;
+    private KVMigration[]? migrationsByVersion;
+
+    // Lazily-built indexes by SubSegmentPath. Definitions are built once via the builder and then reused,
+    // so each index is materialized on first lookup and cached thereafter.
+    private Dictionary<string, KVFieldDefinition>? fieldsByKey;
+
+    private Dictionary<string, KVNodeDefinition>? nodesByKey;
+
+    private Dictionary<string, KVCollectionDefinition>? collectionsByKey;
+
+    private Dictionary<string, KVNestedNodeDefinition>? nestedNodesByKey;
+
+    private string[]? inheritedPrefixes;
 
     // Schema migrations registered against the root definition. Only the root populates these;
     // nested/group definitions leave them empty. See KVMigrator.
     public List<KVMigration> Migrations { get; } = new();
-
-    // Migrations sorted ascending by ToVersion, materialized once and cached (definitions are built then
-    // reused, like the field indexes above). Lets the migrator binary-search to the pending tail instead of
-    // re-scanning the whole list per aggregate, so already-applied migrations cost nothing at runtime.
-    internal KVMigration[] MigrationsByVersion
-    {
-        get
-        {
-            if (_migrationsByVersion is null)
-            {
-                var sorted = Migrations.ToArray();
-                Array.Sort(sorted, static (left, right) => left.ToVersion.CompareTo(right.ToVersion));
-                _migrationsByVersion = sorted;
-            }
-
-            return _migrationsByVersion;
-        }
-    }
 
     // The newest schema version this binary understands (0 when no migrations are declared). O(1) off the
     // cached sorted array. Compared against a snapshot's SchemaVersion to decide whether data is behind,
@@ -37,31 +31,26 @@ public class KVNodeDefinition : KVDefinition
     {
         get
         {
-            var sorted = MigrationsByVersion;
+            var sorted = this.MigrationsByVersion;
             return sorted.Length == 0 ? 0 : sorted[^1].ToVersion;
         }
     }
 
-    // Lazily-built indexes by SubSegmentPath. Definitions are built once via the builder and then reused,
-    // so each index is materialized on first lookup and cached thereafter.
-    private Dictionary<string, KVFieldDefinition>? _fieldsByKey;
-    private Dictionary<string, KVNodeDefinition>? _nodesByKey;
-    private Dictionary<string, KVCollectionDefinition>? _collectionsByKey;
-    private Dictionary<string, KVNestedNodeDefinition>? _nestedNodesByKey;
-
     public List<KVFieldDefinition> Fields { get; } = new();
+
     public List<KVNodeDefinition> Nodes { get; } = new();
+
     public List<KVCollectionDefinition> Collections { get; } = new();
+
     public List<KVNestedNodeDefinition> NestedNodes { get; } = new();
+
     public List<KVValidationRegistration> ValidationRegistrations { get; } = new();
-    internal List<KVChangeReactionDescriptor> ChangeReactions { get; } = new();
+
     public bool? IsResettable { get; set; }
 
     // Root-only marker on a field group: the whole group is inherited (read-only, parent-sourced) when
     // bound with a parent snapshot. See KVOverlay inheritance.
     public bool IsInherited { get; set; }
-
-    private string[]? _inheritedPrefixes;
 
     // The SubSegmentPaths of all inherited root members (fields, groups, collections, nested nodes), cached
     // once. The overlay uses these as prefixes to route inherited reads to the parent and block writes.
@@ -69,42 +58,64 @@ public class KVNodeDefinition : KVDefinition
     {
         get
         {
-            if (_inheritedPrefixes is null)
+            if (this.inheritedPrefixes is null)
             {
                 var prefixes = new List<string>();
-                foreach (var fieldDefinition in Fields)
+                foreach (var fieldDefinition in this.Fields)
                     if (fieldDefinition.IsInherited) prefixes.Add(fieldDefinition.SubSegmentPath);
-                foreach (var groupDefinition in Nodes)
+                foreach (var groupDefinition in this.Nodes)
                     if (groupDefinition.IsInherited) prefixes.Add(groupDefinition.SubSegmentPath);
-                foreach (var collectionDefinition in Collections)
+                foreach (var collectionDefinition in this.Collections)
                     if (collectionDefinition.IsInherited) prefixes.Add(collectionDefinition.SubSegmentPath);
-                foreach (var nestedNodeDefinition in NestedNodes)
+                foreach (var nestedNodeDefinition in this.NestedNodes)
                     if (nestedNodeDefinition.IsInherited) prefixes.Add(nestedNodeDefinition.SubSegmentPath);
-                _inheritedPrefixes = prefixes.ToArray();
+                this.inheritedPrefixes = prefixes.ToArray();
             }
 
-            return _inheritedPrefixes;
+            return this.inheritedPrefixes;
         }
     }
+
     public Func<KVNode, KVNode> GetChildNode { get; init; } = _ => throw new NotImplementedException();
+
+    // Migrations sorted ascending by ToVersion, materialized once and cached (definitions are built then
+    // reused, like the field indexes above). Lets the migrator binary-search to the pending tail instead of
+    // re-scanning the whole list per aggregate, so already-applied migrations cost nothing at runtime.
+    internal KVMigration[] MigrationsByVersion
+    {
+        get
+        {
+            if (this.migrationsByVersion is null)
+            {
+                var sorted = this.Migrations.ToArray();
+                Array.Sort(sorted, static (left, right) => left.ToVersion.CompareTo(right.ToVersion));
+                this.migrationsByVersion = sorted;
+            }
+
+            return this.migrationsByVersion;
+        }
+    }
+
+    internal List<KVChangeReactionDescriptor> ChangeReactions { get; } = new();
 
     // Lookups by SubSegmentPath, replacing allocating O(n) List.Find on warm paths (read, patch resolution,
     // validation, nested-node access). Indexes are lazy and cached; the lists remain authoritative for
     // iteration and declaration order.
     public KVFieldDefinition? FindField(string subSegmentPath)
-        => (_fieldsByKey ??= BuildIndex(Fields)).GetValueOrDefault(subSegmentPath);
+        => (this.fieldsByKey ??= BuildIndex(this.Fields)).GetValueOrDefault(subSegmentPath);
 
     public KVNodeDefinition? FindNode(string subSegmentPath)
-        => (_nodesByKey ??= BuildIndex(Nodes)).GetValueOrDefault(subSegmentPath);
+        => (this.nodesByKey ??= BuildIndex(this.Nodes)).GetValueOrDefault(subSegmentPath);
 
     public KVCollectionDefinition? FindCollection(string subSegmentPath)
-        => (_collectionsByKey ??= BuildIndex(Collections)).GetValueOrDefault(subSegmentPath);
+        => (this.collectionsByKey ??= BuildIndex(this.Collections)).GetValueOrDefault(subSegmentPath);
 
     public KVNestedNodeDefinition? FindNestedNode(string subSegmentPath)
-        => (_nestedNodesByKey ??= BuildIndex(NestedNodes)).GetValueOrDefault(subSegmentPath);
+        => (this.nestedNodesByKey ??= BuildIndex(this.NestedNodes)).GetValueOrDefault(subSegmentPath);
 
     // The builder removes any existing entry before adding, so each SubSegmentPath maps to one definition.
-    private static Dictionary<string, T> BuildIndex<T>(List<T> definitions) where T : KVDefinition
+    private static Dictionary<string, T> BuildIndex<T>(List<T> definitions)
+        where T : KVDefinition
     {
         var index = new Dictionary<string, T>(definitions.Count, StringComparer.Ordinal);
         foreach (var definition in definitions)

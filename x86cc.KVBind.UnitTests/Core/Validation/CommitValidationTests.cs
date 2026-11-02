@@ -8,7 +8,7 @@ public class CommitValidationTests : KVModelTestBase
 {
     public CommitValidationTests()
     {
-        RegisterModelDefinition<ValidationChangeSetModel>(builder =>
+        this.RegisterModelDefinition<ValidationChangeSetModel>(builder =>
         {
             builder.Field(x => x.Name, options => options.Required());
             builder.FieldGroup(x => x.General, group => group.Field(x => x.Code, options => options.Required()));
@@ -23,18 +23,18 @@ public class CommitValidationTests : KVModelTestBase
     [Fact]
     public void PatchValidation_WhenFieldChanges_ReturnsActiveErrorsForPatchScope()
     {
-        var root = CreateRoot<ValidationChangeSetModel>();
+        var root = this.CreateRoot<ValidationChangeSetModel>();
         root.Name = "Valid";
         root.General.Code = "G1";
         root.Items.Create().Name = "item";
 
         root.CommitSetup();
-        var batch = root.Patch(KVPatchOperation.Set("/Name", ""));
+        var batch = root.Patch(KVPatchOperation.Set("/Name", string.Empty));
 
         var validation = batch.Validate();
 
         validation.IsFullEvaluation.Should().BeTrue();
-        
+
         InlineSnapshot.Validate(validation, """
             Errors:
               - Path: Name
@@ -48,7 +48,7 @@ public class CommitValidationTests : KVModelTestBase
     [Fact]
     public void CommitValidation_WhenFullValidationRuns_ReturnsAllActiveErrors()
     {
-        var root = CreateRoot<ValidationChangeSetModel>();
+        var root = this.CreateRoot<ValidationChangeSetModel>();
 
         root.CommitSetup();
         root.Name = string.Empty;
@@ -57,7 +57,7 @@ public class CommitValidationTests : KVModelTestBase
         var validation = root.Validate();
 
         validation.IsFullEvaluation.Should().BeTrue();
-        
+
         InlineSnapshot.Validate(validation, """
             Errors:
               - Path: Name
@@ -86,7 +86,7 @@ public class CommitValidationTests : KVModelTestBase
     [Fact]
     public void CommitValidation_WhenValidationErrorsExist_Throws()
     {
-        var root = CreateRoot<ValidationChangeSetModel>();
+        var root = this.CreateRoot<ValidationChangeSetModel>();
         root.Name = "Valid";
         root.General.Code = "G1";
         root.Items.Create().Name = "item";
@@ -102,7 +102,7 @@ public class CommitValidationTests : KVModelTestBase
     [Fact]
     public void PatchValidation_WhenCollectionChanges_EvaluatesCollectionRules()
     {
-        var root = CreateRoot<ValidationChangeSetModel>();
+        var root = this.CreateRoot<ValidationChangeSetModel>();
         root.Name = "Valid";
         root.General.Code = "G1";
         var item = root.Items.Create();
@@ -113,7 +113,7 @@ public class CommitValidationTests : KVModelTestBase
         var batch = root.Patch(KVPatchOperation.Remove($"/Items/{itemId}"));
 
         var validation = batch.Validate();
-        
+
         InlineSnapshot.Validate(validation, """
             Errors:
               - Path: Items

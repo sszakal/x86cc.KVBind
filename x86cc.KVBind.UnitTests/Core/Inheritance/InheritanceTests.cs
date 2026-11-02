@@ -12,57 +12,6 @@ namespace x86cc.KVBind.UnitTests.Core.Inheritance;
 //   Signatory   — inherited nested node (Person | Company)
 public class InheritanceTests
 {
-    private static KVNodeDefinition BuildDefinition()
-    {
-        var builder = new KVBindBuilder<Contract>();
-        builder.Field(x => x.Reference);
-        builder.Field(x => x.Status);
-        builder.Field(x => x.MasterTerms, f => f
-            .Inherited()
-            .Default("DEFAULT-TERMS")
-            .Validation(p => p.For<ContractProfile>(r => r.Required())));
-        builder.FieldGroup(x => x.Header, group =>
-        {
-            group.Field(x => x.Region);
-            group.Field(x => x.Currency);
-        }, options => options.Inherited());
-        builder.Collection(x => x.Parties, collection =>
-        {
-            collection.Inherited();
-            collection.Item<ContractParty>(item => item.Field(x => x.Name));
-        });
-        builder.NestedNode(x => x.Signatory, nested =>
-        {
-            nested.Inherited();
-            nested.Bind<PersonSignatory>("PERSON", p => { p.Field(x => x.Name); p.Field(x => x.Title); });
-            nested.Bind<CompanySignatory>("COMPANY", c => { c.Field(x => x.Name); c.Field(x => x.RegistrationNo); });
-        });
-        return builder.Build();
-    }
-
-    // The parent (master) committed snapshot, with values at the inherited paths.
-    private static KVSnapshot ParentSnapshot()
-    {
-        var snapshot = new KVSnapshot { LastCommitId = Guid.NewGuid() };
-        snapshot.Data["MasterTerms"] = "Net 30";
-        snapshot.Data["Header/Region"] = "EU";
-        snapshot.Data["Header/Currency"] = "EUR";
-        snapshot.Data["Parties/$items"] = KVValue.FromObject(new[] { "pa" });
-        snapshot.Data["Parties/pa/$type"] = "ContractParty";
-        snapshot.Data["Parties/pa/Name"] = "Acme";
-        snapshot.Data["Signatory/$type"] = "PERSON";
-        snapshot.Data["Signatory/Name"] = "Jane";
-        snapshot.Data["Signatory/Title"] = "CEO";
-        return snapshot;
-    }
-
-    private static Contract BindChild(KVNodeDefinition definition, KVSnapshot parent, KVSnapshot? childSnapshot = null)
-    {
-        var overlay = KVOverlay.Create((childSnapshot ?? new KVSnapshot()).Clone(), "child");
-        overlay.MarkAsChild(); // a child binding requires the mark under the authoritative rule
-        return KVRootNode.Create<Contract>(overlay, definition, parent);
-    }
-
     [Fact]
     public void Child_reads_inherited_values_from_the_parent()
     {
@@ -179,7 +128,8 @@ public class InheritanceTests
     {
         var builder = new KVBindBuilder<Contract>();
 
-        var act = () => builder.FieldGroup(x => x.Header,
+        var act = () => builder.FieldGroup(
+            x => x.Header,
             group => group.Field(x => x.Region, f => f.Inherited()),
             options => { });
 
@@ -288,6 +238,7 @@ public class InheritanceTests
     public void CreateChild_produces_a_marked_child_that_reads_the_parent()
     {
         var definition = BuildDefinition();
+
         // A committed master, holding the inherited data.
         var parent = KVRootNode.Create<Contract>(KVOverlay.Create(ParentSnapshot(), "master"), definition);
 
@@ -296,9 +247,11 @@ public class InheritanceTests
         // The child reads the parent's inherited values…
         child.MasterTerms.Should().Be("Net 30");
         child.Header.Region.Should().Be("EU");
+
         // …its own non-inherited fields are editable…
         child.Reference = "CHILD-1";
         child.Reference.Should().Be("CHILD-1");
+
         // …and its first commit carries the child mark.
         var commit = child.CreateCommit(DateTimeOffset.UtcNow);
         commit.Changes.Keys.Should().Contain("$parent");
@@ -321,24 +274,6 @@ public class InheritanceTests
         rebind.Should().NotThrow();
         var rebindWithParent = () => KVRootNode.Create<Contract>(KVOverlay.Create(childSnapshot.Clone(), "child"), definition, ParentSnapshot());
         rebindWithParent.Should().Throw<InvalidOperationException>();
-    }
-
-    // ── Rebase × inheritance ──────────────────────────────────────────────────────────────────────
-
-    private static bool IsInheritedPath(string path) =>
-        path == "MasterTerms" || path.StartsWith("Header") || path.StartsWith("Parties") || path.StartsWith("Signatory");
-
-    // A child overlay over a marked base (committed non-inherited data, no inherited data) with inheritance set.
-    private static (KVOverlay Overlay, KVSnapshot Base) ChildOverlayForRebase(KVNodeDefinition definition, KVSnapshot parent)
-    {
-        var childBase = new KVSnapshot { LastCommitId = Guid.NewGuid() };
-        childBase.Data["$parent"] = KVValue.FromObject(true);
-        childBase.Data["Reference"] = "R0";
-        childBase.Data["Status"] = "open";
-
-        var overlay = KVOverlay.Create(childBase.Clone(), "child");
-        overlay.SetInheritance(parent, definition.InheritedPrefixes);
-        return (overlay, childBase);
     }
 
     [Fact]
@@ -367,10 +302,14 @@ public class InheritanceTests
         overlay.FinishRebase();
 
         // Non-inherited rebase resolved normally; inherited fields still come from the parent.
-        overlay.TryGet("Reference", out var refv); refv!.Value.Should().Be("R1");   // incoming accepted
-        overlay.TryGet("Status", out var stv); stv!.Value.Should().Be("in_review"); // our draft preserved
-        overlay.TryGet("MasterTerms", out var after); after!.Value.Should().Be("Net 30");
-        overlay.TryGet("Header/Region", out var region); region!.Value.Should().Be("EU");
+        overlay.TryGet("Reference", out var refv);
+        refv!.Value.Should().Be("R1");   // incoming accepted
+        overlay.TryGet("Status", out var stv);
+        stv!.Value.Should().Be("in_review"); // our draft preserved
+        overlay.TryGet("MasterTerms", out var after);
+        after!.Value.Should().Be("Net 30");
+        overlay.TryGet("Header/Region", out var region);
+        region!.Value.Should().Be("EU");
     }
 
     [Fact]
@@ -394,36 +333,121 @@ public class InheritanceTests
         overlay.ResolveConflict("Status", KVConflictResolution.Ours);
         overlay.FinishRebase();
 
-        overlay.TryGet("Status", out var stv); stv!.Value.Should().Be("ours"); // our resolution stuck
-        overlay.TryGet("MasterTerms", out var mt); mt!.Value.Should().Be("Net 30"); // inherited survives
+        overlay.TryGet("Status", out var stv);
+        stv!.Value.Should().Be("ours"); // our resolution stuck
+        overlay.TryGet("MasterTerms", out var mt);
+        mt!.Value.Should().Be("Net 30"); // inherited survives
+    }
+
+    private static KVNodeDefinition BuildDefinition()
+    {
+        var builder = new KVBindBuilder<Contract>();
+        builder.Field(x => x.Reference);
+        builder.Field(x => x.Status);
+        builder.Field(x => x.MasterTerms, f => f
+            .Inherited()
+            .Default("DEFAULT-TERMS")
+            .Validation(p => p.For<ContractProfile>(r => r.Required())));
+        builder.FieldGroup(
+            x => x.Header,
+            group =>
+            {
+                group.Field(x => x.Region);
+                group.Field(x => x.Currency);
+            },
+            options => options.Inherited());
+        builder.Collection(x => x.Parties, collection =>
+        {
+            collection.Inherited();
+            collection.Item<ContractParty>(item => item.Field(x => x.Name));
+        });
+        builder.NestedNode(x => x.Signatory, nested =>
+        {
+            nested.Inherited();
+            nested.Bind<PersonSignatory>("PERSON", p =>
+            {
+                p.Field(x => x.Name);
+                p.Field(x => x.Title);
+            });
+            nested.Bind<CompanySignatory>("COMPANY", c =>
+            {
+                c.Field(x => x.Name);
+                c.Field(x => x.RegistrationNo);
+            });
+        });
+        return builder.Build();
+    }
+
+    // The parent (master) committed snapshot, with values at the inherited paths.
+    private static KVSnapshot ParentSnapshot()
+    {
+        var snapshot = new KVSnapshot { LastCommitId = Guid.NewGuid() };
+        snapshot.Data["MasterTerms"] = "Net 30";
+        snapshot.Data["Header/Region"] = "EU";
+        snapshot.Data["Header/Currency"] = "EUR";
+        snapshot.Data["Parties/$items"] = KVValue.FromObject(new[] { "pa" });
+        snapshot.Data["Parties/pa/$type"] = "ContractParty";
+        snapshot.Data["Parties/pa/Name"] = "Acme";
+        snapshot.Data["Signatory/$type"] = "PERSON";
+        snapshot.Data["Signatory/Name"] = "Jane";
+        snapshot.Data["Signatory/Title"] = "CEO";
+        return snapshot;
+    }
+
+    private static Contract BindChild(KVNodeDefinition definition, KVSnapshot parent, KVSnapshot? childSnapshot = null)
+    {
+        var overlay = KVOverlay.Create((childSnapshot ?? new KVSnapshot()).Clone(), "child");
+        overlay.MarkAsChild(); // a child binding requires the mark under the authoritative rule
+        return KVRootNode.Create<Contract>(overlay, definition, parent);
+    }
+
+    // ── Rebase × inheritance ──────────────────────────────────────────────────────────────────────
+
+    private static bool IsInheritedPath(string path) =>
+        path == "MasterTerms" || path.StartsWith("Header") || path.StartsWith("Parties") || path.StartsWith("Signatory");
+
+    // A child overlay over a marked base (committed non-inherited data, no inherited data) with inheritance set.
+    private static (KVOverlay Overlay, KVSnapshot Base) ChildOverlayForRebase(KVNodeDefinition definition, KVSnapshot parent)
+    {
+        var childBase = new KVSnapshot { LastCommitId = Guid.NewGuid() };
+        childBase.Data["$parent"] = KVValue.FromObject(true);
+        childBase.Data["Reference"] = "R0";
+        childBase.Data["Status"] = "open";
+
+        var overlay = KVOverlay.Create(childBase.Clone(), "child");
+        overlay.SetInheritance(parent, definition.InheritedPrefixes);
+        return (overlay, childBase);
     }
 }
 
 // ── Test model (manual accessors) ─────────────────────────────────────────────────────────────────
 public sealed record ContractProfile : KVValidationProfile
 {
+    private ContractProfile()
+    {
+    }
+
     public static ContractProfile Instance { get; } = new();
-    private ContractProfile() { }
 }
 
 public sealed class Contract : KVRootNode
 {
     public string? Reference
     {
-        get => GetField<string?>(nameof(Reference));
-        set => SetField(nameof(Reference), value);
+        get => this.GetField<string?>(nameof(this.Reference));
+        set => this.SetField(nameof(this.Reference), value);
     }
 
     public string? Status
     {
-        get => GetField<string?>(nameof(Status));
-        set => SetField(nameof(Status), value);
+        get => this.GetField<string?>(nameof(this.Status));
+        set => this.SetField(nameof(this.Status), value);
     }
 
     public string? MasterTerms
     {
-        get => GetField<string?>(nameof(MasterTerms));
-        set => SetField(nameof(MasterTerms), value);
+        get => this.GetField<string?>(nameof(this.MasterTerms));
+        set => this.SetField(nameof(this.MasterTerms), value);
     }
 
     public ContractHeader Header { get; } = new();
@@ -432,8 +456,8 @@ public sealed class Contract : KVRootNode
 
     public Signatory? Signatory
     {
-        get => GetNestedNode<Signatory>(nameof(Signatory));
-        set => SetNestedNode(nameof(Signatory), value);
+        get => this.GetNestedNode<Signatory>(nameof(this.Signatory));
+        set => this.SetNestedNode(nameof(this.Signatory), value);
     }
 
     protected override KVValidationProfile GetValidationProfile() => ContractProfile.Instance;
@@ -443,14 +467,14 @@ public sealed class ContractHeader : KVFieldGroupNode
 {
     public string? Region
     {
-        get => GetField<string?>(nameof(Region));
-        set => SetField(nameof(Region), value);
+        get => this.GetField<string?>(nameof(this.Region));
+        set => this.SetField(nameof(this.Region), value);
     }
 
     public string? Currency
     {
-        get => GetField<string?>(nameof(Currency));
-        set => SetField(nameof(Currency), value);
+        get => this.GetField<string?>(nameof(this.Currency));
+        set => this.SetField(nameof(this.Currency), value);
     }
 }
 
@@ -458,8 +482,8 @@ public sealed class ContractParty : KVCollectionItemNode
 {
     public string? Name
     {
-        get => GetField<string?>(nameof(Name));
-        set => SetField(nameof(Name), value);
+        get => this.GetField<string?>(nameof(this.Name));
+        set => this.SetField(nameof(this.Name), value);
     }
 }
 
@@ -467,8 +491,8 @@ public abstract class Signatory : KVNestedNode
 {
     public string? Name
     {
-        get => GetField<string?>(nameof(Name));
-        set => SetField(nameof(Name), value);
+        get => this.GetField<string?>(nameof(this.Name));
+        set => this.SetField(nameof(this.Name), value);
     }
 }
 
@@ -476,8 +500,8 @@ public sealed class PersonSignatory : Signatory
 {
     public string? Title
     {
-        get => GetField<string?>(nameof(Title));
-        set => SetField(nameof(Title), value);
+        get => this.GetField<string?>(nameof(this.Title));
+        set => this.SetField(nameof(this.Title), value);
     }
 }
 
@@ -485,7 +509,7 @@ public sealed class CompanySignatory : Signatory
 {
     public string? RegistrationNo
     {
-        get => GetField<string?>(nameof(RegistrationNo));
-        set => SetField(nameof(RegistrationNo), value);
+        get => this.GetField<string?>(nameof(this.RegistrationNo));
+        set => this.SetField(nameof(this.RegistrationNo), value);
     }
 }

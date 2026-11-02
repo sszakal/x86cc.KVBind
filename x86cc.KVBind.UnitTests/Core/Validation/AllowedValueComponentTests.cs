@@ -5,11 +5,17 @@ using x86cc.KVBind.Core.Model;
 
 namespace x86cc.KVBind.UnitTests.Core;
 
+public enum CompensationEmployeeType
+{
+    Manager,
+    Assistant
+}
+
 public class AllowedValueComponentTests : KVModelTestBase
 {
     public AllowedValueComponentTests()
     {
-        RegisterModelDefinition<CompensationModel>(builder =>
+        this.RegisterModelDefinition<CompensationModel>(builder =>
         {
             builder.Field(x => x.CompensationType, options =>
             {
@@ -26,22 +32,22 @@ public class AllowedValueComponentTests : KVModelTestBase
     public void AllowedValueComponent_WhenSelectedByIdToken_PersistsToken()
     {
         var model = new KVModelRoot();
-        var rootNode = CreateRoot<CompensationModel>(model);
-        
+        var rootNode = this.CreateRoot<CompensationModel>(model);
+
         rootNode.CommitSetup();
         rootNode.Patch(KVPatchOperation.Set("/CompensationType", "assistant_hourly"));
 
         model.Snapshot.Data.Should().NotContainKey("CompensationType");
-        
+
         rootNode.GetAllChanges().Changes.Should().Contain(change => change.Path == "CompensationType");
         rootNode.CompensationType.Should().Be(CompensationEmployeeType.Assistant);
-        
+
         InlineSnapshot.Validate(model.Overlay.Changes.ToDictionary(pair => pair.Key, pair => pair.Value.Value), """
                                                 CompensationType: assistant_hourly
                                                 """);
-        
+
         var validation = rootNode.Validate();
-        
+
         InlineSnapshot.Validate(validation, """
                                             Errors: []
                                             Scope: []
@@ -53,13 +59,13 @@ public class AllowedValueComponentTests : KVModelTestBase
     public void AllowedValueComponent_WhenTokenIsUnknown_ValidationReturnsAllowedValuesError()
     {
         var model = new KVModelRoot();
-        var rootNode = CreateRoot<CompensationModel>(model);
+        var rootNode = this.CreateRoot<CompensationModel>(model);
         rootNode.CommitSetup();
 
         rootNode.Patch(KVPatchOperation.Set("/CompensationType", "unknown_token"));
 
         var validation = rootNode.Validate();
-        
+
         InlineSnapshot.Validate(validation, """
                                             Errors:
                                               - Path: CompensationType
@@ -73,9 +79,9 @@ public class AllowedValueComponentTests : KVModelTestBase
     [Fact]
     public void AllowedValueComponent_WhenArgPathPatched_ThrowsAsUnsupportedFieldPath()
     {
-        var rootNode = CreateRoot<CompensationModel>();
+        var rootNode = this.CreateRoot<CompensationModel>();
         rootNode.CommitSetup();
-        
+
         rootNode.Patch(KVPatchOperation.Set("/CompensationType", "assistant_hourly"));
 
         var act = () => rootNode.Patch(KVPatchOperation.Set("/CompensationType/$args/Hours", "bad"));
@@ -86,7 +92,7 @@ public class AllowedValueComponentTests : KVModelTestBase
     [Fact]
     public void AllowedValueComponent_WhenSelectedByEnumValue_ValidationPasses()
     {
-        var rootNode = CreateRoot<CompensationModel>();
+        var rootNode = this.CreateRoot<CompensationModel>();
         rootNode.CompensationType = CompensationEmployeeType.Assistant;
 
         rootNode.CommitSetup();
@@ -94,12 +100,6 @@ public class AllowedValueComponentTests : KVModelTestBase
 
         validation.Errors.Should().NotContain(error => error.Path == "CompensationType" && error.Code == "allowed_values");
     }
-}
-
-public enum CompensationEmployeeType
-{
-    Manager,
-    Assistant
 }
 
 public partial class CompensationModel : KVRootNode

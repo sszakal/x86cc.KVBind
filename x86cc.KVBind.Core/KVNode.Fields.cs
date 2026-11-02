@@ -5,20 +5,30 @@ namespace x86cc.KVBind.Core;
 
 public abstract partial class KVNode
 {
-    private KVFieldDefinition GetFieldDefinition(string subSegmentPath)
+    internal void SetFieldForPatch(string fieldKey, object? value)
     {
-        return Definition.FindField(subSegmentPath)
-               ?? throw new InvalidOperationException($"Field '{subSegmentPath}' is not declared under '{Definition.SubSegmentPath}'.");
+        this.EnsureBound();
+        ArgumentNullException.ThrowIfNull(fieldKey);
+        this.EnsureFieldDefined(fieldKey);
+        this.SetFieldCore(fieldKey, value);
     }
 
-    private void EnsureFieldDefined(string subSegmentPath) => _ = GetFieldDefinition(subSegmentPath);
+    internal void RemoveFieldForPatch(string fieldKey)
+    {
+        this.EnsureBound();
+        ArgumentNullException.ThrowIfNull(fieldKey);
+        this.EnsureFieldDefined(fieldKey);
+        var oldValue = this.Model.Get<object?>(fieldKey);
+        if (!this.Model.Remove(fieldKey)) return;
+        this.EmitChange(KVPath.Combine(this.GetCanonicalPath(), fieldKey), oldValue, newValue: null);
+    }
 
     protected TValue GetField<TValue>(string fieldKey)
     {
-        EnsureBound();
+        this.EnsureBound();
         ArgumentNullException.ThrowIfNull(fieldKey);
-        var fieldDefinition = GetFieldDefinition(fieldKey);
-        if (fieldDefinition.AllowedValues is not null && Model.TryGetValue(fieldKey, out var storedValue) && storedValue is not null)
+        var fieldDefinition = this.GetFieldDefinition(fieldKey);
+        if (fieldDefinition.AllowedValues is not null && this.Model.TryGetValue(fieldKey, out var storedValue) && storedValue is not null)
         {
             var storedObject = storedValue.Value;
             try
@@ -31,51 +41,41 @@ public abstract partial class KVNode
             }
         }
 
-        return Model.Get<TValue>(fieldKey);
+        return this.Model.Get<TValue>(fieldKey);
     }
 
     protected void SetField<TValue>(string fieldKey, TValue value)
     {
-        EnsureBound();
+        this.EnsureBound();
         ArgumentNullException.ThrowIfNull(fieldKey);
-        var fieldDefinition = GetFieldDefinition(fieldKey);
+        var fieldDefinition = this.GetFieldDefinition(fieldKey);
 
         // Fast path: with no allowed-value remapping the stored type is exactly TValue, so we build the
         // KVValue<TValue> directly instead of going through reflection (KVValue.FromObject) on every write.
         if (fieldDefinition.AllowedValues is null)
         {
-            var oldValue = Model.Get<object?>(fieldKey);
+            var oldValue = this.Model.Get<object?>(fieldKey);
             if (Equals(oldValue, value)) return;
-            Model.SetValue(fieldKey, new KVValue<TValue>(value));
-            EmitChange(KVPath.Combine(GetCanonicalPath(), fieldKey), oldValue, value);
+            this.Model.SetValue(fieldKey, new KVValue<TValue>(value));
+            this.EmitChange(KVPath.Combine(this.GetCanonicalPath(), fieldKey), oldValue, value);
             return;
         }
 
-        SetFieldCore(fieldKey, value);
+        this.SetFieldCore(fieldKey, value);
     }
 
-    internal void SetFieldForPatch(string fieldKey, object? value)
+    private KVFieldDefinition GetFieldDefinition(string subSegmentPath)
     {
-        EnsureBound();
-        ArgumentNullException.ThrowIfNull(fieldKey);
-        EnsureFieldDefined(fieldKey);
-        SetFieldCore(fieldKey, value);
+        return this.Definition.FindField(subSegmentPath)
+               ?? throw new InvalidOperationException($"Field '{subSegmentPath}' is not declared under '{this.Definition.SubSegmentPath}'.");
     }
 
-    internal void RemoveFieldForPatch(string fieldKey)
-    {
-        EnsureBound();
-        ArgumentNullException.ThrowIfNull(fieldKey);
-        EnsureFieldDefined(fieldKey);
-        var oldValue = Model.Get<object?>(fieldKey);
-        if (!Model.Remove(fieldKey)) return;
-        EmitChange(KVPath.Combine(GetCanonicalPath(), fieldKey), oldValue, newValue: null);
-    }
+    private void EnsureFieldDefined(string subSegmentPath) => _ = this.GetFieldDefinition(subSegmentPath);
 
     private void SetFieldCore(string fieldKey, object? value)
     {
-        var fieldDefinition = GetFieldDefinition(fieldKey);
-        var oldValue = Model.Get<object?>(fieldKey);
+        var fieldDefinition = this.GetFieldDefinition(fieldKey);
+        var oldValue = this.Model.Get<object?>(fieldKey);
         var storageValue = value;
         if (fieldDefinition.AllowedValues is not null)
         {
@@ -91,7 +91,7 @@ public abstract partial class KVNode
 
         if (Equals(oldValue, storageValue)) return;
 
-        Model.SetValue(fieldKey, KVValue.FromObject(storageValue));
-        EmitChange(KVPath.Combine(GetCanonicalPath(), fieldKey), oldValue, storageValue);
+        this.Model.SetValue(fieldKey, KVValue.FromObject(storageValue));
+        this.EmitChange(KVPath.Combine(this.GetCanonicalPath(), fieldKey), oldValue, storageValue);
     }
 }

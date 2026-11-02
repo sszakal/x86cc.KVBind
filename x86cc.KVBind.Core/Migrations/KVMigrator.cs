@@ -40,6 +40,118 @@ public static class KVMigrator
         return BuildFromPending(snapshot, pending, user, timestamp, inheritedPrefixes: []);
     }
 
+    /// <summary>Builds the migration commits and applies them to <paramref name="snapshot"/> in place.</summary>
+    public static IReadOnlyList<KVCommit> Migrate(
+        KVSnapshot snapshot,
+        IEnumerable<KVMigration> migrations,
+        string user = MigrationUser,
+        DateTimeOffset? timestamp = null)
+    {
+        var commits = BuildCommits(snapshot, migrations, user, timestamp);
+        foreach (var commit in commits)
+            snapshot.Apply(commit);
+        return commits;
+    }
+
+    /// <summary>
+    /// Builds the pending migration commits using the migrations registered on a root definition. Takes an
+    /// O(1) fast path when the snapshot is already current (the migration list is not scanned), and otherwise
+    /// binary-searches to the pending tail — so already-applied migrations add no runtime cost as they grow.
+    /// </summary>
+    public static IReadOnlyList<KVCommit> BuildCommits(
+        KVSnapshot snapshot,
+        KVNodeDefinition definition,
+        string user = MigrationUser,
+        DateTimeOffset? timestamp = null)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ArgumentNullException.ThrowIfNull(definition);
+
+        if (snapshot.SchemaVersion >= definition.CurrentSchemaVersion)
+            return Array.Empty<KVCommit>();
+
+        var sorted = definition.MigrationsByVersion;
+        var start = FirstVersionAbove(sorted, snapshot.SchemaVersion);
+        var pending = new ArraySegment<KVMigration>(sorted, start, sorted.Length - start);
+
+        // A child snapshot must not migrate its inherited members (always read from the parent).
+        return BuildFromPending(snapshot, pending, user, timestamp, definition.InheritedPrefixes);
+    }
+
+    /// <summary>Applies the pending migrations registered on a root definition to <paramref name="snapshot"/>.</summary>
+    public static IReadOnlyList<KVCommit> Migrate(
+        KVSnapshot snapshot,
+        KVNodeDefinition definition,
+        string user = MigrationUser,
+        DateTimeOffset? timestamp = null)
+    {
+        var commits = BuildCommits(snapshot, definition, user, timestamp);
+        foreach (var commit in commits)
+            snapshot.Apply(commit);
+        return commits;
+    }
+
+    /// <summary>
+    /// Migrates a batch of aggregates, each potentially at a different version. For every migration, the async
+    /// prepare phase (if any) runs once over just the subset that still needs it — so external data is fetched
+    /// in one round-trip per migration, not per aggregate. Each subject's snapshot is advanced in place and its
+    /// commits returned for persistence; subjects already current contribute no commits and trigger no prepare.
+    /// </summary>
+    public static Task<IReadOnlyList<KVMigrationResult>> MigrateBatchAsync(
+        IReadOnlyList<KVMigrationSubject> subjects,
+        IEnumerable<KVMigration> migrations,
+        string user = MigrationUser,
+        DateTimeOffset? timestamp = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(subjects);
+        ArgumentNullException.ThrowIfNull(migrations);
+
+        // No definition here → nothing is stripped.
+        return MigrateBatchCoreAsync(subjects, migrations, inheritedPrefixes: [], user, timestamp, cancellationToken);
+    }
+
+    /// <summary>
+    /// Batch-migrates using the migrations registered on a root definition. Skips migrations already applied
+    /// across the whole batch by slicing from the lowest version present, so a batch that is entirely current
+    /// does no per-migration work.
+    /// </summary>
+    public static Task<IReadOnlyList<KVMigrationResult>> MigrateBatchAsync(
+        IReadOnlyList<KVMigrationSubject> subjects,
+        KVNodeDefinition definition,
+        string user = MigrationUser,
+        DateTimeOffset? timestamp = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(subjects);
+        ArgumentNullException.ThrowIfNull(definition);
+
+        var sorted = definition.MigrationsByVersion;
+        if (subjects.Count == 0 || sorted.Length == 0)
+        {
+            return Task.FromResult<IReadOnlyList<KVMigrationResult>>(
+                subjects.Select(subject => new KVMigrationResult { Key = subject.Key, Commits = Array.Empty<KVCommit>() }).ToList());
+        }
+
+        var minVersion = int.MaxValue;
+        foreach (var subject in subjects)
+        {
+            if (subject.Snapshot.SchemaVersion < minVersion)
+                minVersion = subject.Snapshot.SchemaVersion;
+        }
+
+        // The whole batch is already current — nothing applies, skip without touching any migration.
+        if (minVersion >= definition.CurrentSchemaVersion)
+        {
+            return Task.FromResult<IReadOnlyList<KVMigrationResult>>(
+                subjects.Select(subject => new KVMigrationResult { Key = subject.Key, Commits = Array.Empty<KVCommit>() }).ToList());
+        }
+
+        var start = FirstVersionAbove(sorted, minVersion);
+        var slice = new ArraySegment<KVMigration>(sorted, start, sorted.Length - start);
+        return MigrateBatchCoreAsync(subjects, slice, definition.InheritedPrefixes, user, timestamp, cancellationToken);
+    }
+
     // True when a snapshot carries the child mark (its inherited members are owned by the parent).
     private static bool IsChild(KVSnapshot snapshot) => snapshot.Data.ContainsKey(KVOverlay.ChildMarkKey);
 
@@ -51,12 +163,16 @@ public static class KVMigrator
             return;
 
         foreach (var key in delta.Keys.ToList())
+        {
             foreach (var prefix in inheritedPrefixes)
+            {
                 if (KVPath.IsSameOrDescendant(key, prefix))
                 {
                     delta.Remove(key);
                     break;
                 }
+            }
+        }
     }
 
     // Builds commits from an already-ordered pending list. Each commit chains off the previous so a later
@@ -117,75 +233,6 @@ public static class KVMigrator
         return lo;
     }
 
-    /// <summary>Builds the migration commits and applies them to <paramref name="snapshot"/> in place.</summary>
-    public static IReadOnlyList<KVCommit> Migrate(
-        KVSnapshot snapshot,
-        IEnumerable<KVMigration> migrations,
-        string user = MigrationUser,
-        DateTimeOffset? timestamp = null)
-    {
-        var commits = BuildCommits(snapshot, migrations, user, timestamp);
-        foreach (var commit in commits)
-            snapshot.Apply(commit);
-        return commits;
-    }
-
-    /// <summary>
-    /// Builds the pending migration commits using the migrations registered on a root definition. Takes an
-    /// O(1) fast path when the snapshot is already current (the migration list is not scanned), and otherwise
-    /// binary-searches to the pending tail — so already-applied migrations add no runtime cost as they grow.
-    /// </summary>
-    public static IReadOnlyList<KVCommit> BuildCommits(
-        KVSnapshot snapshot,
-        KVNodeDefinition definition,
-        string user = MigrationUser,
-        DateTimeOffset? timestamp = null)
-    {
-        ArgumentNullException.ThrowIfNull(snapshot);
-        ArgumentNullException.ThrowIfNull(definition);
-
-        if (snapshot.SchemaVersion >= definition.CurrentSchemaVersion)
-            return Array.Empty<KVCommit>();
-
-        var sorted = definition.MigrationsByVersion;
-        var start = FirstVersionAbove(sorted, snapshot.SchemaVersion);
-        var pending = new ArraySegment<KVMigration>(sorted, start, sorted.Length - start);
-        // A child snapshot must not migrate its inherited members (always read from the parent).
-        return BuildFromPending(snapshot, pending, user, timestamp, definition.InheritedPrefixes);
-    }
-
-    /// <summary>Applies the pending migrations registered on a root definition to <paramref name="snapshot"/>.</summary>
-    public static IReadOnlyList<KVCommit> Migrate(
-        KVSnapshot snapshot,
-        KVNodeDefinition definition,
-        string user = MigrationUser,
-        DateTimeOffset? timestamp = null)
-    {
-        var commits = BuildCommits(snapshot, definition, user, timestamp);
-        foreach (var commit in commits)
-            snapshot.Apply(commit);
-        return commits;
-    }
-
-    /// <summary>
-    /// Migrates a batch of aggregates, each potentially at a different version. For every migration, the async
-    /// prepare phase (if any) runs once over just the subset that still needs it — so external data is fetched
-    /// in one round-trip per migration, not per aggregate. Each subject's snapshot is advanced in place and its
-    /// commits returned for persistence; subjects already current contribute no commits and trigger no prepare.
-    /// </summary>
-    public static Task<IReadOnlyList<KVMigrationResult>> MigrateBatchAsync(
-        IReadOnlyList<KVMigrationSubject> subjects,
-        IEnumerable<KVMigration> migrations,
-        string user = MigrationUser,
-        DateTimeOffset? timestamp = null,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(subjects);
-        ArgumentNullException.ThrowIfNull(migrations);
-        // No definition here → nothing is stripped.
-        return MigrateBatchCoreAsync(subjects, migrations, inheritedPrefixes: [], user, timestamp, cancellationToken);
-    }
-
     private static async Task<IReadOnlyList<KVMigrationResult>> MigrateBatchCoreAsync(
         IReadOnlyList<KVMigrationSubject> subjects,
         IEnumerable<KVMigration> migrations,
@@ -238,40 +285,5 @@ public static class KVMigrator
         return subjects
             .Select(subject => new KVMigrationResult { Key = subject.Key, Commits = commitsByKey[subject.Key] })
             .ToList();
-    }
-
-    /// <summary>
-    /// Batch-migrates using the migrations registered on a root definition. Skips migrations already applied
-    /// across the whole batch by slicing from the lowest version present, so a batch that is entirely current
-    /// does no per-migration work.
-    /// </summary>
-    public static Task<IReadOnlyList<KVMigrationResult>> MigrateBatchAsync(
-        IReadOnlyList<KVMigrationSubject> subjects,
-        KVNodeDefinition definition,
-        string user = MigrationUser,
-        DateTimeOffset? timestamp = null,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(subjects);
-        ArgumentNullException.ThrowIfNull(definition);
-
-        var sorted = definition.MigrationsByVersion;
-        if (subjects.Count == 0 || sorted.Length == 0)
-            return Task.FromResult<IReadOnlyList<KVMigrationResult>>(
-                subjects.Select(subject => new KVMigrationResult { Key = subject.Key, Commits = Array.Empty<KVCommit>() }).ToList());
-
-        var minVersion = int.MaxValue;
-        foreach (var subject in subjects)
-            if (subject.Snapshot.SchemaVersion < minVersion)
-                minVersion = subject.Snapshot.SchemaVersion;
-
-        // The whole batch is already current — nothing applies, skip without touching any migration.
-        if (minVersion >= definition.CurrentSchemaVersion)
-            return Task.FromResult<IReadOnlyList<KVMigrationResult>>(
-                subjects.Select(subject => new KVMigrationResult { Key = subject.Key, Commits = Array.Empty<KVCommit>() }).ToList());
-
-        var start = FirstVersionAbove(sorted, minVersion);
-        var slice = new ArraySegment<KVMigration>(sorted, start, sorted.Length - start);
-        return MigrateBatchCoreAsync(subjects, slice, definition.InheritedPrefixes, user, timestamp, cancellationToken);
     }
 }

@@ -9,7 +9,7 @@ public class CollectionBindingTests : KVModelTestBase
 {
     public CollectionBindingTests()
     {
-        RegisterModelDefinition<CollectionTestModel>(modelBuilder =>
+        this.RegisterModelDefinition<CollectionTestModel>(modelBuilder =>
         {
             modelBuilder.Collection(x => x.CollectionKey1, collection =>
             {
@@ -30,7 +30,7 @@ public class CollectionBindingTests : KVModelTestBase
             });
         });
 
-        RegisterModelDefinition<PolymorphicCollectionTestModel>(modelBuilder =>
+        this.RegisterModelDefinition<PolymorphicCollectionTestModel>(modelBuilder =>
         {
             modelBuilder.Collection(x => x.Items, collection =>
             {
@@ -48,11 +48,11 @@ public class CollectionBindingTests : KVModelTestBase
             });
         });
 
-        RegisterModelDefinition<MissingCollectionDeclarationModel>(_ =>
+        this.RegisterModelDefinition<MissingCollectionDeclarationModel>(_ =>
         {
         });
 
-        RegisterModelDefinition<DefaultItemIdCollectionTestModel>(modelBuilder =>
+        this.RegisterModelDefinition<DefaultItemIdCollectionTestModel>(modelBuilder =>
         {
             modelBuilder.Collection(x => x.Items, collection =>
             {
@@ -60,7 +60,7 @@ public class CollectionBindingTests : KVModelTestBase
             });
         });
 
-        RegisterModelDefinition<NestedCollectionTestModel>(modelBuilder =>
+        this.RegisterModelDefinition<NestedCollectionTestModel>(modelBuilder =>
         {
             modelBuilder.Collection(x => x.Level1Collection, collection =>
             {
@@ -77,14 +77,13 @@ public class CollectionBindingTests : KVModelTestBase
                 });
             });
         });
-
     }
 
     [Fact]
     public void CollectionBinding_WhenItemsAreCreated_StoresItemFieldsAtCanonicalPaths()
     {
         var data = new KVModelRoot();
-        var model = CreateRoot<CollectionTestModel>(data);
+        var model = this.CreateRoot<CollectionTestModel>(data);
 
         var firstItem = model.CollectionKey1.Create(Guid.Parse("11111111-1111-1111-1111-111111111111"));
         firstItem.Field1 = "A1";
@@ -103,7 +102,7 @@ public class CollectionBindingTests : KVModelTestBase
         model.CollectionKey1.GetById(firstId)!.Field2.Should().Be("A2");
         model.CollectionKey2.GetById(secondId)!.Field1.Should().Be("B1");
         model.CollectionKey2.GetById(secondId)!.Field2.Should().Be("B2");
-        
+
         data.Overlay.Changes.Should().ContainKey("CollectionKey1/11111111-1111-1111-1111-111111111111/Field1").WhoseValue.Should().Be("A1");
         data.Overlay.Changes.Should().ContainKey("CollectionKey1/11111111-1111-1111-1111-111111111111/Field2").WhoseValue.Should().Be("A2");
         data.Overlay.Changes.Should().ContainKey("CollectionKey2/22222222-2222-2222-2222-222222222222/Field1").WhoseValue.Should().Be("B1");
@@ -114,7 +113,7 @@ public class CollectionBindingTests : KVModelTestBase
     public void CollectionBinding_WhenItemIsRemoved_RemovesItemFromRuntimeCollection()
     {
         var data = new KVModelRoot();
-        var model = CreateRoot<CollectionTestModel>(data);
+        var model = this.CreateRoot<CollectionTestModel>(data);
 
         var item1 = model.CollectionKey1.Create();
         item1.Field1 = "keep";
@@ -135,7 +134,7 @@ public class CollectionBindingTests : KVModelTestBase
     public void CollectionBinding_WhenItemIsMoved_ReordersRuntimeCollection()
     {
         var data = new KVModelRoot();
-        var model = CreateRoot<CollectionTestModel>(data);
+        var model = this.CreateRoot<CollectionTestModel>(data);
 
         var first = model.CollectionKey1.Create();
         var second = model.CollectionKey1.Create();
@@ -156,7 +155,7 @@ public class CollectionBindingTests : KVModelTestBase
     public void CollectionBinding_WhenItemExists_ReturnsBoundItemById()
     {
         var data = new KVModelRoot();
-        var model = CreateRoot<CollectionTestModel>(data);
+        var model = this.CreateRoot<CollectionTestModel>(data);
 
         var created = model.CollectionKey1.Create();
         created.Field1 = "lookup";
@@ -172,7 +171,7 @@ public class CollectionBindingTests : KVModelTestBase
     public void CollectionBinding_WhenAllowedSubtypeIsCreated_StoresTypeTokenAndHydratesConcreteSubtype()
     {
         var data = new KVModelRoot();
-        var model = CreateRoot<PolymorphicCollectionTestModel>(data);
+        var model = this.CreateRoot<PolymorphicCollectionTestModel>(data);
 
         var subtype = model.Items.Create<SpecialFieldGroupNode>();
         subtype.Field1 = "Subtype1";
@@ -192,7 +191,7 @@ public class CollectionBindingTests : KVModelTestBase
     public void CollectionBinding_WhenSubtypeIsNotAllowed_ThrowsOnCreate()
     {
         var data = new KVModelRoot();
-        var model = CreateRoot<CollectionTestModel>(data);
+        var model = this.CreateRoot<CollectionTestModel>(data);
 
         var act = () => model.CollectionKey1.Create<SpecialFieldGroupNode>();
 
@@ -208,7 +207,7 @@ public class CollectionBindingTests : KVModelTestBase
         data.Set($"Items/{id}/$type", "unknown");
         data.Set($"Items/{id}/Field1", "value");
 
-        var act = () => CreateRoot<PolymorphicCollectionTestModel>(data);
+        var act = () => this.CreateRoot<PolymorphicCollectionTestModel>(data);
 
         act.Should().Throw<InvalidOperationException>();
     }
@@ -242,7 +241,7 @@ public class CollectionBindingTests : KVModelTestBase
     [Fact]
     public void CollectionBinding_WhenCollectionIsNotDeclared_ThrowsOnUsage()
     {
-        var model = CreateRoot<MissingCollectionDeclarationModel>();
+        var model = this.CreateRoot<MissingCollectionDeclarationModel>();
         var act = () => model.Items.Create();
 
         act.Should().Throw<NullReferenceException>();
@@ -251,7 +250,7 @@ public class CollectionBindingTests : KVModelTestBase
     [Fact]
     public void CollectionBinding_WhenItemIsCreatedWithoutId_UsesGuidStringId()
     {
-        var model = CreateRoot<DefaultItemIdCollectionTestModel>();
+        var model = this.CreateRoot<DefaultItemIdCollectionTestModel>();
 
         var item = model.Items.Create();
         var id = model.Items.GetItemId(item);
@@ -263,7 +262,7 @@ public class CollectionBindingTests : KVModelTestBase
     public void CollectionBinding_WhenCollectionsAreNested_StoresNestedItemFieldsAtCanonicalPaths()
     {
         var model = new KVModelRoot();
-        var rootNode = CreateRoot<NestedCollectionTestModel>(model);
+        var rootNode = this.CreateRoot<NestedCollectionTestModel>(model);
 
         var level1FirstItem = rootNode.Level1Collection.Create(Guid.Parse("11111111-1111-1111-1111-111111111111"));
         var level1SecondItem = rootNode.Level1Collection.Create(Guid.Parse("22222222-2222-2222-2222-222222222222"));
@@ -274,21 +273,19 @@ public class CollectionBindingTests : KVModelTestBase
         var level1FirstItemLevel2SecondItem = level1FirstItem.Level2Collection.Create(Guid.Parse("44444444-4444-4444-4444-444444444444"));
         level1FirstItemLevel2SecondItem.Field1 = "3";
         level1FirstItemLevel2SecondItem.Field2 = "4";
-        
+
         var level2FirstItemLevel2FirstItem = level1SecondItem.Level2Collection.Create(Guid.Parse("55555555-5555-5555-5555-555555555555"));
         level2FirstItemLevel2FirstItem.Field1 = "5";
         level2FirstItemLevel2FirstItem.Field2 = "6";
         var level2FirstItemLevel2SecondItem = level1SecondItem.Level2Collection.Create(Guid.Parse("66666666-6666-6666-6666-666666666666"));
         level2FirstItemLevel2SecondItem.Field1 = "7";
         level2FirstItemLevel2SecondItem.Field2 = "8";
-     
-        
+
         model.Overlay.Changes.Should().ContainKey("Level1Collection/11111111-1111-1111-1111-111111111111/Level2Collection/33333333-3333-3333-3333-333333333333/Field1").WhoseValue.Should().Be("1");
         model.Overlay.Changes.Should().ContainKey("Level1Collection/11111111-1111-1111-1111-111111111111/Level2Collection/44444444-4444-4444-4444-444444444444/Field2").WhoseValue.Should().Be("4");
         model.Overlay.Changes.Should().ContainKey("Level1Collection/22222222-2222-2222-2222-222222222222/Level2Collection/55555555-5555-5555-5555-555555555555/Field1").WhoseValue.Should().Be("5");
         model.Overlay.Changes.Should().ContainKey("Level1Collection/22222222-2222-2222-2222-222222222222/Level2Collection/66666666-6666-6666-6666-666666666666/Field2").WhoseValue.Should().Be("8");
-        
-        
+
         InlineSnapshot.Validate(rootNode, """
             Level1Collection:
               - Level2Collection:
@@ -303,7 +300,6 @@ public class CollectionBindingTests : KVModelTestBase
                     Field2: 8
             """);
     }
-
 }
 
 public partial class CollectionTestModel : KVRootNode
@@ -331,7 +327,7 @@ public partial class FieldGroupNode : KVCollectionItemNode
 {
     [KVBind("Field1")]
     public partial string Field1 { get; set; }
-    
+
     [KVBind("Field2")]
     public partial string Field2 { get; set; }
 }

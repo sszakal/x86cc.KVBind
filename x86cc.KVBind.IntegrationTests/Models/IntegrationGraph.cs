@@ -2,6 +2,13 @@ using x86cc.KVBind.Core;
 
 namespace x86cc.KVBind.IntegrationTests.Models;
 
+public enum IntegrationCompensationType
+{
+    None,
+    Manager,
+    Assistant
+}
+
 public partial class IntegrationGraph : KVRootNode
 {
     [KVBind(nameof(Text))]
@@ -164,8 +171,16 @@ public sealed record ComplexDetails(string Code, int[] Scores, IReadOnlyList<Met
 public sealed class IntegrationSmartStatus : IEquatable<IntegrationSmartStatus>
 {
     public static readonly IntegrationSmartStatus New = new("new", "New");
+
     public static readonly IntegrationSmartStatus InReview = new("in_review", "In Review");
+
     public static readonly IntegrationSmartStatus Approved = new("approved", "Approved");
+
+    private IntegrationSmartStatus(string id, string label)
+    {
+        this.Id = id;
+        this.Label = label;
+    }
 
     public static IReadOnlyList<IntegrationSmartStatus> All { get; } =
     [
@@ -174,40 +189,27 @@ public sealed class IntegrationSmartStatus : IEquatable<IntegrationSmartStatus>
         Approved
     ];
 
-    private IntegrationSmartStatus(string id, string label)
-    {
-        Id = id;
-        Label = label;
-    }
-
     public string Id { get; }
 
     public string Label { get; }
 
     public bool Equals(IntegrationSmartStatus? other)
     {
-        return other is not null && string.Equals(Id, other.Id, StringComparison.Ordinal);
+        return other is not null && string.Equals(this.Id, other.Id, StringComparison.Ordinal);
     }
 
     public override bool Equals(object? obj)
     {
-        return obj is IntegrationSmartStatus other && Equals(other);
+        return obj is IntegrationSmartStatus other && this.Equals(other);
     }
 
     public override int GetHashCode()
     {
-        return StringComparer.Ordinal.GetHashCode(Id);
+        return StringComparer.Ordinal.GetHashCode(this.Id);
     }
 
     public override string ToString()
     {
-        return Label;
+        return this.Label;
     }
-}
-
-public enum IntegrationCompensationType
-{
-    None,
-    Manager,
-    Assistant
 }

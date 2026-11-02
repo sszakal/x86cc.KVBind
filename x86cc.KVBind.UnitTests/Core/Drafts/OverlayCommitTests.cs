@@ -21,7 +21,7 @@ public class OverlayCommitTests
     public void OverlayCommit_WhenUserIsClearedAfterCreation_Throws()
     {
         var overlay = KVOverlay.Create(new KVSnapshot(), "editor");
-        var act = () => overlay.User = "";
+        var act = () => overlay.User = string.Empty;
 
         act.Should().Throw<ArgumentException>().WithMessage("Overlay user cannot be empty.*");
     }

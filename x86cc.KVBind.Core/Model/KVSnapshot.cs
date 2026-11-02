@@ -33,27 +33,27 @@ public sealed class KVSnapshot
     {
         return new KVSnapshot
         {
-            Timestamp = Timestamp,
-            LastCommitId = LastCommitId,
-            LastCommitTimestamp = LastCommitTimestamp,
-            Created = Created,
-            CreatedBy = CreatedBy,
-            Modified = Modified,
-            ModifiedBy = ModifiedBy,
-            SchemaVersion = SchemaVersion,
-            Data = new KVDictionary(Data)
+            Timestamp = this.Timestamp,
+            LastCommitId = this.LastCommitId,
+            LastCommitTimestamp = this.LastCommitTimestamp,
+            Created = this.Created,
+            CreatedBy = this.CreatedBy,
+            Modified = this.Modified,
+            ModifiedBy = this.ModifiedBy,
+            SchemaVersion = this.SchemaVersion,
+            Data = new KVDictionary(this.Data)
         };
     }
 
     public bool TryGet(string path, out KVValue? value)
     {
-        return Data.TryGetValue(path, out value);
+        return this.Data.TryGetValue(path, out value);
     }
 
     // Span overload for the allocation-free read path — probes Data via its Ordinal alternate lookup.
     public bool TryGet(ReadOnlySpan<char> path, out KVValue? value)
     {
-        if (Data.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(path, out var found))
+        if (this.Data.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(path, out var found))
         {
             value = found;
             return true;
@@ -67,15 +67,15 @@ public sealed class KVSnapshot
     {
         if (string.IsNullOrWhiteSpace(path))
         {
-            return Data.Count > 0;
+            return this.Data.Count > 0;
         }
 
-        if (Data.ContainsKey(path))
+        if (this.Data.ContainsKey(path))
         {
             return true;
         }
 
-        foreach (var key in Data.Keys)
+        foreach (var key in this.Data.Keys)
         {
             if (KVPath.IsSameOrDescendant(key, path))
             {
@@ -90,7 +90,7 @@ public sealed class KVSnapshot
     {
         ArgumentNullException.ThrowIfNull(commit);
 
-        if (commit.PreviousCommitId != LastCommitId)
+        if (commit.PreviousCommitId != this.LastCommitId)
         {
             throw new InvalidOperationException("Commit does not continue the snapshot commit chain.");
         }
@@ -98,20 +98,20 @@ public sealed class KVSnapshot
         foreach (var (path, value) in commit.Changes)
         {
             if (value == KVValue.Tombstone)
-                RemovePathOrPrefix(Data, path);
+                RemovePathOrPrefix(this.Data, path);
             else
-                Data[path] = value;
+                this.Data[path] = value;
         }
 
         // A migration commit advances the schema version — even with no data changes (a pure version bump).
         if (commit.MigrationToVersion is int migratedTo)
-            SchemaVersion = migratedTo;
+            this.SchemaVersion = migratedTo;
 
-        LastCommitId = commit.CommitId;
-        LastCommitTimestamp = commit.Timestamp;
-        Modified = commit.Timestamp;
-        ModifiedBy = commit.User;
-        Timestamp = DateTimeOffset.UtcNow;
+        this.LastCommitId = commit.CommitId;
+        this.LastCommitTimestamp = commit.Timestamp;
+        this.Modified = commit.Timestamp;
+        this.ModifiedBy = commit.User;
+        this.Timestamp = DateTimeOffset.UtcNow;
     }
 
     public void Apply(IEnumerable<KVCommit> commits)
@@ -120,7 +120,7 @@ public sealed class KVSnapshot
 
         foreach (var commit in commits)
         {
-            Apply(commit);
+            this.Apply(commit);
         }
     }
 

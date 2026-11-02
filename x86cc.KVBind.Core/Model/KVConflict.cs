@@ -94,12 +94,12 @@ public sealed class KVConflict
     public KVValue? CustomValue { get; set; }
 
     /// <summary>True for real conflicts that block <see cref="KVOverlay.FinishRebase"/> until resolved.</summary>
-    public bool RequiresResolution => Kind is KVConflictKind.Value or KVConflictKind.DeleteEdit or KVConflictKind.Structural;
+    public bool RequiresResolution => this.Kind is KVConflictKind.Value or KVConflictKind.DeleteEdit or KVConflictKind.Structural;
 
     /// <summary>True for non-conflicting incoming changes (default-accepted, individually rejectable).</summary>
-    public bool IsIncoming => Kind is KVConflictKind.Incoming or KVConflictKind.IncomingItem;
+    public bool IsIncoming => this.Kind is KVConflictKind.Incoming or KVConflictKind.IncomingItem;
 
-    public bool IsResolved => Resolution != KVConflictResolution.Unresolved;
+    public bool IsResolved => this.Resolution != KVConflictResolution.Unresolved;
 
     public void Resolve(KVConflictResolution resolution, KVValue? customValue = null)
     {
@@ -108,22 +108,31 @@ public sealed class KVConflict
 
         if (resolution == KVConflictResolution.Custom)
         {
-            if (Kind == KVConflictKind.DeleteEdit)
+            if (this.Kind == KVConflictKind.DeleteEdit)
+            {
                 throw new InvalidOperationException(
-                    $"Custom resolution is not valid for a delete/edit conflict at '{Path}'. Choose Ours (keep deletion) or Theirs (restore upstream).");
-            if (Kind == KVConflictKind.Structural)
+                    $"Custom resolution is not valid for a delete/edit conflict at '{this.Path}'. Choose Ours (keep deletion) or Theirs (restore upstream).");
+            }
+
+            if (this.Kind == KVConflictKind.Structural)
+            {
                 throw new InvalidOperationException(
-                    $"Custom resolution is not valid for a structural conflict at '{Path}'. Choose Ours or Theirs for the whole node.");
-            if (IsIncoming)
+                    $"Custom resolution is not valid for a structural conflict at '{this.Path}'. Choose Ours or Theirs for the whole node.");
+            }
+
+            if (this.IsIncoming)
+            {
                 throw new InvalidOperationException(
-                    $"Custom resolution is not valid for an incoming change at '{Path}'. Choose Theirs (accept) or Ours (reject).");
-            CustomValue = customValue;
+                    $"Custom resolution is not valid for an incoming change at '{this.Path}'. Choose Theirs (accept) or Ours (reject).");
+            }
+
+            this.CustomValue = customValue;
         }
         else
         {
-            CustomValue = null;
+            this.CustomValue = null;
         }
 
-        Resolution = resolution;
+        this.Resolution = resolution;
     }
 }

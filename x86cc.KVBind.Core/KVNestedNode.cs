@@ -6,7 +6,7 @@ public abstract class KVNestedNode : KVNode
 {
     internal const string TypeKey = "$type";
 
-    public string? ItemType() => Model.Get<string?>(TypeKey);
+    public string? ItemType() => this.Model.Get<string?>(TypeKey);
 
     internal static string? GetItemType(KVModel model) => model.Get<string?>(TypeKey);
 

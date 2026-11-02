@@ -40,6 +40,7 @@ public sealed record ClaimDraftResponse(
     Guid BaseSnapshotVersion,
     Guid? BaseCommitId,
     IReadOnlyList<ClaimChangeResponse> Changes,
+
     // Draft state — drives the editor vs. forced-merge screen on the frontend.
     bool IsRebasing,
     bool IsStale,
@@ -55,7 +56,7 @@ public sealed record RebaseConflictResponse(
     object? MainValue,       // V2 — committed upstream
     object? OursValue,       // draft value (null when the draft deleted/never touched the path)
     bool IsIncoming,         // true = non-conflicting incoming change (default accept, rejectable)
-    bool RequiresResolution);// true = real conflict that blocks finishing until resolved
+    bool RequiresResolution); // true = real conflict that blocks finishing until resolved
 
 public sealed record RebaseResultResponse(
     Guid ClaimId,

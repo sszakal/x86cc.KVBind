@@ -5,14 +5,9 @@ namespace x86cc.KVBind.UnitTests.Core;
 
 public abstract class DeepGraphTestBase : KVModelTestBase
 {
-    protected static string DeepLeafPath => $"Level1Collection/{TestIds.Level1Text}/Level2Collection/{TestIds.Level2Text}/Level3Collection/{TestIds.Level3Text}/Level4Collection/{TestIds.Level4Text}";
-    protected static string Level1Path => $"Level1Collection/{TestIds.Level1Text}";
-    protected static string Level2Path => $"{Level1Path}/Level2Collection/{TestIds.Level2Text}";
-    protected static string Level3Path => $"{Level2Path}/Level3Collection/{TestIds.Level3Text}";
-
     protected DeepGraphTestBase()
     {
-        RegisterModelDefinition<DeepNestedCollectionRoot>(modelBuilder =>
+        this.RegisterModelDefinition<DeepNestedCollectionRoot>(modelBuilder =>
         {
             modelBuilder.Collection(x => x.Level1Collection, level1 =>
             {
@@ -47,15 +42,13 @@ public abstract class DeepGraphTestBase : KVModelTestBase
         });
     }
 
-    protected TRoot CommitAndContinue<TRoot>(TRoot root, KVModelRoot model, ICollection<KVCommit> commits)
-        where TRoot : KVRootNode
-    {
-        var commit = root.CreateCommit(DateTimeOffset.UtcNow);
-        commits.Add(commit);
-        model.Snapshot.Apply(commit);
-        model.ReplaceOverlay(KVOverlay.Create(model.Snapshot, model.Overlay.User));
-        return BindRoot(root, model);
-    }
+    protected static string DeepLeafPath => $"Level1Collection/{TestIds.Level1Text}/Level2Collection/{TestIds.Level2Text}/Level3Collection/{TestIds.Level3Text}/Level4Collection/{TestIds.Level4Text}";
+
+    protected static string Level1Path => $"Level1Collection/{TestIds.Level1Text}";
+
+    protected static string Level2Path => $"{Level1Path}/Level2Collection/{TestIds.Level2Text}";
+
+    protected static string Level3Path => $"{Level2Path}/Level3Collection/{TestIds.Level3Text}";
 
     protected static string CreateDeepLeaf(DeepNestedCollectionRoot root, out DeepLevel4Item leaf)
     {
@@ -81,6 +74,16 @@ public abstract class DeepGraphTestBase : KVModelTestBase
                      ?? throw new InvalidOperationException("Level 2 item was not found.");
         return level2.Level3Collection.GetById(TestIds.Level3Text)
                ?? throw new InvalidOperationException("Level 3 item was not found.");
+    }
+
+    protected TRoot CommitAndContinue<TRoot>(TRoot root, KVModelRoot model, ICollection<KVCommit> commits)
+        where TRoot : KVRootNode
+    {
+        var commit = root.CreateCommit(DateTimeOffset.UtcNow);
+        commits.Add(commit);
+        model.Snapshot.Apply(commit);
+        model.ReplaceOverlay(KVOverlay.Create(model.Snapshot, model.Overlay.User));
+        return this.BindRoot(root, model);
     }
 }
 

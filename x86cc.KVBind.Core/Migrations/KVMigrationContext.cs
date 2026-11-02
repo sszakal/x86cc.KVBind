@@ -24,8 +24,8 @@ public sealed class KVMigrationContext
 
     internal KVMigrationContext(object? key, object? prepared)
     {
-        Key = key;
-        Prepared = prepared;
+        this.Key = key;
+        this.Prepared = prepared;
     }
 
     /// <summary>The current aggregate's identity, or null on the synchronous path.</summary>
@@ -34,9 +34,9 @@ public sealed class KVMigrationContext
     /// <summary>Whatever this migration's prepare phase returned for the batch (e.g. a lookup keyed by id).</summary>
     public object? Prepared { get; }
 
-    public TKey KeyAs<TKey>() => (TKey)Key!;
+    public TKey KeyAs<TKey>() => (TKey)this.Key!;
 
-    public TPrepared PreparedAs<TPrepared>() => (TPrepared)Prepared!;
+    public TPrepared PreparedAs<TPrepared>() => (TPrepared)this.Prepared!;
 }
 
 /// <summary>The migration commits produced for one aggregate in a batch run, in chain order.</summary>

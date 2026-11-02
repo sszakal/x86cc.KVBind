@@ -7,7 +7,7 @@ public class ChangeReactionTests : KVModelTestBase
 {
     public ChangeReactionTests()
     {
-        RegisterModelDefinition<ReactionRoot>(builder =>
+        this.RegisterModelDefinition<ReactionRoot>(builder =>
         {
             builder.Field(x => x.Summary);
             builder.Collection(x => x.Items, collection =>
@@ -31,13 +31,13 @@ public class ChangeReactionTests : KVModelTestBase
             builder.OnChange(path => path.Collection(x => x.Items).NestedNode(x => x.Detail).Field(x => x.Code), x => x.ResetSummary);
         });
 
-        RegisterModelDefinition<DirectCycleReactionRoot>(builder =>
+        this.RegisterModelDefinition<DirectCycleReactionRoot>(builder =>
         {
             builder.Field(x => x.A);
             builder.OnChange(path => path.Field(x => x.A), x => x.ChangeAAgain);
         });
 
-        RegisterModelDefinition<IndirectCycleReactionRoot>(builder =>
+        this.RegisterModelDefinition<IndirectCycleReactionRoot>(builder =>
         {
             builder.Field(x => x.A);
             builder.Field(x => x.B);
@@ -50,7 +50,7 @@ public class ChangeReactionTests : KVModelTestBase
     [Fact]
     public void DirectSetter_WhenCollectionItemFieldChanges_TriggersRootReaction()
     {
-        var root = CreateRoot<ReactionRoot>();
+        var root = this.CreateRoot<ReactionRoot>();
         var itemId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
         root.Items.Create(itemId).Amount = 12;
@@ -62,7 +62,7 @@ public class ChangeReactionTests : KVModelTestBase
     [Fact]
     public void PatchSet_WhenCollectionItemFieldChanges_TriggersRootReaction()
     {
-        var root = CreateRoot<ReactionRoot>();
+        var root = this.CreateRoot<ReactionRoot>();
         var itemId = Guid.Parse("22222222-2222-2222-2222-222222222222");
         root.Patch(KVPatchOperation.Add("/Items", new KVAddPatchPayload(itemId)));
 
@@ -74,7 +74,7 @@ public class ChangeReactionTests : KVModelTestBase
     [Fact]
     public void PatchSet_WhenNestedNodeFieldChanges_TriggersRootReaction()
     {
-        var root = CreateRoot<ReactionRoot>();
+        var root = this.CreateRoot<ReactionRoot>();
         root.Patch(KVPatchOperation.Init("/Detail", nameof(ReactionDetail)));
 
         root.Patch(KVPatchOperation.Set("/Detail/Code", "A"));
@@ -85,7 +85,7 @@ public class ChangeReactionTests : KVModelTestBase
     [Fact]
     public void PatchSet_WhenNestedCollectionNestedNodeFieldChanges_TriggersRootReaction()
     {
-        var root = CreateRoot<ReactionRoot>();
+        var root = this.CreateRoot<ReactionRoot>();
         var itemId = Guid.Parse("33333333-3333-3333-3333-333333333333");
         root.Patch(
             KVPatchOperation.Add("/Items", new KVAddPatchPayload(itemId)),
@@ -99,7 +99,7 @@ public class ChangeReactionTests : KVModelTestBase
     [Fact]
     public void DirectSetter_WhenUnrelatedFieldChanges_DoesNotTriggerRootReaction()
     {
-        var root = CreateRoot<ReactionRoot>();
+        var root = this.CreateRoot<ReactionRoot>();
 
         root.Summary = "manual";
 
@@ -109,7 +109,7 @@ public class ChangeReactionTests : KVModelTestBase
     [Fact]
     public void CollectionRemove_WhenItemIsRemoved_TriggersCollectionReaction()
     {
-        var root = CreateRoot<ReactionRoot>();
+        var root = this.CreateRoot<ReactionRoot>();
         var itemId = Guid.Parse("44444444-4444-4444-4444-444444444444");
         root.Items.Create(itemId);
 
@@ -123,7 +123,7 @@ public class ChangeReactionTests : KVModelTestBase
     [Fact]
     public void DirectCycle_WhenReactionChangesSameField_ThrowsCycleError()
     {
-        var root = CreateRoot<DirectCycleReactionRoot>();
+        var root = this.CreateRoot<DirectCycleReactionRoot>();
 
         var act = () => root.A = "start";
 
@@ -134,7 +134,7 @@ public class ChangeReactionTests : KVModelTestBase
     [Fact]
     public void IndirectCycle_WhenReactionsChangeEachOther_ThrowsCycleErrorAndCleansRootState()
     {
-        var root = CreateRoot<IndirectCycleReactionRoot>();
+        var root = this.CreateRoot<IndirectCycleReactionRoot>();
 
         var act = () => root.A = "start";
 
@@ -155,24 +155,24 @@ public class ReactionRoot : KVRootNode
 
     public ReactionDetail? Detail
     {
-        get => GetNestedNode<ReactionDetail>(nameof(Detail));
-        set => SetNestedNode(nameof(Detail), value);
+        get => this.GetNestedNode<ReactionDetail>(nameof(this.Detail));
+        set => this.SetNestedNode(nameof(this.Detail), value);
     }
 
     public string? Summary
     {
-        get => GetField<string?>(nameof(Summary));
-        set => SetField(nameof(Summary), value);
+        get => this.GetField<string?>(nameof(this.Summary));
+        set => this.SetField(nameof(this.Summary), value);
     }
 
     public void ResetSummary(KVChangeContext<ReactionRoot> context)
     {
-        Summary = $"{context.ChangedPath}:{context.NewValue}";
+        this.Summary = $"{context.ChangedPath}:{context.NewValue}";
     }
 
     public void TrackCollectionChange(KVChangeContext<ReactionRoot> context)
     {
-        CollectionChanges.Add($"{context.ChangedPath}:{(context.NewValue is null ? "removed" : "added")}");
+        this.CollectionChanges.Add($"{context.ChangedPath}:{(context.NewValue is null ? "removed" : "added")}");
     }
 }
 
@@ -180,14 +180,14 @@ public class ReactionItem : KVCollectionItemNode
 {
     public int Amount
     {
-        get => GetField<int>(nameof(Amount));
-        set => SetField(nameof(Amount), value);
+        get => this.GetField<int>(nameof(this.Amount));
+        set => this.SetField(nameof(this.Amount), value);
     }
 
     public ReactionDetail? Detail
     {
-        get => GetNestedNode<ReactionDetail>(nameof(Detail));
-        set => SetNestedNode(nameof(Detail), value);
+        get => this.GetNestedNode<ReactionDetail>(nameof(this.Detail));
+        set => this.SetNestedNode(nameof(this.Detail), value);
     }
 }
 
@@ -195,8 +195,8 @@ public class ReactionDetail : KVNestedNode
 {
     public string? Code
     {
-        get => GetField<string?>(nameof(Code));
-        set => SetField(nameof(Code), value);
+        get => this.GetField<string?>(nameof(this.Code));
+        set => this.SetField(nameof(this.Code), value);
     }
 }
 
@@ -204,13 +204,13 @@ public class DirectCycleReactionRoot : KVRootNode
 {
     public string? A
     {
-        get => GetField<string?>(nameof(A));
-        set => SetField(nameof(A), value);
+        get => this.GetField<string?>(nameof(this.A));
+        set => this.SetField(nameof(this.A), value);
     }
 
     public void ChangeAAgain(KVChangeContext<DirectCycleReactionRoot> context)
     {
-        A = $"{context.NewValue}!";
+        this.A = $"{context.NewValue}!";
     }
 }
 
@@ -218,29 +218,29 @@ public class IndirectCycleReactionRoot : KVRootNode
 {
     public string? A
     {
-        get => GetField<string?>(nameof(A));
-        set => SetField(nameof(A), value);
+        get => this.GetField<string?>(nameof(this.A));
+        set => this.SetField(nameof(this.A), value);
     }
 
     public string? B
     {
-        get => GetField<string?>(nameof(B));
-        set => SetField(nameof(B), value);
+        get => this.GetField<string?>(nameof(this.B));
+        set => this.SetField(nameof(this.B), value);
     }
 
     public string? C
     {
-        get => GetField<string?>(nameof(C));
-        set => SetField(nameof(C), value);
+        get => this.GetField<string?>(nameof(this.C));
+        set => this.SetField(nameof(this.C), value);
     }
 
     public void ChangeB(KVChangeContext<IndirectCycleReactionRoot> context)
     {
-        B = $"{context.NewValue}:B";
+        this.B = $"{context.NewValue}:B";
     }
 
     public void ChangeA(KVChangeContext<IndirectCycleReactionRoot> context)
     {
-        A = $"{context.NewValue}:A";
+        this.A = $"{context.NewValue}:A";
     }
 }

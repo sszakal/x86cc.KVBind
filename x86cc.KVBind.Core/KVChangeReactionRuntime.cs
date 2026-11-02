@@ -5,6 +5,11 @@ using x86cc.KVBind.Core.Model;
 
 namespace x86cc.KVBind.Core;
 
+internal readonly record struct KVReactionFrame(
+    string NodeCanonicalPath,
+    string ChangedPath,
+    KVChangeReactionDescriptor Reaction);
+
 internal static class KVChangeReactionRuntime
 {
     private const int MaxReactionChainLength = 16;
@@ -108,7 +113,7 @@ internal static class KVChangeReactionRuntime
 
 internal sealed class KVReactionExecutionState
 {
-    private int _scopeDepth;
+    private int scopeDepth;
 
     internal Stack<KVReactionFrame> Stack { get; } = [];
 
@@ -116,22 +121,17 @@ internal sealed class KVReactionExecutionState
 
     internal bool EnterScope()
     {
-        return _scopeDepth++ == 0;
+        return this.scopeDepth++ == 0;
     }
 
     internal void ExitScope(bool isTopLevel)
     {
-        _scopeDepth--;
+        this.scopeDepth--;
         if (isTopLevel)
         {
-            Stack.Clear();
-            ActiveFrames.Clear();
-            _scopeDepth = 0;
+            this.Stack.Clear();
+            this.ActiveFrames.Clear();
+            this.scopeDepth = 0;
         }
     }
 }
-
-internal readonly record struct KVReactionFrame(
-    string NodeCanonicalPath,
-    string ChangedPath,
-    KVChangeReactionDescriptor Reaction);

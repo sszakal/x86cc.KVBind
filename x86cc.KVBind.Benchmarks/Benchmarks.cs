@@ -17,21 +17,21 @@ public class InitializeBenchmark
 [MemoryDiagnoser]
 public class GetBenchmark
 {
-    private NativeRoot _native = null!;
-    private KvRoot _kvBind = null!;
+    private NativeRoot native = null!;
+    private KvRoot kvBind = null!;
 
     [GlobalSetup]
     public void Setup()
     {
-        _native = GraphFactory.BuildNative();
-        _kvBind = GraphFactory.BuildKvBind();
+        this.native = GraphFactory.BuildNative();
+        this.kvBind = GraphFactory.BuildKvBind();
     }
 
     [Benchmark(Baseline = true)]
     public long Native()
     {
         long sum = 0;
-        foreach (var component in _native.GetAllComponents())
+        foreach (var component in this.native.GetAllComponents())
             sum += GraphFactory.ReadAll(component);
         return sum;
     }
@@ -40,7 +40,7 @@ public class GetBenchmark
     public long KvBind()
     {
         long sum = 0;
-        foreach (var component in _kvBind.GetAllComponents())
+        foreach (var component in this.kvBind.GetAllComponents())
             sum += GraphFactory.ReadAll(component);
         return sum;
     }
@@ -50,30 +50,30 @@ public class GetBenchmark
 [MemoryDiagnoser]
 public class SetBenchmark
 {
-    private NativeRoot _native = null!;
-    private KvRoot _kvBind = null!;
-    private int _seed;
+    private NativeRoot native = null!;
+    private KvRoot kvBind = null!;
+    private int seed;
 
     [GlobalSetup]
     public void Setup()
     {
-        _native = GraphFactory.BuildNative();
-        _kvBind = GraphFactory.BuildKvBind();
+        this.native = GraphFactory.BuildNative();
+        this.kvBind = GraphFactory.BuildKvBind();
     }
 
     [Benchmark(Baseline = true)]
     public void Native()
     {
-        var seed = ++_seed;
-        foreach (var component in _native.GetAllComponents())
+        var seed = ++this.seed;
+        foreach (var component in this.native.GetAllComponents())
             GraphFactory.Fill(component, seed);
     }
 
     [Benchmark]
     public void KvBind()
     {
-        var seed = ++_seed;
-        foreach (var component in _kvBind.GetAllComponents())
+        var seed = ++this.seed;
+        foreach (var component in this.kvBind.GetAllComponents())
             GraphFactory.Fill(component, seed);
     }
 }

@@ -10,7 +10,7 @@ public class DeepGraphValidationTests : DeepGraphTestBase
     public void DeepGraphValidation_WhenLeafNestedNodeRequiredFieldIsMissing_ReturnsCanonicalPath()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<DeepNestedCollectionRoot>(model);
+        var root = this.CreateRoot<DeepNestedCollectionRoot>(model);
         var leafPath = CreateDeepLeaf(root, out var leaf);
         leaf.LeafField = "leaf";
         root.Patch(KVPatchOperation.Init($"/{leafPath}/Animal", "DOG"));
@@ -26,7 +26,7 @@ public class DeepGraphValidationTests : DeepGraphTestBase
     public void DeepGraphValidation_WhenLeafNestedNodeRequiredFieldIsSet_ReturnsNoNestedNodeErrors()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<DeepNestedCollectionRoot>(model);
+        var root = this.CreateRoot<DeepNestedCollectionRoot>(model);
         var leafPath = CreateDeepLeaf(root, out var leaf);
         leaf.LeafField = "leaf";
         root.Patch(KVPatchOperation.Init($"/{leafPath}/Animal", "DOG"));
@@ -41,7 +41,7 @@ public class DeepGraphValidationTests : DeepGraphTestBase
     public void DeepGraphValidation_WhenCommitHasDeepNestedValidationError_Throws()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<DeepNestedCollectionRoot>(model);
+        var root = this.CreateRoot<DeepNestedCollectionRoot>(model);
         var leafPath = CreateDeepLeaf(root, out _);
         root.Patch(KVPatchOperation.Init($"/{leafPath}/Animal", "DOG"));
 

@@ -10,27 +10,27 @@ public abstract partial class KVNode
     // safe — though only intended — for a freshly created aggregate. Driven from KVRootNode.ApplyDefaults().
     internal void ApplyDefaultsRecursive()
     {
-        EnsureBound();
+        this.EnsureBound();
 
         // When inheritance is active (a child bound with a parent), inherited root members are read-only and
         // owned by the parent — skip them so we never try to write a default into a read-only path. On a
         // parentless master (no inheritance) the same members are editable and default normally.
-        var hasInheritance = Model.Overlay.HasInheritance;
+        var hasInheritance = this.Model.Overlay.HasInheritance;
 
-        foreach (var field in Definition.Fields)
+        foreach (var field in this.Definition.Fields)
         {
             if (hasInheritance && field.IsInherited) continue;
-            if (field.HasDefault && !IsFieldSet(field.SubSegmentPath))
-                SetFieldForPatch(field.SubSegmentPath, field.DefaultValue);
+            if (field.HasDefault && !this.IsFieldSet(field.SubSegmentPath))
+                this.SetFieldForPatch(field.SubSegmentPath, field.DefaultValue);
         }
 
-        foreach (var nodeDef in Definition.Nodes)
+        foreach (var nodeDef in this.Definition.Nodes)
         {
             if (hasInheritance && nodeDef.IsInherited) continue;
             nodeDef.GetChildNode(this).ApplyDefaultsRecursive();
         }
 
-        foreach (var collDef in Definition.Collections)
+        foreach (var collDef in this.Definition.Collections)
         {
             if (hasInheritance && collDef.IsInherited) continue;
             var collection = collDef.GetCollection(this);
@@ -44,20 +44,20 @@ public abstract partial class KVNode
             }
         }
 
-        foreach (var nestedDef in Definition.NestedNodes)
+        foreach (var nestedDef in this.Definition.NestedNodes)
         {
             if (hasInheritance && nestedDef.IsInherited) continue;
             if (string.IsNullOrEmpty(nestedDef.DefaultTypeToken))
                 continue;
 
-            var slotModel = GetNestedNodeModel(nestedDef.SubSegmentPath);
+            var slotModel = this.GetNestedNodeModel(nestedDef.SubSegmentPath);
             if (!string.IsNullOrWhiteSpace(KVNestedNode.GetItemType(slotModel)))
                 continue; // already initialized — leave it be
 
-            InitNestedNodeToToken(nestedDef.SubSegmentPath, nestedDef.DefaultTypeToken).ApplyDefaultsRecursive();
+            this.InitNestedNodeToToken(nestedDef.SubSegmentPath, nestedDef.DefaultTypeToken).ApplyDefaultsRecursive();
         }
     }
 
     private bool IsFieldSet(string fieldKey)
-        => Model.TryGetValue(fieldKey, out var value) && value?.Value is not null;
+        => this.Model.TryGetValue(fieldKey, out var value) && value?.Value is not null;
 }

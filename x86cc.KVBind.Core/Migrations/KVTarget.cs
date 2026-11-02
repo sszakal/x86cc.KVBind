@@ -16,9 +16,11 @@ namespace x86cc.KVBind.Core.Migrations;
 /// </remarks>
 public sealed class KVTarget
 {
-    private readonly List<Segment> _segments = new();
+    private readonly List<Segment> segments = new();
 
-    private KVTarget() { }
+    private KVTarget()
+    {
+    }
 
     /// <summary>Starts a selector at the document root.</summary>
     public static KVTarget Root => new();
@@ -27,7 +29,7 @@ public sealed class KVTarget
     public KVTarget Seg(string name)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        _segments.Add(new Segment(name, IsWildcard: false, RequireType: null));
+        this.segments.Add(new Segment(name, IsWildcard: false, RequireType: null));
         return this;
     }
 
@@ -37,7 +39,7 @@ public sealed class KVTarget
     /// </summary>
     public KVTarget AnyItem(string? ofType = null)
     {
-        _segments.Add(new Segment(Name: null, IsWildcard: true, RequireType: ofType));
+        this.segments.Add(new Segment(Name: null, IsWildcard: true, RequireType: ofType));
         return this;
     }
 
@@ -48,9 +50,9 @@ public sealed class KVTarget
     public KVTarget OfType(string typeToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(typeToken);
-        if (_segments.Count == 0)
+        if (this.segments.Count == 0)
             throw new InvalidOperationException("OfType must follow a segment.");
-        _segments[^1] = _segments[^1] with { RequireType = typeToken };
+        this.segments[^1] = this.segments[^1] with { RequireType = typeToken };
         return this;
     }
 
@@ -58,7 +60,7 @@ public sealed class KVTarget
     internal IEnumerable<string> Resolve(KVDictionary source)
     {
         IEnumerable<string> prefixes = new[] { string.Empty };
-        foreach (var segment in _segments)
+        foreach (var segment in this.segments)
             prefixes = Expand(prefixes, segment, source);
         return prefixes;
     }

@@ -13,8 +13,11 @@ internal static class KVMigrationPaths
 
         var prefix = path + "/";
         foreach (var key in source.Keys)
+        {
             if (key.StartsWith(prefix, StringComparison.Ordinal))
                 return true;
+        }
+
         return false;
     }
 
@@ -28,8 +31,11 @@ internal static class KVMigrationPaths
 // ── Nested-node type replacement (e.g. CAT -> DOG) ────────────────────────────────────────────────
 
 internal abstract record KVReshapeOp;
+
 internal sealed record KVReshapeDrop(string Relative) : KVReshapeOp;
+
 internal sealed record KVReshapeSet(string Relative, Func<KVMigrationFieldView, object?> Factory, bool Overwrite) : KVReshapeOp;
+
 internal sealed record KVReshapeRename(string FromRelative, string ToRelative) : KVReshapeOp;
 
 /// <summary>
@@ -45,7 +51,7 @@ public sealed class KVNodeReshapeBuilder
     public KVNodeReshapeBuilder Drop(string relativePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
-        Ops.Add(new KVReshapeDrop(relativePath));
+        this.Ops.Add(new KVReshapeDrop(relativePath));
         return this;
     }
 
@@ -54,7 +60,7 @@ public sealed class KVNodeReshapeBuilder
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
         ArgumentNullException.ThrowIfNull(value);
-        Ops.Add(new KVReshapeSet(relativePath, value, overwrite));
+        this.Ops.Add(new KVReshapeSet(relativePath, value, overwrite));
         return this;
     }
 
@@ -63,7 +69,7 @@ public sealed class KVNodeReshapeBuilder
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fromRelative);
         ArgumentException.ThrowIfNullOrWhiteSpace(toRelative);
-        Ops.Add(new KVReshapeRename(fromRelative, toRelative));
+        this.Ops.Add(new KVReshapeRename(fromRelative, toRelative));
         return this;
     }
 }
@@ -107,6 +113,7 @@ internal sealed class ReplaceNestedTypeStep(KVTarget target, string toType, IRea
                             delta[nodePath + "/" + rename.ToRelative] = moved!;
                             delta[from] = KVValue.Tombstone;
                         }
+
                         break;
                 }
             }

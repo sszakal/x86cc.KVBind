@@ -5,8 +5,6 @@ namespace x86cc.KVBind.Sample.Api.Claims;
 
 public sealed class InsuranceClaimDefinitionBuilder : IKVModelDefinitionBuilder
 {
-    public Type ModelType => typeof(InsuranceClaim);
-
     public static readonly IReadOnlyList<string> DamageCategories =
         ["structural", "electrical", "mechanical", "cosmetic", "water", "fire", "theft", "other"];
 
@@ -19,6 +17,8 @@ public sealed class InsuranceClaimDefinitionBuilder : IKVModelDefinitionBuilder
         ("expedite",     "Expedite"),
         ("complex",      "Complex"),
     ];
+
+    public Type ModelType => typeof(InsuranceClaim);
 
     public KVNodeDefinition Build()
     {
@@ -34,6 +34,7 @@ public sealed class InsuranceClaimDefinitionBuilder : IKVModelDefinitionBuilder
         {
             f.DisplayName("Status").UiControl("select");
             f.Default("draft"); // a fresh claim starts in draft (materialized by CreateNew/ApplyDefaults)
+
             // AllowedValue(storedToken, id, label)
             f.AllowedValue("draft",      "draft",      "Draft");
             f.AllowedValue("in_review",  "in_review",  "In Review");
@@ -60,7 +61,6 @@ public sealed class InsuranceClaimDefinitionBuilder : IKVModelDefinitionBuilder
              .UiControl("textarea")
              .Validation(p => p.For<SubmitClaimValidationProfile>(r => r.MaxLength(1000))));
 
-
         // ── Tags — AllowedElementValue for multi-select array ─────────────────────
         builder.Field(x => x.Tags, f =>
         {
@@ -70,28 +70,37 @@ public sealed class InsuranceClaimDefinitionBuilder : IKVModelDefinitionBuilder
         });
 
         // ── Policy (field group) ──────────────────────────────────────────────────
-        builder.FieldGroup(x => x.Policy, policy =>
-        {
-            policy.Field(x => x.PolicyNumber, f => f.DisplayName("Policy Number"));
-
-            // Coverage type — two options use AllowedValueComponent with a template
-            // to tell the UI "this option requires additional parameters".
-            policy.Field(x => x.CoverageType, f =>
+        builder.FieldGroup(
+            x => x.Policy,
+            policy =>
             {
-                f.DisplayName("Coverage Type").UiControl("select");
-                f.AllowedValue("comprehensive",  "comprehensive",  "Comprehensive");
-                f.AllowedValueComponent("collision",      "collision",      "Collision",
-                    c => c.Template("Collision — {Deductible:C} deductible")
-                           .Placeholder<decimal>("Deductible", "Deductible Amount"));
-                f.AllowedValueComponent("collision_plus", "collision_plus", "Collision Plus",
-                    c => c.Template("Collision Plus — {Deductible:C} deductible, {ExcessAmount:C} excess")
-                           .Placeholder<decimal>("Deductible",    "Deductible Amount")
-                           .Placeholder<decimal>("ExcessAmount",  "Excess Amount"));
-                f.AllowedValue("liability", "liability", "Liability Only");
-                f.AllowedValue("medical",   "medical",   "Medical Payments");
-                f.Validation(p => p.For<SubmitClaimValidationProfile>(r => r.Required()));
-            });
-        }, options => options.Section());
+                policy.Field(x => x.PolicyNumber, f => f.DisplayName("Policy Number"));
+
+                // Coverage type — two options use AllowedValueComponent with a template
+                // to tell the UI "this option requires additional parameters".
+                policy.Field(x => x.CoverageType, f =>
+                {
+                    f.DisplayName("Coverage Type").UiControl("select");
+                    f.AllowedValue("comprehensive",  "comprehensive",  "Comprehensive");
+                    f.AllowedValueComponent(
+                        "collision",
+                        "collision",
+                        "Collision",
+                        c => c.Template("Collision — {Deductible:C} deductible")
+                               .Placeholder<decimal>("Deductible", "Deductible Amount"));
+                    f.AllowedValueComponent(
+                        "collision_plus",
+                        "collision_plus",
+                        "Collision Plus",
+                        c => c.Template("Collision Plus — {Deductible:C} deductible, {ExcessAmount:C} excess")
+                               .Placeholder<decimal>("Deductible",    "Deductible Amount")
+                               .Placeholder<decimal>("ExcessAmount",  "Excess Amount"));
+                    f.AllowedValue("liability", "liability", "Liability Only");
+                    f.AllowedValue("medical",   "medical",   "Medical Payments");
+                    f.Validation(p => p.For<SubmitClaimValidationProfile>(r => r.Required()));
+                });
+            },
+            options => options.Section());
 
         // ── Damaged Items ─────────────────────────────────────────────────────────
         builder.Collection(x => x.DamagedItems, items =>
@@ -127,13 +136,14 @@ public sealed class InsuranceClaimDefinitionBuilder : IKVModelDefinitionBuilder
         {
             claimant.DisplayName("Claimant");
             claimant.Bind<PersonClaimant>("PERSON", person =>
-                person.Field(x => x.FullName,
+                person.Field(
+                    x => x.FullName,
                     f => f.Validation(p => p.For<SubmitClaimValidationProfile>(r => r.Required()))));
             claimant.Bind<CompanyClaimant>("COMPANY", company =>
-                company.Field(x => x.CompanyName,
+                company.Field(
+                    x => x.CompanyName,
                     f => f.Validation(p => p.For<SubmitClaimValidationProfile>(r => r.Required()))));
         });
-
 
         return builder.Build();
     }

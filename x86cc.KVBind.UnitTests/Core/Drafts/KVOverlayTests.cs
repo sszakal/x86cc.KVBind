@@ -1,5 +1,5 @@
-using AwesomeAssertions;
 using System.Text.Json;
+using AwesomeAssertions;
 using x86cc.KVBind.Core.Model;
 
 namespace x86cc.KVBind.UnitTests.Core;

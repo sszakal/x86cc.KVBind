@@ -9,7 +9,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
 {
     public OverlayDraftLifecycleTests()
     {
-        RegisterModelDefinition<ChangeSetTestModel>(modelBuilder =>
+        this.RegisterModelDefinition<ChangeSetTestModel>(modelBuilder =>
         {
             modelBuilder.Field(x => x.Title);
             modelBuilder.Field(x => x.Status);
@@ -33,7 +33,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
     public void Overlay_WhenDraftMutatesAcrossFieldGroupAndCollection_TracksSnapshotAndChanges()
     {
         var model = new KVModelRoot();
-        var rootNode = CreateRoot<ChangeSetTestModel>(model);
+        var rootNode = this.CreateRoot<ChangeSetTestModel>(model);
         rootNode.Title = "source";
         rootNode.Status = 7;
         rootNode.General.Code = "SRC";
@@ -44,7 +44,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
         sourceItem.Amount = 10;
         var sourceItemId = rootNode.Items.GetItemId(sourceItem);
 
-        CommitSetup(model);
+        this.CommitSetup(model);
         rootNode.Title = "overlay";
         rootNode.Status = 99;
         rootNode.General.Code = "OVR";
@@ -61,7 +61,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
         rootNode.Items.GetById(sourceItemId)!.Amount.Should().Be(25);
         rootNode.Items.Count().Should().Be(2);
         model.Snapshot.Data["Title"].Should().Be("source");
-        
+
         rootNode.GetAllChanges().Changes.Should().Contain(change => change.Path == "Title" && change.ChangeType == KVChangeDeltaType.Updated);
     }
 
@@ -69,10 +69,10 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
     public void Overlay_WhenContinuingDraft_PreservesDraftValues()
     {
         var model = new KVModelRoot();
-        var rootNode = CreateRoot<ChangeSetTestModel>(model);
+        var rootNode = this.CreateRoot<ChangeSetTestModel>(model);
         rootNode.Title = "base";
 
-        CommitSetup(model);
+        this.CommitSetup(model);
         rootNode.Title = "draft";
 
         rootNode.Title.Should().Be("draft");
@@ -83,7 +83,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
     public void Discard_WhenOverlayHasFieldGroupAndCollectionChanges_RevertsToSnapshot()
     {
         var model = new KVModelRoot();
-        var rootNode = CreateRoot<ChangeSetTestModel>(model);
+        var rootNode = this.CreateRoot<ChangeSetTestModel>(model);
         rootNode.Title = "base";
         rootNode.General.Code = "SRC";
         var sourceItem = rootNode.Items.Create();
@@ -91,7 +91,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
         sourceItem.Amount = 100;
         var sourceItemId = rootNode.Items.GetItemId(sourceItem);
 
-        CommitSetup(model);
+        this.CommitSetup(model);
         rootNode.Title = "changed";
         rootNode.General.Code = "OVR";
         rootNode.Items.GetById(sourceItemId)!.Amount = 101;
@@ -100,7 +100,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
         added.Amount = 999;
 
         rootNode.Clear();
-        
+
         rootNode.Title.Should().Be("base");
         rootNode.General.Code.Should().Be("SRC");
         rootNode.Items.GetById(sourceItemId)!.Amount.Should().Be(100);
@@ -111,7 +111,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
     public void Commit_WhenOverlayContainsFieldGroupAndCollectionChanges_AppliesChangesToSnapshot()
     {
         var model = new KVModelRoot();
-        var rootNode = CreateRoot<ChangeSetTestModel>(model);
+        var rootNode = this.CreateRoot<ChangeSetTestModel>(model);
         rootNode.Title = "source";
         rootNode.Status = 7;
         rootNode.General.Code = "SRC";
@@ -124,9 +124,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
         var id1 = rootNode.Items.GetItemId(item1);
         var id2 = rootNode.Items.GetItemId(item2);
 
-        
-        
-        CommitSetup(model);
+        this.CommitSetup(model);
         rootNode.Title = "applied";
         rootNode.Status = 13;
         rootNode.General.Code = "APPLIED";
@@ -136,24 +134,26 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
 
         var commit = rootNode.CreateCommit(DateTimeOffset.UtcNow);
         model.Snapshot.Apply(commit);
-        
-        InlineSnapshot.Validate(model.Snapshot.Data
+
+        InlineSnapshot.Validate(
+            model.Snapshot.Data
             .Where(pair => !pair.Key.Contains("/$") && !pair.Key.StartsWith("$", StringComparison.Ordinal))
-            .ToDictionary(pair => pair.Key, pair => pair.Value.Value), """
-                                                Title: applied
-                                                Status: 13
-                                                General/Code: APPLIED
-                                                Items/11111111-1111-1111-1111-111111111111/Name: one
-                                                Items/11111111-1111-1111-1111-111111111111/Amount: 11
-                                                Items/33333333-3333-3333-3333-333333333333/Name: three
-                                                """);
+            .ToDictionary(pair => pair.Key, pair => pair.Value.Value),
+            """
+            Title: applied
+            Status: 13
+            General/Code: APPLIED
+            Items/11111111-1111-1111-1111-111111111111/Name: one
+            Items/11111111-1111-1111-1111-111111111111/Amount: 11
+            Items/33333333-3333-3333-3333-333333333333/Name: three
+            """);
     }
 
     [Fact]
     public void Discard_WhenGroupAndCollectionPathsArePatched_RevertsToSnapshot()
     {
         var model = new KVModelRoot();
-        var source = CreateRoot<ChangeSetTestModel>(model);
+        var source = this.CreateRoot<ChangeSetTestModel>(model);
         source.Title = "Base";
         source.General.Code = "SRC";
         var baseItem = source.Items.Create();
@@ -161,7 +161,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
         var baseId = source.Items.GetItemId(baseItem);
         var addedId = Guid.Parse("33333333-3333-3333-3333-333333333333");
 
-        CommitSetup(model);
+        this.CommitSetup(model);
         source.Patch(KVPatchOperation.Set("/General/Code", "OVR"));
         source.Patch(KVPatchOperation.Add("/Items", new KVAddPatchPayload(addedId)));
 
@@ -182,7 +182,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
     public void DeltaComputation_WhenDraftHasRootGroupAndCollectionChanges_ReturnsCanonicalPaths()
     {
         var model = new KVModelRoot();
-        var source = CreateRoot<ChangeSetTestModel>(model);
+        var source = this.CreateRoot<ChangeSetTestModel>(model);
         source.Title = "base";
         source.General.Code = "SRC";
         var sourceItem = source.Items.Create(Guid.Parse("11111111-1111-1111-1111-111111111111"));
@@ -190,7 +190,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
         sourceItem.Amount = 10;
         var sourceItemId = source.Items.GetItemId(sourceItem);
 
-        CommitSetup(model);
+        this.CommitSetup(model);
         source.Title = "updated";
         source.General.Code = "OVR";
         source.Items.GetById(sourceItemId)!.Amount = 25;
@@ -201,7 +201,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
         source.Items.RemoveById(removedId);
 
         var delta = source.GetAllChanges();
-        
+
         InlineSnapshot.Validate(delta, """
             Changes:
               - Path: General/Code
@@ -218,10 +218,10 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
     public void Overlay_WhenFieldIsUnset_ClearsFieldAsDraftChange()
     {
         var model = new KVModelRoot();
-        var source = CreateRoot<ChangeSetTestModel>(model);
+        var source = this.CreateRoot<ChangeSetTestModel>(model);
         source.Title = "base";
 
-        CommitSetup(model);
+        this.CommitSetup(model);
         source.Patch(KVPatchOperation.Unset("/Title"));
 
         source.Title.Should().BeNull();
@@ -232,10 +232,10 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
     public void Discard_WhenFieldWasUnset_RevealsSnapshotValue()
     {
         var model = new KVModelRoot();
-        var source = CreateRoot<ChangeSetTestModel>(model);
+        var source = this.CreateRoot<ChangeSetTestModel>(model);
         source.Title = "base";
 
-        CommitSetup(model);
+        this.CommitSetup(model);
         source.Patch(KVPatchOperation.Unset("/Title"));
         source.Patch(KVPatchOperation.Discard("/Title"));
 
@@ -257,7 +257,6 @@ public partial class ChangeSetTestModel : KVRootNode
 
     [KVBind("Items")]
     public KVCollectionNode<ChangeSetItemNode> Items { get; } = new();
-
 }
 
 public partial class ChangeSetGeneralGroup : KVFieldGroupNode

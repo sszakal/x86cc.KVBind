@@ -8,7 +8,7 @@ public class RootBindingTests : KVModelTestBase
 {
     public RootBindingTests()
     {
-        RegisterModelDefinition<NewRootNode>(builder =>
+        this.RegisterModelDefinition<NewRootNode>(builder =>
         {
             builder.Field(x => x.Title);
             builder.FieldGroup(x => x.Child, child => child.Field(x => x.Name));
@@ -23,12 +23,12 @@ public class RootBindingTests : KVModelTestBase
             });
         });
     }
-    
+
     [Fact]
     public void RootBinding_WhenRootModelIsBound_ExposesBoundRootModel()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<NewRootNode>(model);
+        var root = this.CreateRoot<NewRootNode>(model);
 
         root.RootModel().Should().BeSameAs(model);
     }
@@ -47,7 +47,7 @@ public class RootBindingTests : KVModelTestBase
     public void RootBinding_WhenRootUsesPlainModel_Throws()
     {
         var root = new NewRootNode();
-        var definition = CreateRegistry().Get<NewRootNode>();
+        var definition = this.CreateRegistry().Get<NewRootNode>();
 
         var act = () => root.BindPlainModelForTest(new KVModel(), definition);
 
@@ -58,7 +58,7 @@ public class RootBindingTests : KVModelTestBase
     public void RootBinding_WhenCollectionIsDeclared_BindsCollectionToChildModel()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<NewRootNode>(model);
+        var root = this.CreateRoot<NewRootNode>(model);
 
         root.Items.Model.Should().NotBeNull();
         root.Items.Model.DataPath.Should().Be("Items");
@@ -68,7 +68,7 @@ public class RootBindingTests : KVModelTestBase
     public void RootBinding_WhenFieldsAreSet_UsesLocalKeysAndStoresResolvedPaths()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<NewRootNode>(model);
+        var root = this.CreateRoot<NewRootNode>(model);
 
         root.Title = "Contract A";
         root.Child.Name = "Artist";
@@ -83,7 +83,7 @@ public class RootBindingTests : KVModelTestBase
     [Fact]
     public void RootBinding_WhenFieldIsNotDefined_ThrowsOnRead()
     {
-        var root = CreateRoot<NewRootNode>();
+        var root = this.CreateRoot<NewRootNode>();
 
         var act = () => root.ReadNotDefined();
 
@@ -94,7 +94,7 @@ public class RootBindingTests : KVModelTestBase
     public void RootBinding_WhenCollectionItemIsCreated_BindsItemAndStoresMetadata()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<NewRootNode>(model);
+        var root = this.CreateRoot<NewRootNode>(model);
 
         var item = root.Items.Create();
         item.Value = "A";
@@ -108,7 +108,7 @@ public class RootBindingTests : KVModelTestBase
     public void RootBinding_WhenCollectionItemIsMovedAndRemoved_UpdatesRuntimeChildren()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<NewRootNode>(model);
+        var root = this.CreateRoot<NewRootNode>(model);
         var first = root.Items.Create();
         var second = root.Items.Create();
         var id1 = root.Items.GetItemId(first);
@@ -126,7 +126,7 @@ public class RootBindingTests : KVModelTestBase
     public void RootBinding_WhenCollectionSubtypeIsCreated_StoresTokenAndHydratesSubtype()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<NewRootNode>(model);
+        var root = this.CreateRoot<NewRootNode>(model);
 
         var item = root.Items.Create<NewSpecialCollectionItemNode>();
         item.Value = "S";
@@ -142,7 +142,7 @@ public class RootBindingTests : KVModelTestBase
     public void RootBinding_WhenCollectionSubtypeIsNotAllowed_ThrowsOnCreate()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<NewRootNode>(model);
+        var root = this.CreateRoot<NewRootNode>(model);
 
         var act = () => root.Items.Create<NewUnregisteredCollectionItemNode>();
 
@@ -157,8 +157,8 @@ public class RootBindingTests : KVModelTestBase
         model.Set($"Items/$items", new string[] { id });
         model.Set($"Items/{id}/$type", "unknown");
         model.Set($"Items/{id}/Value", "V");
-        
-        var act = () => CreateRoot<NewRootNode>(model);
+
+        var act = () => this.CreateRoot<NewRootNode>(model);
 
         act.Should().Throw<InvalidOperationException>();
     }
@@ -171,24 +171,22 @@ public class RootBindingTests : KVModelTestBase
 
         public string? Title
         {
-            get => GetField<string?>("Title");
-            set => SetField("Title", value);
+            get => this.GetField<string?>("Title");
+            set => this.SetField("Title", value);
         }
 
-        public string? ReadNotDefined() => GetField<string?>("NotDefined");
+        public string? ReadNotDefined() => this.GetField<string?>("NotDefined");
 
-        public void BindPlainModelForTest(KVModel model, KVNodeDefinition definition) => Bind(model, definition);
-
+        public void BindPlainModelForTest(KVModel model, KVNodeDefinition definition) => this.Bind(model, definition);
     }
 
     private sealed class NewChildNode : KVFieldGroupNode
     {
         public string? Name
         {
-            get => GetField<string?>("Name");
-            set => SetField("Name", value);
+            get => this.GetField<string?>("Name");
+            set => this.SetField("Name", value);
         }
-
     }
 
     private sealed class NewCollectionNode : KVCollectionNode<NewCollectionItemNode>;
@@ -197,8 +195,8 @@ public class RootBindingTests : KVModelTestBase
     {
         public string? Value
         {
-            get => GetField<string?>("Value");
-            set => SetField("Value", value);
+            get => this.GetField<string?>("Value");
+            set => this.SetField("Value", value);
         }
     }
 
@@ -206,8 +204,8 @@ public class RootBindingTests : KVModelTestBase
     {
         public string? Special
         {
-            get => GetField<string?>("Special");
-            set => SetField("Special", value);
+            get => this.GetField<string?>("Special");
+            set => this.SetField("Special", value);
         }
     }
 

@@ -10,7 +10,7 @@ public class DeepGraphBindingTests : DeepGraphTestBase
     public void DeepGraphBinding_WhenLeafNestedNodeIsEdited_StoresExpectedCanonicalPaths()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<DeepNestedCollectionRoot>(model);
+        var root = this.CreateRoot<DeepNestedCollectionRoot>(model);
         var leafPath = CreateDeepLeaf(root, out var leaf);
 
         leaf.LeafField = "leaf-1";
@@ -29,13 +29,13 @@ public class DeepGraphBindingTests : DeepGraphTestBase
     public void DeepGraphBinding_WhenCommittedAndRebound_HydratesLeafNestedNode()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<DeepNestedCollectionRoot>(model);
+        var root = this.CreateRoot<DeepNestedCollectionRoot>(model);
         var leafPath = CreateDeepLeaf(root, out var leaf);
 
         leaf.LeafField = "leaf-1";
         root.Patch(KVPatchOperation.Init($"/{leafPath}/Animal", "DOG"));
         root.Patch(KVPatchOperation.Set($"/{leafPath}/Animal/DogName", "Rex"));
-        CommitAndContinue(root, model, new List<KVCommit>());
+        this.CommitAndContinue(root, model, new List<KVCommit>());
 
         var hydratedLeaf = GetDeepLeaf(root);
         hydratedLeaf.LeafField.Should().Be("leaf-1");

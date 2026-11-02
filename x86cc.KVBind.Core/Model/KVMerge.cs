@@ -23,7 +23,8 @@ namespace x86cc.KVBind.Core.Model;
 /// </remarks>
 public static class KVMerge
 {
-    private const string TypeSegment  = "$type";
+    private const string TypeSegment = "$type";
+
     private const string ItemsSegment = "$items";
 
     public static KVMergeResult Merge(
@@ -31,8 +32,8 @@ public static class KVMerge
         IReadOnlyDictionary<string, KVValue> theirs,
         IReadOnlyDictionary<string, KVValue> ours)
     {
-        var conflicts        = new List<KVConflict>();
-        var incoming         = new List<KVConflict>();
+        var conflicts = new List<KVConflict>();
+        var incoming = new List<KVConflict>();
         var mergedItemArrays = new Dictionary<string, KVValue>(System.StringComparer.Ordinal);
 
         var changes = ours; // the passes below read the draft change-set as "changes".
@@ -50,8 +51,10 @@ public static class KVMerge
             if (v == KVValue.Tombstone)
             {
                 foreach (var baseKey in baseSnapshot.Data.Keys)
+                {
                     if (KVPath.IsSameOrDescendant(baseKey, k))
                         mainChanged.Add(baseKey);
+                }
             }
             else
             {
@@ -89,6 +92,7 @@ public static class KVMerge
             });
             structuralNodes.Add(nodePath);
         }
+
         bool CoveredByStructuralNode(string path) =>
             structuralNodes.Any(n => KVPath.IsSameOrDescendant(path, n));
         foreach (var p in mainChanged.Where(CoveredByStructuralNode).ToList())
@@ -127,13 +131,13 @@ public static class KVMerge
 
             var collectionPath = ParentPath(key);
             TheirsGet(key, out var theirsItemsValue);
-            var baseIds   = ExtractItemIds(baseSnapshot.Data.GetValueOrDefault(key));
+            var baseIds = ExtractItemIds(baseSnapshot.Data.GetValueOrDefault(key));
             var targetIds = ExtractItemIds(theirsItemsValue);
-            var ourIds    = ExtractItemIds(changes.GetValueOrDefault(key));
+            var ourIds = ExtractItemIds(changes.GetValueOrDefault(key));
 
-            var addedByOurs     = ourIds.Except(baseIds, System.StringComparer.Ordinal).ToHashSet(System.StringComparer.Ordinal);
-            var removedByOurs   = baseIds.Except(ourIds, System.StringComparer.Ordinal).ToHashSet(System.StringComparer.Ordinal);
-            var addedByTarget   = targetIds.Except(baseIds, System.StringComparer.Ordinal).ToHashSet(System.StringComparer.Ordinal);
+            var addedByOurs = ourIds.Except(baseIds, System.StringComparer.Ordinal).ToHashSet(System.StringComparer.Ordinal);
+            var removedByOurs = baseIds.Except(ourIds, System.StringComparer.Ordinal).ToHashSet(System.StringComparer.Ordinal);
+            var addedByTarget = targetIds.Except(baseIds, System.StringComparer.Ordinal).ToHashSet(System.StringComparer.Ordinal);
             var removedByTarget = baseIds.Except(targetIds, System.StringComparer.Ordinal).ToHashSet(System.StringComparer.Ordinal);
 
             bool ItemEditedByOurs(string id) =>
@@ -200,6 +204,7 @@ public static class KVMerge
                 if (removedByOurs.Contains(id) && !caseBConflicted.Contains(id)) continue;
                 mergedIds.Add(id);
             }
+
             foreach (var id in addedByOurs)
                 if (!mergedIds.Contains(id, System.StringComparer.Ordinal)) mergedIds.Add(id);
             foreach (var id in caseBConflicted)
@@ -315,6 +320,12 @@ public static class KVMerge
         return slash < 0 ? path : path[(slash + 1)..];
     }
 
+    internal static bool ValueEquals(KVValue? a, KVValue? b)
+    {
+        if (a is null || b is null) return a is null && b is null;
+        return a.Equals(b);
+    }
+
     private static bool IsReservedLeaf(string key, string segment) =>
         string.Equals(key, segment, System.StringComparison.Ordinal)
         || key.EndsWith("/" + segment, System.StringComparison.Ordinal);
@@ -323,12 +334,6 @@ public static class KVMerge
     {
         var slash = key.LastIndexOf('/');
         return slash < 0 ? string.Empty : key[..slash];
-    }
-
-    internal static bool ValueEquals(KVValue? a, KVValue? b)
-    {
-        if (a is null || b is null) return a is null && b is null;
-        return a.Equals(b);
     }
 }
 

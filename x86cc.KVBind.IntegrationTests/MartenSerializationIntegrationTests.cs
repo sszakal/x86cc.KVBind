@@ -10,13 +10,21 @@ namespace x86cc.KVBind.IntegrationTests;
 public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
 {
     private static readonly KVNodeDefinition Definition = IntegrationGraphDefinition.Create();
+
     private static readonly Guid AggregateId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+
     private static readonly Guid ExternalId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+
     private static readonly Guid BaseOrderId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
     private static readonly Guid BaseLineId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+
     private static readonly Guid BaseAdjustmentId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+
     private static readonly Guid DraftOrderId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+
     private static readonly Guid DraftLineId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+
     private static readonly Guid DraftAdjustmentId = Guid.Parse("66666666-6666-6666-6666-666666666666");
 
     [Fact]
@@ -24,14 +32,14 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
     {
         var snapshot = CreateFullSnapshot();
 
-        await using (var session = Store.LightweightSession())
+        await using (var session = this.Store.LightweightSession())
         {
             session.Store(new IntegrationSnapshotDocument { Id = AggregateId, Snapshot = snapshot });
             await session.SaveChangesAsync();
         }
 
         IntegrationSnapshotDocument? reloaded;
-        await using (var session = Store.QuerySession())
+        await using (var session = this.Store.QuerySession())
         {
             reloaded = await session.LoadAsync<IntegrationSnapshotDocument>(AggregateId);
         }
@@ -61,20 +69,20 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
     [Fact]
     public async Task OverlayRoundTrip_WithEditsAndDeepCollections_PreservesDraftState()
     {
-        var snapshot = await PersistSnapshotAsync(CreateFullSnapshot());
+        var snapshot = await this.PersistSnapshotAsync(CreateFullSnapshot());
         var overlay = KVOverlay.Create(snapshot.Clone(), "adjuster-a");
         var root = Bind(overlay);
         ApplyDraftEdits(root);
 
         var overlayDocument = IntegrationOverlayDocument.Create(AggregateId, "adjuster-a", overlay);
-        await using (var session = Store.LightweightSession())
+        await using (var session = this.Store.LightweightSession())
         {
             session.Store(overlayDocument);
             await session.SaveChangesAsync();
         }
 
         IntegrationOverlayDocument? reloaded;
-        await using (var session = Store.QuerySession())
+        await using (var session = this.Store.QuerySession())
         {
             reloaded = await session.LoadAsync<IntegrationOverlayDocument>(overlayDocument.Id);
         }
@@ -99,20 +107,20 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
     [Fact]
     public async Task CommitRoundTrip_AfterOverlayReload_PreservesCommitAndFinalSnapshot()
     {
-        var snapshot = await PersistSnapshotAsync(CreateFullSnapshot());
+        var snapshot = await this.PersistSnapshotAsync(CreateFullSnapshot());
         var overlay = KVOverlay.Create(snapshot.Clone(), "adjuster-a");
         var root = Bind(overlay);
         ApplyDraftEdits(root);
 
         var overlayDocument = IntegrationOverlayDocument.Create(AggregateId, "adjuster-a", overlay);
-        await using (var session = Store.LightweightSession())
+        await using (var session = this.Store.LightweightSession())
         {
             session.Store(overlayDocument);
             await session.SaveChangesAsync();
         }
 
         IntegrationOverlayDocument reloadedOverlay;
-        await using (var session = Store.QuerySession())
+        await using (var session = this.Store.QuerySession())
         {
             reloadedOverlay = (await session.LoadAsync<IntegrationOverlayDocument>(overlayDocument.Id))!;
         }
@@ -122,7 +130,7 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         commit.User = "adjuster-a";
         snapshot.Apply(commit);
 
-        await using (var session = Store.LightweightSession())
+        await using (var session = this.Store.LightweightSession())
         {
             session.Store(new IntegrationCommitDocument { Id = commit.CommitId, AggregateId = AggregateId, Commit = commit });
             session.Store(new IntegrationSnapshotDocument { Id = AggregateId, Snapshot = snapshot });
@@ -131,7 +139,7 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
 
         IntegrationCommitDocument? reloadedCommit;
         IntegrationSnapshotDocument? reloadedSnapshot;
-        await using (var session = Store.QuerySession())
+        await using (var session = this.Store.QuerySession())
         {
             reloadedCommit = await session.LoadAsync<IntegrationCommitDocument>(commit.CommitId);
             reloadedSnapshot = await session.LoadAsync<IntegrationSnapshotDocument>(AggregateId);
@@ -157,7 +165,7 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
     [Fact]
     public async Task RepeatedReloadEditSaveReload_DoesNotDriftStoredValueTypes()
     {
-        var snapshot = await PersistSnapshotAsync(CreateFullSnapshot());
+        var snapshot = await this.PersistSnapshotAsync(CreateFullSnapshot());
 
         var firstOverlay = KVOverlay.Create(snapshot.Clone(), "adjuster-a");
         var firstDraft = Bind(firstOverlay);
@@ -168,14 +176,14 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         firstDraft.CompensationType = IntegrationCompensationType.Manager;
 
         var overlayDocument = IntegrationOverlayDocument.Create(AggregateId, "adjuster-a", firstOverlay);
-        await using (var session = Store.LightweightSession())
+        await using (var session = this.Store.LightweightSession())
         {
             session.Store(overlayDocument);
             await session.SaveChangesAsync();
         }
 
         IntegrationOverlayDocument reloadedOverlay;
-        await using (var session = Store.QuerySession())
+        await using (var session = this.Store.QuerySession())
         {
             reloadedOverlay = (await session.LoadAsync<IntegrationOverlayDocument>(overlayDocument.Id))!;
         }
@@ -190,14 +198,14 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
             KVPatchOperation.Set("/CompensationType", "assistant_hourly"));
         reloadedOverlay.UpdateFrom(secondOverlay);
 
-        await using (var session = Store.LightweightSession())
+        await using (var session = this.Store.LightweightSession())
         {
             session.Store(reloadedOverlay);
             await session.SaveChangesAsync();
         }
 
         IntegrationOverlayDocument finalOverlayDocument;
-        await using (var session = Store.QuerySession())
+        await using (var session = this.Store.QuerySession())
         {
             finalOverlayDocument = (await session.LoadAsync<IntegrationOverlayDocument>(overlayDocument.Id))!;
         }
@@ -230,9 +238,12 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         var snapshot = new KVSnapshot { CreatedBy = "test", ModifiedBy = "test" };
         var overlay = KVOverlay.Create(snapshot, "test");
         var root = Bind(overlay);
-        var o1 = root.Orders.Create(orderId1); o1.OrderNumber = "ORD-1";
-        var o2 = root.Orders.Create(orderId2); o2.OrderNumber = "ORD-2";
-        var o3 = root.Orders.Create(orderId3); o3.OrderNumber = "ORD-3";
+        var o1 = root.Orders.Create(orderId1);
+        o1.OrderNumber = "ORD-1";
+        var o2 = root.Orders.Create(orderId2);
+        o2.OrderNumber = "ORD-2";
+        var o3 = root.Orders.Create(orderId3);
+        o3.OrderNumber = "ORD-3";
 
         // Move third order to front: [orderId3, orderId1, orderId2]
         root.Orders.MoveById(orderId3.ToString("D"), 0);
@@ -242,14 +253,14 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         snapshot.Apply(commit);
 
         // Persist and reload from Postgres
-        await using (var session = Store.LightweightSession())
+        await using (var session = this.Store.LightweightSession())
         {
             session.Store(new IntegrationSnapshotDocument { Id = AggregateId, Snapshot = snapshot });
             await session.SaveChangesAsync();
         }
 
         IntegrationSnapshotDocument? reloaded;
-        await using (var session = Store.QuerySession())
+        await using (var session = this.Store.QuerySession())
         {
             reloaded = await session.LoadAsync<IntegrationSnapshotDocument>(AggregateId);
         }
@@ -264,17 +275,6 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         reloadedRoot.Orders.ElementAt(0).OrderNumber.Should().Be("ORD-3");
         reloadedRoot.Orders.ElementAt(1).OrderNumber.Should().Be("ORD-1");
         reloadedRoot.Orders.ElementAt(2).OrderNumber.Should().Be("ORD-2");
-    }
-
-    private async Task<KVSnapshot> PersistSnapshotAsync(KVSnapshot snapshot)
-    {
-        await using var session = Store.LightweightSession();
-        session.Store(new IntegrationSnapshotDocument { Id = AggregateId, Snapshot = snapshot });
-        await session.SaveChangesAsync();
-
-        await using var query = Store.QuerySession();
-        var reloaded = await query.LoadAsync<IntegrationSnapshotDocument>(AggregateId);
-        return reloaded!.Snapshot;
     }
 
     private static KVSnapshot CreateFullSnapshot()
@@ -464,5 +464,16 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
     {
         storedValue.Value.Should().BeAssignableTo<IEnumerable<string>>().Subject
             .Should().BeEquivalentTo(expected, options => options.WithStrictOrdering());
+    }
+
+    private async Task<KVSnapshot> PersistSnapshotAsync(KVSnapshot snapshot)
+    {
+        await using var session = this.Store.LightweightSession();
+        session.Store(new IntegrationSnapshotDocument { Id = AggregateId, Snapshot = snapshot });
+        await session.SaveChangesAsync();
+
+        await using var query = this.Store.QuerySession();
+        var reloaded = await query.LoadAsync<IntegrationSnapshotDocument>(AggregateId);
+        return reloaded!.Snapshot;
     }
 }

@@ -8,7 +8,7 @@ public class ProtectedNodePatchTests : KVModelTestBase
 {
     public ProtectedNodePatchTests()
     {
-        RegisterModelDefinition<NewPatchRootNode>(builder =>
+        this.RegisterModelDefinition<NewPatchRootNode>(builder =>
         {
             builder.Field(x => x.Title);
             builder.FieldGroup(x => x.General, general => general.Field(x => x.Code));
@@ -23,7 +23,7 @@ public class ProtectedNodePatchTests : KVModelTestBase
     public void ProtectedNodePatch_WhenSetTargetsFields_UpdatesRootGroupAndCollectionFields()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<NewPatchRootNode>(model);
+        var root = this.CreateRoot<NewPatchRootNode>(model);
 
         var item = root.Items.Create();
         var id = root.Items.GetItemId(item);
@@ -43,7 +43,7 @@ public class ProtectedNodePatchTests : KVModelTestBase
     public void ProtectedNodePatch_WhenCollectionOperationsTargetItems_AppliesAddRemoveAndMove()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<NewPatchRootNode>(model);
+        var root = this.CreateRoot<NewPatchRootNode>(model);
 
         var first = root.Items.Create();
         var second = root.Items.Create();
@@ -66,7 +66,7 @@ public class ProtectedNodePatchTests : KVModelTestBase
     public void ProtectedNodePatch_WhenAddUsesUnsupportedSubtypeToken_Throws()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<NewPatchRootNode>(model);
+        var root = this.CreateRoot<NewPatchRootNode>(model);
 
         root.CommitSetup();
         var act = () => root.Patch(KVPatchOperation.Add("/Items", new KVAddPatchPayload(Guid.NewGuid(), "special")));
@@ -78,8 +78,8 @@ public class ProtectedNodePatchTests : KVModelTestBase
     public void ProtectedNodePatch_WhenDiscardTargetsField_RevertsFromSnapshot()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<NewPatchRootNode>(model);
-        
+        var root = this.CreateRoot<NewPatchRootNode>(model);
+
         root.Title = "Base";
 
         root.CommitSetup();
@@ -98,20 +98,18 @@ public class ProtectedNodePatchTests : KVModelTestBase
 
         public string? Title
         {
-            get => GetField<string?>("Title");
-            set => SetField("Title", value);
+            get => this.GetField<string?>("Title");
+            set => this.SetField("Title", value);
         }
-        
     }
 
     private sealed class NewPatchGeneralNode : KVFieldGroupNode
     {
         public string? Code
         {
-            get => GetField<string?>("Code");
-            set => SetField("Code", value);
+            get => this.GetField<string?>("Code");
+            set => this.SetField("Code", value);
         }
-
     }
 
     private sealed class NewPatchCollectionNode : KVCollectionNode<NewPatchItemNode>;
@@ -120,8 +118,8 @@ public class ProtectedNodePatchTests : KVModelTestBase
     {
         public int Amount
         {
-            get => GetField<int>("Amount");
-            set => SetField("Amount", value);
+            get => this.GetField<int>("Amount");
+            set => this.SetField("Amount", value);
         }
     }
 }

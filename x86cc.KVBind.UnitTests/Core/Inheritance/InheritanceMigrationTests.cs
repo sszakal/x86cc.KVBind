@@ -9,17 +9,6 @@ namespace x86cc.KVBind.UnitTests.Core.Inheritance;
 // those fields normally, and the child sees the result through the inheritance read-through.
 public class InheritanceMigrationTests
 {
-    private static KVNodeDefinition DefinitionWithBackfills()
-    {
-        var builder = new KVBindBuilder<Contract>();
-        builder.Field(x => x.Reference);
-        builder.Field(x => x.MasterTerms, f => f.Inherited());
-        builder.Migration(2, m => m
-            .Backfill(KVTarget.Root.Seg("MasterTerms"), _ => "MIGRATED-TERMS") // inherited
-            .Backfill(KVTarget.Root.Seg("Reference"), _ => "MIGRATED-REF"));   // non-inherited
-        return builder.Build();
-    }
-
     [Fact]
     public void Master_migration_backfills_both_inherited_and_non_inherited_fields()
     {
@@ -64,5 +53,16 @@ public class InheritanceMigrationTests
         child.Snapshot.Data.Should().NotContainKey("MasterTerms");
         child.Snapshot.Data["Reference"].Value.Should().Be("MIGRATED-REF");
         child.Snapshot.SchemaVersion.Should().Be(2);
+    }
+
+    private static KVNodeDefinition DefinitionWithBackfills()
+    {
+        var builder = new KVBindBuilder<Contract>();
+        builder.Field(x => x.Reference);
+        builder.Field(x => x.MasterTerms, f => f.Inherited());
+        builder.Migration(2, m => m
+            .Backfill(KVTarget.Root.Seg("MasterTerms"), _ => "MIGRATED-TERMS") // inherited
+            .Backfill(KVTarget.Root.Seg("Reference"), _ => "MIGRATED-REF"));   // non-inherited
+        return builder.Build();
     }
 }

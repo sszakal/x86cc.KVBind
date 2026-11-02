@@ -8,7 +8,7 @@ public class PatchExecutionTests : KVModelTestBase
 {
     public PatchExecutionTests()
     {
-        RegisterModelDefinition<ChangeSetPatchModel>(modelBuilder =>
+        this.RegisterModelDefinition<ChangeSetPatchModel>(modelBuilder =>
         {
             modelBuilder.Field(x => x.Title);
             modelBuilder.FieldGroup(x => x.General, group => group.Field(x => x.Code));
@@ -22,7 +22,7 @@ public class PatchExecutionTests : KVModelTestBase
             });
         });
 
-        RegisterModelDefinition<PolymorphicPatchModel>(modelBuilder =>
+        this.RegisterModelDefinition<PolymorphicPatchModel>(modelBuilder =>
         {
             modelBuilder.Collection(x => x.Items, collection =>
             {
@@ -34,7 +34,7 @@ public class PatchExecutionTests : KVModelTestBase
             });
         });
 
-        RegisterModelDefinition<NestedPatchModel>(modelBuilder =>
+        this.RegisterModelDefinition<NestedPatchModel>(modelBuilder =>
         {
             modelBuilder.Collection(x => x.OuterItems, collection =>
             {
@@ -52,7 +52,7 @@ public class PatchExecutionTests : KVModelTestBase
             });
         });
 
-        RegisterModelDefinition<CustomOperationPatchModel>(modelBuilder =>
+        this.RegisterModelDefinition<CustomOperationPatchModel>(modelBuilder =>
         {
             modelBuilder.Collection(x => x.Items, collection =>
             {
@@ -65,7 +65,7 @@ public class PatchExecutionTests : KVModelTestBase
             });
         });
 
-        RegisterModelDefinition<ConventionCustomOperationPatchModel>(modelBuilder =>
+        this.RegisterModelDefinition<ConventionCustomOperationPatchModel>(modelBuilder =>
         {
             modelBuilder.Collection(x => x.Items, collection =>
             {
@@ -74,7 +74,7 @@ public class PatchExecutionTests : KVModelTestBase
             });
         });
 
-        RegisterModelDefinition<NestedNodeRoot>(builder =>
+        this.RegisterModelDefinition<NestedNodeRoot>(builder =>
         {
             builder.NestedNode(x => x.Animal, nested =>
                 nested.Bind<DogNestedNode>("DOG", dog =>
@@ -86,7 +86,7 @@ public class PatchExecutionTests : KVModelTestBase
     public void PatchExecution_WhenSetTargetsFields_UpdatesFieldAndGroupPaths()
     {
         var modelData = new KVModelRoot();
-        var model = CreateRoot<ChangeSetPatchModel>(modelData);
+        var model = this.CreateRoot<ChangeSetPatchModel>(modelData);
         model.Title = "Base";
         model.General.Code = "SRC";
 
@@ -105,7 +105,7 @@ public class PatchExecutionTests : KVModelTestBase
     public void PatchExecution_WhenCollectionOperationsTargetItems_AppliesAddRemoveAndMove()
     {
         var modelData = new KVModelRoot();
-        var model = CreateRoot<ChangeSetPatchModel>(modelData);
+        var model = this.CreateRoot<ChangeSetPatchModel>(modelData);
         var first = model.Items.Create();
         first.Name = "first";
         first.Amount = 1;
@@ -139,7 +139,7 @@ public class PatchExecutionTests : KVModelTestBase
     [Fact]
     public void PatchExecution_WhenAddUsesDuplicateClientItemId_Throws()
     {
-        var model = CreateRoot<ChangeSetPatchModel>();
+        var model = this.CreateRoot<ChangeSetPatchModel>();
         var itemId = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
         model.CommitSetup();
@@ -153,7 +153,7 @@ public class PatchExecutionTests : KVModelTestBase
     public void PatchExecution_WhenAddUsesUnsupportedSubtypeToken_Throws()
     {
         var modelData = new KVModelRoot();
-        var model = CreateRoot<PolymorphicPatchModel>(modelData);
+        var model = this.CreateRoot<PolymorphicPatchModel>(modelData);
         model.CommitSetup();
 
         var act = () => model.Patch(KVPatchOperation.Add("/Items", new KVAddPatchPayload(Guid.NewGuid(), "special")));
@@ -164,7 +164,7 @@ public class PatchExecutionTests : KVModelTestBase
     [Fact]
     public void PatchExecution_WhenDiscardTargetsField_RevertsPathFromSnapshot()
     {
-        var model = CreateRoot<ChangeSetPatchModel>();
+        var model = this.CreateRoot<ChangeSetPatchModel>();
         model.Title = "Base";
 
         model.CommitSetup();
@@ -180,7 +180,7 @@ public class PatchExecutionTests : KVModelTestBase
     [Fact]
     public void PatchExecution_WhenDiscardTargetsRoot_ClearsDraftAndAllowsLaterEdits()
     {
-        var model = CreateRoot<ChangeSetPatchModel>();
+        var model = this.CreateRoot<ChangeSetPatchModel>();
         model.Title = "Base";
 
         model.CommitSetup();
@@ -196,7 +196,7 @@ public class PatchExecutionTests : KVModelTestBase
     [Fact]
     public void PatchExecution_WhenItemIsRemovedBeforeLaterEdit_Throws()
     {
-        var model = CreateRoot<ChangeSetPatchModel>();
+        var model = this.CreateRoot<ChangeSetPatchModel>();
         var item = model.Items.Create();
         item.Amount = 1;
         var itemId = model.Items.GetItemId(item);
@@ -211,7 +211,7 @@ public class PatchExecutionTests : KVModelTestBase
     [Fact]
     public void PatchExecution_WhenItemIsEditedBeforeRemove_LeavesItemRemoved()
     {
-        var model = CreateRoot<ChangeSetPatchModel>();
+        var model = this.CreateRoot<ChangeSetPatchModel>();
         var item = model.Items.Create();
         item.Amount = 1;
         var itemId = model.Items.GetItemId(item);
@@ -227,7 +227,7 @@ public class PatchExecutionTests : KVModelTestBase
     [Fact]
     public void PatchExecution_WhenSetTargetsNestedCollectionItem_TraversesNestedCollections()
     {
-        var model = CreateRoot<NestedPatchModel>();
+        var model = this.CreateRoot<NestedPatchModel>();
         var outerItem = model.OuterItems.Create();
         var outerId = model.OuterItems.GetItemId(outerItem);
         var innerItem = outerItem.InnerItems.Create();
@@ -247,7 +247,7 @@ public class PatchExecutionTests : KVModelTestBase
     [Fact]
     public void PatchExecution_WhenSelectorPathIsUsed_Throws()
     {
-        var model = CreateRoot<ChangeSetPatchModel>();
+        var model = this.CreateRoot<ChangeSetPatchModel>();
         var item = model.Items.Create();
         item.Name = "entry-1";
         item.Amount = 10;
@@ -261,7 +261,7 @@ public class PatchExecutionTests : KVModelTestBase
     [Fact]
     public void PatchExecution_WhenCustomCollectionOperationIsRegistered_InvokesHandler()
     {
-        var model = CreateRoot<CustomOperationPatchModel>();
+        var model = this.CreateRoot<CustomOperationPatchModel>();
         var itemId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
         model.CommitSetup();
@@ -274,7 +274,7 @@ public class PatchExecutionTests : KVModelTestBase
     [Fact]
     public void PatchExecution_WhenCustomCollectionOperationIsUnregistered_Throws()
     {
-        var model = CreateRoot<ChangeSetPatchModel>();
+        var model = this.CreateRoot<ChangeSetPatchModel>();
 
         model.CommitSetup();
         var act = () => model.Patch(KVPatchOperation.Custom("GROUP", "/Items", new ItemsToGroup(Guid.NewGuid())));
@@ -285,7 +285,7 @@ public class PatchExecutionTests : KVModelTestBase
     [Fact]
     public void PatchExecution_WhenCustomOperationUsesMethodNameConvention_InvokesHandler()
     {
-        var model = CreateRoot<ConventionCustomOperationPatchModel>();
+        var model = this.CreateRoot<ConventionCustomOperationPatchModel>();
         var itemId = Guid.Parse("55555555-5555-5555-5555-555555555555");
 
         model.CommitSetup();
@@ -297,7 +297,7 @@ public class PatchExecutionTests : KVModelTestBase
     [Fact]
     public void PatchExecution_WhenCustomOperationRunsBeforeBuiltInOperation_AppliesSequentially()
     {
-        var model = CreateRoot<CustomOperationPatchModel>();
+        var model = this.CreateRoot<CustomOperationPatchModel>();
         var itemId = Guid.Parse("33333333-3333-3333-3333-333333333333");
         var itemPath = itemId.ToString("D");
 
@@ -312,7 +312,7 @@ public class PatchExecutionTests : KVModelTestBase
     [Fact]
     public void PatchExecution_WhenCustomOperationUsesBuiltInName_ThrowsDuringDefinitionBuild()
     {
-        RegisterModelDefinition<BuiltInOverridePatchModel>(modelBuilder =>
+        this.RegisterModelDefinition<BuiltInOverridePatchModel>(modelBuilder =>
         {
             modelBuilder.Collection(x => x.Items, collection =>
             {
@@ -321,7 +321,7 @@ public class PatchExecutionTests : KVModelTestBase
             });
         });
 
-        Action act = () => CreateRoot<BuiltInOverridePatchModel>();
+        Action act = () => this.CreateRoot<BuiltInOverridePatchModel>();
 
         act.Should().Throw<InvalidOperationException>();
     }
@@ -330,10 +330,10 @@ public class PatchExecutionTests : KVModelTestBase
     public void PatchExecution_WhenUnsetTargetsCommittedField_RemovesFieldAndEmitsRemovedDelta()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<ChangeSetPatchModel>(model);
+        var root = this.CreateRoot<ChangeSetPatchModel>(model);
         root.Title = "original";
-        CommitSetup(model);
-        root = CreateRoot<ChangeSetPatchModel>(model);
+        this.CommitSetup(model);
+        root = this.CreateRoot<ChangeSetPatchModel>(model);
 
         var result = root.Patch(KVPatchOperation.Unset("/Title"));
 
@@ -344,7 +344,7 @@ public class PatchExecutionTests : KVModelTestBase
     [Fact]
     public void PatchExecution_WhenUnsetTargetsDraftOnlyField_ProducesNoDelta()
     {
-        var root = CreateRoot<ChangeSetPatchModel>();
+        var root = this.CreateRoot<ChangeSetPatchModel>();
         root.Title = "draft-only";
 
         var result = root.Patch(KVPatchOperation.Unset("/Title"));
@@ -357,10 +357,10 @@ public class PatchExecutionTests : KVModelTestBase
     public void PatchExecution_WhenDropTargetsInitializedNestedNode_ClearsSlotAndEmitsRemovedDelta()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<NestedNodeRoot>(model);
+        var root = this.CreateRoot<NestedNodeRoot>(model);
         root.Patch(KVPatchOperation.Init("/Animal", "DOG"));
-        CommitSetup(model);
-        root = CreateRoot<NestedNodeRoot>(model);
+        this.CommitSetup(model);
+        root = this.CreateRoot<NestedNodeRoot>(model);
 
         var result = root.Patch(KVPatchOperation.Drop("/Animal"));
 
@@ -371,7 +371,7 @@ public class PatchExecutionTests : KVModelTestBase
     [Fact]
     public void PatchExecution_WhenDropTargetsUninitializedNestedNode_IsNoOp()
     {
-        var root = CreateRoot<NestedNodeRoot>();
+        var root = this.CreateRoot<NestedNodeRoot>();
 
         var result = root.Patch(KVPatchOperation.Drop("/Animal"));
 
@@ -416,8 +416,8 @@ public partial class CustomOperationPatchModel : KVRootNode
 
     public void GroupItems(ItemsToGroup argument)
     {
-        Items.Create(argument.ItemId);
-        GroupInvocations++;
+        this.Items.Create(argument.ItemId);
+        this.GroupInvocations++;
     }
 }
 
@@ -428,7 +428,7 @@ public partial class ConventionCustomOperationPatchModel : KVRootNode
 
     public void GroupItems(ItemsToGroup argument)
     {
-        Items.Create(argument.ItemId);
+        this.Items.Create(argument.ItemId);
     }
 }
 

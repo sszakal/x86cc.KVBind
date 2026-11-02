@@ -8,7 +8,7 @@ public class BasicValidationTests : KVModelTestBase
 {
     public BasicValidationTests()
     {
-        RegisterModelDefinition<ValidationRootNode>(builder =>
+        this.RegisterModelDefinition<ValidationRootNode>(builder =>
         {
             builder.Field(x => x.Title, options => options.Required());
             builder.Collection(x => x.Items, options =>
@@ -23,8 +23,8 @@ public class BasicValidationTests : KVModelTestBase
     public void Validation_WhenRequiredFieldsAndCollectionsAreEmpty_ReturnsErrors()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<ValidationRootNode>(model);
-        
+        var root = this.CreateRoot<ValidationRootNode>(model);
+
         var result = root.Validate();
 
         result.Errors.Should().Contain(error => error.Path == "Title" && error.Code == "required");
@@ -35,7 +35,7 @@ public class BasicValidationTests : KVModelTestBase
     public void Validation_WhenCollectionMeetsRequirements_ReturnsNoNotEmptyError()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<ValidationRootNode>(model);
+        var root = this.CreateRoot<ValidationRootNode>(model);
 
         root.Title = "Valid";
         var item = root.Items.Create();
@@ -52,8 +52,8 @@ public class BasicValidationTests : KVModelTestBase
 
         public string? Title
         {
-            get => GetField<string?>("Title");
-            set => SetField("Title", value);
+            get => this.GetField<string?>("Title");
+            set => this.SetField("Title", value);
         }
     }
 
@@ -63,8 +63,8 @@ public class BasicValidationTests : KVModelTestBase
     {
         public int Amount
         {
-            get => GetField<int>("Amount");
-            set => SetField("Amount", value);
+            get => this.GetField<int>("Amount");
+            set => this.SetField("Amount", value);
         }
     }
 }

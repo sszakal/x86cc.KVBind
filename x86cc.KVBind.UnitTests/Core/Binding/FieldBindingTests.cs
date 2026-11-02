@@ -1,16 +1,30 @@
+using System.Text.Json;
 using AwesomeAssertions;
 using Meziantou.Framework.InlineSnapshotTesting;
-using System.Text.Json;
 using x86cc.KVBind.Core;
 using x86cc.KVBind.Core.Model;
 
 namespace x86cc.KVBind.UnitTests.Core;
 
+public enum FieldEnum
+{
+    First,
+    Second,
+    Third
+}
+
+public struct StructTestModel
+{
+    public uint UnsignedIntField { get; set; }
+
+    public long LongIntField { get; set; }
+}
+
 public class FieldBindingTests : KVModelTestBase
 {
     public FieldBindingTests()
     {
-        RegisterModelDefinition<FieldTestModel>(modelBuilder =>
+        this.RegisterModelDefinition<FieldTestModel>(modelBuilder =>
         {
             modelBuilder.Field(x => x.BooleanField);
             modelBuilder.Field(x => x.CharField);
@@ -40,7 +54,7 @@ public class FieldBindingTests : KVModelTestBase
     public void FieldBinding_WhenRootFieldsAreSet_StoresDraftValuesAtRootPaths()
     {
         var model = new KVModelRoot();
-        var rootNode = CreateRoot<FieldTestModel>(model);
+        var rootNode = this.CreateRoot<FieldTestModel>(model);
 
         var structValue = new StructTestModel { UnsignedIntField = 7, LongIntField = 77 };
         var dateTimeValue = new DateTime(2026, 4, 15, 11, 30, 45, DateTimeKind.Utc);
@@ -48,7 +62,7 @@ public class FieldBindingTests : KVModelTestBase
         var timeOnlyValue = new TimeOnly(18, 42, 9);
         var dateOnlyValue = new DateOnly(2026, 4, 15);
         var timeSpanValue = TimeSpan.FromMinutes(95);
-		var guidValue = Guid.Parse("f38c4671-bb96-481b-9546-6280291e7671");
+        var guidValue = Guid.Parse("f38c4671-bb96-481b-9546-6280291e7671");
         int[] arrayOfInts = [1, 2, 3];
         string[] arrayOfStrings = ["1", "2", "3"];
         DateTime[] arrayOfDates = [dateTimeValue.AddDays(1), dateTimeValue.AddMinutes(1), dateTimeValue.AddYears(1)];
@@ -76,7 +90,7 @@ public class FieldBindingTests : KVModelTestBase
         rootNode.ArrayOfDates = arrayOfDates;
         rootNode.ArrayOfEnums = arrayOfEnums;
         rootNode.ArrayOfSmartEnums = arrayOfSmartEnums;
-                
+
         model.Overlay.Changes.Should().ContainKey("BooleanField").WhoseValue.Should().Be(true);
         model.Overlay.Changes.Should().ContainKey("StringField").WhoseValue.Should().Be("notes");
         model.Overlay.Changes.Should().ContainKey("StructField").WhoseValue.Should().Be(structValue);
@@ -87,8 +101,8 @@ public class FieldBindingTests : KVModelTestBase
     public void FieldBinding_WhenValuesExist_ReadsTypedValues()
     {
         var model = new KVModelRoot();
-        var rootNode = CreateRoot<FieldTestModel>(model);
-        
+        var rootNode = this.CreateRoot<FieldTestModel>(model);
+
         var structValue = new StructTestModel { UnsignedIntField = 9, LongIntField = 99 };
         var dateTimeValue = new DateTime(2027, 1, 1, 7, 15, 0, DateTimeKind.Utc);
         var dateTimeOffsetValue = new DateTimeOffset(2027, 1, 1, 7, 15, 0, TimeSpan.FromHours(-5));
@@ -96,7 +110,7 @@ public class FieldBindingTests : KVModelTestBase
         var dateOnlyValue = new DateOnly(2027, 1, 2);
         var timeSpanValue = TimeSpan.FromHours(3.5);
         var guidValue = Guid.Parse("c2f27b04-6e65-4c5d-a2db-1b6b0713c689");
-        
+
         int[] arrayOfInts = [1, 2, 3];
         string[] arrayOfStrings = ["1", "2", "3"];
         DateTime[] arrayOfDates = [dateTimeValue.AddDays(1), dateTimeValue.AddMinutes(1), dateTimeValue.AddYears(1)];
@@ -124,7 +138,7 @@ public class FieldBindingTests : KVModelTestBase
         model.Set(nameof(FieldTestModel.ArrayOfDates), arrayOfDates);
         model.Set(nameof(FieldTestModel.ArrayOfEnums), arrayOfEnums);
         model.Set(nameof(FieldTestModel.ArrayOfSmartEnums), arrayOfSmartEnums);
-        
+
         InlineSnapshot.Validate(rootNode, """
             BooleanField: true
             CharField: Z
@@ -172,7 +186,7 @@ public class FieldBindingTests : KVModelTestBase
     [Fact]
     public void FieldBinding_WhenValueIsMissing_ReadsClrDefaultValue()
     {
-        var rootNode = CreateRoot<FieldTestModel>();
+        var rootNode = this.CreateRoot<FieldTestModel>();
 
         rootNode.BooleanField.Should().BeFalse();
         rootNode.IntField.Should().Be(0);
@@ -185,7 +199,7 @@ public class FieldBindingTests : KVModelTestBase
     public void FieldBinding_WhenValueIsStoredAsNull_ReadsClrDefaultValue()
     {
         var model = new KVModelRoot();
-        var rootNode = CreateRoot<FieldTestModel>(model);
+        var rootNode = this.CreateRoot<FieldTestModel>(model);
         model.Set<object?>(nameof(FieldTestModel.DecimalField), null);
         model.Set<string?>(nameof(FieldTestModel.StringField), null);
 
@@ -197,25 +211,25 @@ public class FieldBindingTests : KVModelTestBase
     public void FieldBinding_WhenSnapshotRoundTripsThroughJson_PreservesDateLookingStringAndDateTime()
     {
         var model = new KVModelRoot();
-        var rootNode = CreateRoot<FieldTestModel>(model);
+        var rootNode = this.CreateRoot<FieldTestModel>(model);
         var dateTimeValue = new DateTime(2027, 1, 1, 7, 15, 0, DateTimeKind.Utc);
         rootNode.StringField = "2027-01-01";
         rootNode.DateTimeField = dateTimeValue;
-        CommitSetup(model);
+        this.CommitSetup(model);
 
         var restoredSnapshot = JsonSerializer.Deserialize<KVSnapshot>(JsonSerializer.Serialize(model.Snapshot))!;
-        var definition = CreateRegistry().Get<FieldTestModel>();
+        var definition = this.CreateRegistry().Get<FieldTestModel>();
         var restoredModel = new KVModelRoot(KVOverlay.Create(restoredSnapshot, TestUser));
-        var restoredRoot = CreateRoot<FieldTestModel>(restoredModel);
+        var restoredRoot = this.CreateRoot<FieldTestModel>(restoredModel);
 
         restoredRoot.StringField.Should().Be("2027-01-01");
         restoredRoot.DateTimeField.Should().Be(dateTimeValue);
     }
-    
+
     [Fact]
     public void FieldBinding_WhenEnumValueIsOutsideAllowedSet_StoresRawValueForValidation()
     {
-        var rootNode = CreateRoot<FieldTestModel>();
+        var rootNode = this.CreateRoot<FieldTestModel>();
 
         rootNode.EnumField = (FieldEnum)999;
         rootNode.EnumField.Should().Be((FieldEnum)999);
@@ -225,8 +239,8 @@ public class FieldBindingTests : KVModelTestBase
     public void FieldBinding_WhenSmartEnumTokenIsUnknown_ThrowsOnRead()
     {
         var model = new KVModelRoot();
-        var rootNode = CreateRoot<FieldTestModel>(model);
-        
+        var rootNode = this.CreateRoot<FieldTestModel>(model);
+
         model.Set(nameof(FieldTestModel.SmartEnumField), "unknown");
 
         var act = () => _ = rootNode.SmartEnumField;
@@ -237,7 +251,7 @@ public class FieldBindingTests : KVModelTestBase
 
 public partial class FieldTestModel : KVRootNode
 {
-    [KVBind(nameof(BooleanField))] 
+    [KVBind(nameof(BooleanField))]
     public partial bool BooleanField { get; set; }
 
     [KVBind(nameof(CharField))]
@@ -259,67 +273,61 @@ public partial class FieldTestModel : KVRootNode
     public partial StructTestModel StructField { get; set; }
 
     [KVBind(nameof(StringField))]
-    public partial string StringField { get; set; } 
-    
+    public partial string StringField { get; set; }
+
     [KVBind(nameof(EnumField))]
-    public partial FieldEnum EnumField { get; set; }  
-    
+    public partial FieldEnum EnumField { get; set; }
+
     [KVBind(nameof(DateTimeField))]
     public partial DateTime DateTimeField { get; set; }
-    
+
     [KVBind(nameof(DateTimeOffsetField))]
     public partial DateTimeOffset DateTimeOffsetField { get; set; }
-    
+
     [KVBind(nameof(TimeOnlyField))]
     public partial TimeOnly TimeOnlyField { get; set; }
-    
+
     [KVBind(nameof(DateOnlyField))]
     public partial DateOnly DateOnlyField { get; set; }
-    
+
     [KVBind(nameof(TimespanField))]
-    public partial TimeSpan TimespanField { get; set; }    
-    
+    public partial TimeSpan TimespanField { get; set; }
+
     [KVBind(nameof(SmartEnumField))]
-    public partial SmartEnum SmartEnumField { get; set; }    
-    
+    public partial SmartEnum SmartEnumField { get; set; }
+
     [KVBind(nameof(GuidField))]
     public partial Guid GuidField { get; set; }
-    
+
     [KVBind(nameof(ArrayOfInts))]
     public partial int[] ArrayOfInts { get; set; }
-    
+
     [KVBind(nameof(ArrayOfStrings))]
     public partial string[] ArrayOfStrings { get; set; }
-    
+
     [KVBind(nameof(ArrayOfDates))]
     public partial DateTime[] ArrayOfDates { get; set; }
-    
+
     [KVBind(nameof(ArrayOfEnums))]
     public partial FieldEnum[] ArrayOfEnums { get; set; }
-    
+
     [KVBind(nameof(ArrayOfSmartEnums))]
     public partial SmartEnum[] ArrayOfSmartEnums { get; set; }
-}
-
-public struct StructTestModel
-{
-    public uint UnsignedIntField { get; set; }
-
-    public long LongIntField { get; set; }
-}
-
-public enum FieldEnum
-{
-    First,
-    Second,
-    Third
 }
 
 public sealed class SmartEnum : IEquatable<SmartEnum>
 {
     public static readonly SmartEnum First = new("first", "First");
+
     public static readonly SmartEnum Second = new("second", "Second");
+
     public static readonly SmartEnum Third = new("third", "Third");
+
+    private SmartEnum(string id, string label)
+    {
+        this.Id = id;
+        this.Label = label;
+    }
 
     public static IReadOnlyList<SmartEnum> All { get; } =
     [
@@ -328,33 +336,27 @@ public sealed class SmartEnum : IEquatable<SmartEnum>
         Third
     ];
 
-    private SmartEnum(string id, string label)
-    {
-        Id = id;
-        Label = label;
-    }
-
     public string Id { get; }
 
     public string Label { get; }
 
     public bool Equals(SmartEnum? other)
     {
-        return other is not null && string.Equals(Id, other.Id, StringComparison.Ordinal);
+        return other is not null && string.Equals(this.Id, other.Id, StringComparison.Ordinal);
     }
 
     public override bool Equals(object? obj)
     {
-        return obj is SmartEnum other && Equals(other);
+        return obj is SmartEnum other && this.Equals(other);
     }
 
     public override int GetHashCode()
     {
-        return StringComparer.Ordinal.GetHashCode(Id);
+        return StringComparer.Ordinal.GetHashCode(this.Id);
     }
 
     public override string ToString()
     {
-        return Id;
+        return this.Id;
     }
 }

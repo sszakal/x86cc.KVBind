@@ -11,7 +11,7 @@ public class KVModelRoot : KVModel
     {
     }
 
-    public static KVModelRoot Create(KVOverlay overlay) => new(overlay);
+    public KVSnapshot Snapshot => this.Overlay.Snapshot;
 
-    public KVSnapshot Snapshot => Overlay.Snapshot;
+    public static KVModelRoot Create(KVOverlay overlay) => new(overlay);
 }

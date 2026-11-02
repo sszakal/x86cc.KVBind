@@ -12,13 +12,13 @@ public class CollectionItemsKeyTests : KVModelTestBase
 
     public CollectionItemsKeyTests()
     {
-        RegisterModelDefinition<ChangeSetTestModel>(builder =>
+        this.RegisterModelDefinition<ChangeSetTestModel>(builder =>
         {
             builder.Field(x => x.Title);
             builder.Field(x => x.Status);
             builder.FieldGroup(x => x.General, g =>
             {
-                g.Field(x => x.Code); 
+                g.Field(x => x.Code);
                 g.Field(x => x.Notes);
             });
             builder.Collection(x => x.Items, items =>
@@ -34,7 +34,7 @@ public class CollectionItemsKeyTests : KVModelTestBase
     public void Create_WritesItemsKey()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<ChangeSetTestModel>(model);
+        var root = this.CreateRoot<ChangeSetTestModel>(model);
 
         root.Items.Create(Id1).Name = "first";
 
@@ -47,7 +47,7 @@ public class CollectionItemsKeyTests : KVModelTestBase
     public void CreateMultiple_MaintainsInsertionOrder()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<ChangeSetTestModel>(model);
+        var root = this.CreateRoot<ChangeSetTestModel>(model);
         root.Items.Create(Id1);
         root.Items.Create(Id2);
         root.Items.Create(Id3);
@@ -63,7 +63,7 @@ public class CollectionItemsKeyTests : KVModelTestBase
     public void RemoveById_RemovesFromItemsKey()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<ChangeSetTestModel>(model);
+        var root = this.CreateRoot<ChangeSetTestModel>(model);
         root.Items.Create(Id1);
         root.Items.Create(Id2);
 
@@ -77,7 +77,7 @@ public class CollectionItemsKeyTests : KVModelTestBase
     public void MoveById_UpdatesItemsKeyOrder()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<ChangeSetTestModel>(model);
+        var root = this.CreateRoot<ChangeSetTestModel>(model);
         root.Items.Create(Id1);
         root.Items.Create(Id2);
         root.Items.Create(Id3);
@@ -95,14 +95,14 @@ public class CollectionItemsKeyTests : KVModelTestBase
     public void ItemsOrder_SurvivesCommitAndRebind()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<ChangeSetTestModel>(model);
+        var root = this.CreateRoot<ChangeSetTestModel>(model);
         root.Items.Create(Id1).Name = "first";
         root.Items.Create(Id2).Name = "second";
         root.Items.Create(Id3).Name = "third";
         root.Items.MoveById(Id3.ToString("D"), 0); // [Id3, Id1, Id2]
 
-        CommitSetup(model);
-        root = CreateRoot<ChangeSetTestModel>(model);
+        this.CommitSetup(model);
+        root = this.CreateRoot<ChangeSetTestModel>(model);
 
         root.Items.Count().Should().Be(3);
         root.Items.ElementAt(0).ItemId().Should().Be(Id3.ToString("D"));
@@ -114,10 +114,10 @@ public class CollectionItemsKeyTests : KVModelTestBase
     public void DeleteAndReAdd_SameId_FieldValuesRevertToSnapshot()
     {
         var model = new KVModelRoot();
-        var root = CreateRoot<ChangeSetTestModel>(model);
+        var root = this.CreateRoot<ChangeSetTestModel>(model);
         root.Items.Create(Id1).Name = "original";
-        CommitSetup(model);
-        root = CreateRoot<ChangeSetTestModel>(model);
+        this.CommitSetup(model);
+        root = this.CreateRoot<ChangeSetTestModel>(model);
 
         root.Items.RemoveById(Id1.ToString("D"));
         var reAdded = root.Items.Create(Id1);
@@ -135,7 +135,7 @@ public class CollectionItemsKeyTests : KVModelTestBase
     [Fact]
     public void ItemsKey_DoesNotAppearInGetAllChanges()
     {
-        var root = CreateRoot<ChangeSetTestModel>();
+        var root = this.CreateRoot<ChangeSetTestModel>();
         root.Items.Create(Id1).Name = "test";
 
         var changes = root.GetAllChanges().Changes;
@@ -147,7 +147,7 @@ public class CollectionItemsKeyTests : KVModelTestBase
     public void EmptyCollection_HasNoItemsKey()
     {
         var model = new KVModelRoot();
-        _ = CreateRoot<ChangeSetTestModel>(model);
+        _ = this.CreateRoot<ChangeSetTestModel>(model);
 
         model.Overlay.Changes.Should().NotContainKey("Items/$items");
     }

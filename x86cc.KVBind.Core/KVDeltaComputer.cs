@@ -97,6 +97,7 @@ internal static class KVDeltaComputer
             var childNode = childDef.GetChildNode(node);
             if (childNode is KVNode kvChild && HasDraftState(kvChild)) return true;
         }
+
         return false;
     }
 

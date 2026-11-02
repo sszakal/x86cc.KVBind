@@ -21,6 +21,7 @@ public class MigrationCommitTests
         var migrations = new[]
         {
             KVMigration.Define(2, m => m
+
                 // Batch-fetch a per-aggregate amount, then map it into each aggregate.
                 .Prepare((subset, _) =>
                 {
@@ -28,7 +29,8 @@ public class MigrationCommitTests
                     var data = subset.ToDictionary(s => (string)s.Key, s => (object?)((string)s.Key + "-amount"));
                     return Task.FromResult<object?>(data);
                 })
-                .Backfill(KVTarget.Root.Seg("Amount"),
+                .Backfill(
+                    KVTarget.Root.Seg("Amount"),
                     view => view.Context.PreparedAs<Dictionary<string, object?>>()[view.Context.KeyAs<string>()])),
             KVMigration.Define(3, m => m
                 .Prepare((subset, _) =>
@@ -60,15 +62,6 @@ public class MigrationCommitTests
 
         static IReadOnlyList<KVCommit> Commits(IReadOnlyList<KVMigrationResult> results, string key)
             => results.Single(r => (string)r.Key == key).Commits;
-    }
-
-    private sealed class MigrationRootNode : KVRootNode
-    {
-        public string? Title
-        {
-            get => GetField<string?>("Title");
-            set => SetField("Title", value);
-        }
     }
 
     [Fact]
@@ -132,8 +125,10 @@ public class MigrationCommitTests
     public void Up_to_date_snapshot_produces_no_commits_without_running_migrations()
     {
         var builder = new KVBindBuilder<MigrationRootNode>();
+
         // An already-applied migration whose step would throw if it were ever executed again.
-        builder.Migration(2, m => m.Backfill(KVTarget.Root.Seg("X"),
+        builder.Migration(2, m => m.Backfill(
+            KVTarget.Root.Seg("X"),
             _ => throw new InvalidOperationException("applied migration must not run")));
         builder.Migration(3, m => m.Backfill(KVTarget.Root.Seg("Y"), _ => "y"));
         var definition = builder.Build();
@@ -151,23 +146,6 @@ public class MigrationCommitTests
         behind.SchemaVersion.Should().Be(3);
     }
 
-    // A v1-shaped claim: a polymorphic damaged-items collection and a polymorphic Claimant nested node.
-    private static KVSnapshot V1Snapshot()
-    {
-        var snapshot = new KVSnapshot { SchemaVersion = 1, LastCommitId = Guid.NewGuid() };
-        snapshot.Data["ClaimNumber"] = "C-1";
-        snapshot.Data["Status"] = "draft";
-        snapshot.Data["DamagedItems/$items"] = KVValue.FromObject(new[] { "g1", "g2" });
-        snapshot.Data["DamagedItems/g1/$type"] = "DamagedItem";
-        snapshot.Data["DamagedItems/g1/Category"] = "structural";
-        snapshot.Data["DamagedItems/g1/LegacyNote"] = "old";
-        snapshot.Data["DamagedItems/g2/$type"] = "VehicleItem";
-        snapshot.Data["DamagedItems/g2/Category"] = "mechanical";
-        snapshot.Data["Claimant/$type"] = "PERSON";
-        snapshot.Data["Claimant/Name"] = "Alice";
-        return snapshot;
-    }
-
     [Fact]
     public void Each_pending_migration_becomes_its_own_chained_commit()
     {
@@ -176,10 +154,13 @@ public class MigrationCommitTests
         var migrations = new[]
         {
             KVMigration.Define(2, m => m
+
                 // Rename Category -> DamageCategory, but ONLY for DamagedItem-typed items (not VehicleItem).
-                .RenameField(KVTarget.Root.Seg("DamagedItems").AnyItem(ofType: "DamagedItem").Seg("Category"),
+                .RenameField(
+                    KVTarget.Root.Seg("DamagedItems").AnyItem(ofType: "DamagedItem").Seg("Category"),
                     "DamageCategory")),
             KVMigration.Define(3, m => m
+
                 // A removed field, a backfilled new field, and a nested-node-subtype field rename.
                 .Remove(KVTarget.Root.Seg("DamagedItems").AnyItem().Seg("LegacyNote"))
                 .Backfill(KVTarget.Root.Seg("Policy").Seg("Deductible"), _ => 500m)
@@ -191,9 +172,11 @@ public class MigrationCommitTests
         commits.Should().HaveCount(2);
         commits[0].MigrationToVersion.Should().Be(2);
         commits[1].MigrationToVersion.Should().Be(3);
+
         // Chained: the second continues the first.
         commits[1].PreviousCommitId.Should().Be(commits[0].CommitId);
         commits[0].PreviousCommitId.Should().Be(snapshot.LastCommitId);
+
         // Source snapshot is untouched until we apply.
         snapshot.SchemaVersion.Should().Be(1);
 
@@ -266,5 +249,31 @@ public class MigrationCommitTests
 
         commits.Should().HaveCount(1);
         commits[0].MigrationToVersion.Should().Be(2);
+    }
+
+    // A v1-shaped claim: a polymorphic damaged-items collection and a polymorphic Claimant nested node.
+    private static KVSnapshot V1Snapshot()
+    {
+        var snapshot = new KVSnapshot { SchemaVersion = 1, LastCommitId = Guid.NewGuid() };
+        snapshot.Data["ClaimNumber"] = "C-1";
+        snapshot.Data["Status"] = "draft";
+        snapshot.Data["DamagedItems/$items"] = KVValue.FromObject(new[] { "g1", "g2" });
+        snapshot.Data["DamagedItems/g1/$type"] = "DamagedItem";
+        snapshot.Data["DamagedItems/g1/Category"] = "structural";
+        snapshot.Data["DamagedItems/g1/LegacyNote"] = "old";
+        snapshot.Data["DamagedItems/g2/$type"] = "VehicleItem";
+        snapshot.Data["DamagedItems/g2/Category"] = "mechanical";
+        snapshot.Data["Claimant/$type"] = "PERSON";
+        snapshot.Data["Claimant/Name"] = "Alice";
+        return snapshot;
+    }
+
+    private sealed class MigrationRootNode : KVRootNode
+    {
+        public string? Title
+        {
+            get => this.GetField<string?>("Title");
+            set => this.SetField("Title", value);
+        }
     }
 }

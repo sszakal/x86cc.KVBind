@@ -6,9 +6,9 @@ namespace x86cc.KVBind.Benchmarks;
 // declare fields/collections — the schema is defined here with KVBindBuilder<T>.
 public static class KvComponentDefinition
 {
-    private static KVNodeDefinition? _cached;
+    private static KVNodeDefinition? cached;
 
-    public static KVNodeDefinition Build() => _cached ??= BuildCore();
+    public static KVNodeDefinition Build() => cached ??= BuildCore();
 
     private static KVNodeDefinition BuildCore()
     {

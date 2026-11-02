@@ -8,6 +8,15 @@ using x86cc.KVBind.Core.Model;
 
 namespace x86cc.KVBind.Core;
 
+internal enum KVPatchTargetKind
+{
+    Path,
+    Field,
+    Collection,
+    CollectionItem,
+    NestedNode
+}
+
 internal static class KVPatchRuntime
 {
     internal static void Apply(KVRootNode root, IEnumerable<KVPatchOperation> operations)
@@ -40,45 +49,46 @@ internal sealed class KVPathPatchTarget : KVPatchTarget;
 internal sealed class KVFieldPatchTarget : KVPatchTarget
 {
     public required KVNode Node { get; init; }
+
     public required KVFieldDefinition Definition { get; init; }
+
     public required string FieldKey { get; init; }
 }
 
 internal sealed class KVCollectionPatchTarget : KVPatchTarget
 {
     public required KVNode Owner { get; init; }
+
     public required IKVCollectionNode Collection { get; init; }
+
     public required KVCollectionDefinition Definition { get; init; }
 }
 
 internal sealed class KVCollectionItemPatchTarget : KVPatchTarget
 {
     public required KVNode Owner { get; init; }
+
     public required IKVCollectionNode Collection { get; init; }
+
     public required KVCollectionDefinition Definition { get; init; }
+
     public required KVNode Item { get; init; }
+
     public required string ItemId { get; init; }
 }
 
 internal sealed class KVNestedNodePatchTarget : KVPatchTarget
 {
     public required KVNode Owner { get; init; }
+
     public required KVNestedNodeDefinition Definition { get; init; }
+
     public required KVModel SlotModel { get; init; }
 }
 
 internal sealed class KVPatchExecutionContext
 {
     public required KVRootNode Root { get; init; }
-}
-
-internal enum KVPatchTargetKind
-{
-    Path,
-    Field,
-    Collection,
-    CollectionItem,
-    NestedNode
 }
 
 internal sealed class KVPatchOperationRegistry
@@ -257,7 +267,7 @@ internal sealed class KVPatchOperationRegistry
 
 internal sealed class KVPatchOperationDescriptor
 {
-    private readonly Action<KVPatchTarget, KVPatchOperation, KVPatchExecutionContext> _invoke;
+    private readonly Action<KVPatchTarget, KVPatchOperation, KVPatchExecutionContext> invoke;
 
     private KVPatchOperationDescriptor(
         string operation,
@@ -265,10 +275,10 @@ internal sealed class KVPatchOperationDescriptor
         Type argumentType,
         Action<KVPatchTarget, KVPatchOperation, KVPatchExecutionContext> invoke)
     {
-        Operation = operation;
-        TargetKind = targetKind;
-        ArgumentType = argumentType;
-        _invoke = invoke;
+        this.Operation = operation;
+        this.TargetKind = targetKind;
+        this.ArgumentType = argumentType;
+        this.invoke = invoke;
     }
 
     public string Operation { get; }
@@ -325,7 +335,7 @@ internal sealed class KVPatchOperationDescriptor
 
     internal void Invoke(KVPatchTarget target, KVPatchOperation operation, KVPatchExecutionContext context)
     {
-        _invoke(target, operation, context);
+        this.invoke(target, operation, context);
     }
 
     private static MethodInfo GetMethod<TParent, TArgument>(Expression<Func<TParent, Action<TArgument>>> methodSelector)

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://githubusercontent.com",
+  "settings": {
+    "documentationRules": {
+      "companyName": "x86cc",
+      "copyrightText": "Copyright (c) x86cc. All rights reserved."
+    },
+    "orderingRules": {
+      "usingDirectivesPlacement": "outsideNamespace"
+    }
+  }
+}

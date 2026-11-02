@@ -8,22 +8,22 @@ public abstract class KVModelTestBase
 {
     protected const string TestUser = "test";
 
-    private readonly List<IKVModelDefinitionBuilder> _definitionBuilders = [];
-    private IKVDefinitionRegistry? _registry;
+    private readonly List<IKVModelDefinitionBuilder> definitionBuilders = [];
+    private IKVDefinitionRegistry? registry;
 
     protected void RegisterModelDefinition<TModel>(Action<KVBindBuilder<TModel>> define)
         where TModel : KVRootNode
     {
         ArgumentNullException.ThrowIfNull(define);
 
-        _definitionBuilders.Add(new TestModelDefinitionBuilder<TModel>(define));
-        _registry = null;
+        this.definitionBuilders.Add(new TestModelDefinitionBuilder<TModel>(define));
+        this.registry = null;
     }
 
     protected TKVRootNode CreateRoot<TKVRootNode>(KVModelRoot? model = null)
         where TKVRootNode : KVRootNode, new()
     {
-        var registry = CreateRegistry();
+        var registry = this.CreateRegistry();
         var definition = registry.Get<TKVRootNode>();
         return KVRootNode.Create<TKVRootNode>(model ?? new KVModelRoot(KVOverlay.Create(new KVSnapshot(), TestUser)), definition);
     }
@@ -38,7 +38,7 @@ public abstract class KVModelTestBase
     protected TKVRootNode BindRoot<TKVRootNode>(TKVRootNode root, KVModelRoot model)
         where TKVRootNode : KVRootNode
     {
-        var registry = CreateRegistry();
+        var registry = this.CreateRegistry();
         var definition = registry.Get<TKVRootNode>();
         root.BindRuntime(model, definition);
         return root;
@@ -46,7 +46,7 @@ public abstract class KVModelTestBase
 
     protected IKVDefinitionRegistry CreateRegistry()
     {
-        return _registry ??= new KVDefinitionRegistry([.. _definitionBuilders]);
+        return this.registry ??= new KVDefinitionRegistry([.. this.definitionBuilders]);
     }
 
     private sealed class TestModelDefinitionBuilder<TModel>(Action<KVBindBuilder<TModel>> define)
@@ -62,5 +62,4 @@ public abstract class KVModelTestBase
             return builder.Build();
         }
     }
-
 }

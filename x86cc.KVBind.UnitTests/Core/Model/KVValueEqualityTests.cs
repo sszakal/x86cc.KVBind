@@ -9,7 +9,17 @@ namespace x86cc.KVBind.UnitTests.Core;
 // the two deliberate improvements (decimal-scale-insensitive, NaN-safe).
 public class KVValueEqualityTests
 {
-    private static KVValue V<T>(T value) => new KVValue<T>(value);
+    public static IEnumerable<object[]> RoundTripValues() =>
+    [
+        [V(42)],
+        [V("hello")],
+        [V(true)],
+        [V(9.99m)],
+        [V(new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc))],
+        [V(Guid.Parse("22222222-2222-2222-2222-222222222222"))],
+        [V(new[] { 1, 2, 3 })],
+        [V(new[] { "a", "b" })],
+    ];
 
     // ── Scalars: unchanged ────────────────────────────────────────────────────────
 
@@ -99,18 +109,6 @@ public class KVValueEqualityTests
         original.GetHashCode().Should().Be(reloaded.GetHashCode());
     }
 
-    public static IEnumerable<object[]> RoundTripValues() =>
-    [
-        [V(42)],
-        [V("hello")],
-        [V(true)],
-        [V(9.99m)],
-        [V(new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc))],
-        [V(Guid.Parse("22222222-2222-2222-2222-222222222222"))],
-        [V(new[] { 1, 2, 3 })],
-        [V(new[] { "a", "b" })],
-    ];
-
     // ── Intended behavior changes ─────────────────────────────────────────────────
 
     [Fact]
@@ -130,4 +128,6 @@ public class KVValueEqualityTests
         V(double.NaN).Equals(V(double.NaN)).Should().BeTrue();
         V(float.NaN).Equals(V(float.NaN)).Should().BeTrue();
     }
+
+    private static KVValue V<T>(T value) => new KVValue<T>(value);
 }

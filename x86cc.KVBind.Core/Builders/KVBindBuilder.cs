@@ -10,7 +10,9 @@ namespace x86cc.KVBind.Core;
 public sealed class KVBindBuilder<TEntity>
     where TEntity : KVNode
 {
-    private readonly KVNodeDefinition _definition;
+    private readonly KVNodeDefinition definition;
+
+    private bool isBuilt;
 
     public KVBindBuilder()
         : this(
@@ -21,34 +23,32 @@ public sealed class KVBindBuilder<TEntity>
 
     private KVBindBuilder(string subSegmentPath, Func<KVNode, KVNode> getNode)
     {
-        _definition = new KVNodeDefinition
+        this.definition = new KVNodeDefinition
         {
             SubSegmentPath = subSegmentPath,
             GetChildNode = getNode
         };
     }
 
-    private bool _isBuilt;
-
     // Forward reference to the definition being built — use for self-referential or
     // mutually-recursive nested node declarations. Call Build() after all declarations
     // are complete; SelfReference exposes the same object without locking the builder.
-    public KVNodeDefinition SelfReference => _definition;
+    public KVNodeDefinition SelfReference => this.definition;
 
     public KVNodeDefinition Build()
     {
-        if (_isBuilt)
+        if (this.isBuilt)
         {
-            return _definition;
+            return this.definition;
         }
 
-        _isBuilt = true;
-        return _definition;
+        this.isBuilt = true;
+        return this.definition;
     }
 
     public void Field<TValue>(Expression<Func<TEntity, TValue>> selector)
     {
-        Field(selector, configure: null);
+        this.Field(selector, configure: null);
     }
 
     public void Field<TValue>(Expression<Func<TEntity, TValue>> selector, Action<KVFieldOptionsBuilder<TValue>>? configure)
@@ -62,13 +62,14 @@ public sealed class KVBindBuilder<TEntity>
         var propertyName = ResolveSelectorKey(selector);
         var options = new KVFieldOptionsBuilder<TValue>();
         configure?.Invoke(options);
-        EnsureInheritedAllowed(options.IsInherited, propertyName);
+        this.EnsureInheritedAllowed(options.IsInherited, propertyName);
+
         // Inherited + default is valid: the default applies only when the aggregate is created WITHOUT a
         // parent (a master). With a parent (a child) the value is inherited and the default is skipped
         // (see KVNode.Defaults.ApplyDefaultsRecursive). After Detach() the field becomes the child's own.
         var validationRules = options.BuildValidationRules();
 
-        _definition.Fields.RemoveAll(field => string.Equals(field.SubSegmentPath, propertyName, StringComparison.Ordinal));
+        this.definition.Fields.RemoveAll(field => string.Equals(field.SubSegmentPath, propertyName, StringComparison.Ordinal));
         var fieldDefinition = new KVFieldDefinition
         {
             SubSegmentPath = propertyName,
@@ -77,13 +78,14 @@ public sealed class KVBindBuilder<TEntity>
             AllowedValues = options.AllowedValuesDefinition,
             HasDefault = options.HasDefault,
             DefaultValue = options.DefaultValue,
+
             // DSL DisplayName(...) wins; otherwise fall back to [KVBind(DisplayName = "...")] on the property.
             DisplayName = options.DisplayNameValue ?? ResolveDisplayName(selector)
         };
         fieldDefinition.ValidationRules.AddRange(validationRules);
         fieldDefinition.AddAnnotations(options.Annotations);
 
-        _definition.Fields.Add(fieldDefinition);
+        this.definition.Fields.Add(fieldDefinition);
     }
 
     // Self-describing field group: the group type carries its own definition via IKVNodeDefinition, so no
@@ -91,14 +93,14 @@ public sealed class KVBindBuilder<TEntity>
     public void FieldGroup<TGroup>(Expression<Func<TEntity, TGroup>> selector)
         where TGroup : KVFieldGroupNode, IKVNodeDefinition
     {
-        AddStaticFieldGroup<TGroup>(selector, configure: null);
+        this.AddStaticFieldGroup<TGroup>(selector, configure: null);
     }
 
     public void FieldGroup<TGroup>(Expression<Func<TEntity, TGroup>> selector, Action<KVFieldGroupOptionsBuilder> configure)
         where TGroup : KVFieldGroupNode, IKVNodeDefinition
     {
         ArgumentNullException.ThrowIfNull(configure);
-        AddStaticFieldGroup<TGroup>(selector, configure);
+        this.AddStaticFieldGroup<TGroup>(selector, configure);
     }
 
     public void FieldGroup<TGroup>(
@@ -108,90 +110,7 @@ public sealed class KVBindBuilder<TEntity>
         where TGroup : KVFieldGroupNode
     {
         ArgumentNullException.ThrowIfNull(define);
-        AddFieldGroup(selector, define, configure);
-    }
-
-    private void AddStaticFieldGroup<TGroup>(
-        Expression<Func<TEntity, TGroup>> selector,
-        Action<KVFieldGroupOptionsBuilder>? configure)
-        where TGroup : KVFieldGroupNode, IKVNodeDefinition
-    {
-        ArgumentNullException.ThrowIfNull(selector);
-
-        var propertyName = ResolveSelectorKey(selector);
-        var getter = selector.Compile();
-        var options = new KVFieldGroupOptionsBuilder();
-        configure?.Invoke(options);
-
-        _definition.Nodes.RemoveAll(node => string.Equals(node.SubSegmentPath, propertyName, StringComparison.Ordinal));
-
-        // The type's static Definition describes only its internal structure (SubSegmentPath = "" and a
-        // throwing GetChildNode), so re-home it under this property with the parent's getter.
-        var nodeDefinition = RehomeFieldGroup(TGroup.Definition, propertyName, owner => getter((TEntity)owner));
-
-        nodeDefinition.AddAnnotations(options.Annotations);
-        EnsureInheritedAllowed(options.IsInherited, nodeDefinition.SubSegmentPath);
-        nodeDefinition.IsResettable = options.IsResettable;
-        nodeDefinition.IsInherited = options.IsInherited;
-        nodeDefinition.DisplayName = options.DisplayNameValue ?? ResolveDisplayName(selector);
-        _definition.Nodes.Add(nodeDefinition);
-    }
-
-    private static KVNodeDefinition RehomeFieldGroup(KVNodeDefinition source, string subSegmentPath, Func<KVNode, KVNode> getChildNode)
-    {
-        var definition = new KVNodeDefinition
-        {
-            SubSegmentPath = subSegmentPath,
-            GetChildNode = getChildNode
-        };
-
-        // Child definitions are immutable at bind time, so they can be shared by reference.
-        definition.Fields.AddRange(source.Fields);
-        definition.Nodes.AddRange(source.Nodes);
-        definition.Collections.AddRange(source.Collections);
-        definition.NestedNodes.AddRange(source.NestedNodes);
-        definition.ValidationRegistrations.AddRange(source.ValidationRegistrations);
-        definition.ChangeReactions.AddRange(source.ChangeReactions);
-        definition.AddAnnotations(source.Annotations);
-
-        return definition;
-    }
-
-    private void AddFieldGroup<TGroup>(
-        Expression<Func<TEntity, TGroup>> selector,
-        Action<KVBindBuilder<TGroup>>? define,
-        Action<KVFieldGroupOptionsBuilder>? configure)
-        where TGroup : KVFieldGroupNode
-    {
-        ArgumentNullException.ThrowIfNull(selector);
-        if (typeof(KVRootNode).IsAssignableFrom(typeof(TGroup)))
-        {
-            throw new InvalidOperationException($"Field group type '{typeof(TGroup).FullName}' cannot inherit KVRootNode.");
-        }
-
-        if (typeof(KVNestedNode).IsAssignableFrom(typeof(TGroup)))
-        {
-            throw new InvalidOperationException($"Nested node type '{typeof(TGroup).FullName}' cannot be declared as a field group. Use NestedNode(...).");
-        }
-
-        var propertyName = ResolveSelectorKey(selector);
-        var getter = selector.Compile();
-        var options = new KVFieldGroupOptionsBuilder();
-        configure?.Invoke(options);
-
-        _definition.Nodes.RemoveAll(node => string.Equals(node.SubSegmentPath, propertyName, StringComparison.Ordinal));
-        var childBuilder = new KVBindBuilder<TGroup>(
-            propertyName,
-            owner => getter((TEntity)owner));
-        define?.Invoke(childBuilder);
-        var nodeDefinition = childBuilder.Build();
-
-        nodeDefinition.AddAnnotations(options.Annotations);
-        EnsureInheritedAllowed(options.IsInherited, nodeDefinition.SubSegmentPath);
-        nodeDefinition.IsResettable = options.IsResettable;
-        nodeDefinition.IsInherited = options.IsInherited;
-        nodeDefinition.DisplayName = options.DisplayNameValue ?? ResolveDisplayName(selector);
-        _definition.Nodes.Add(nodeDefinition);
+        this.AddFieldGroup(selector, define, configure);
     }
 
     // Self-describing single-type collection: the item type carries its own definition via
@@ -204,7 +123,7 @@ public sealed class KVBindBuilder<TEntity>
         var propertyName = ResolveSelectorKey(selector);
         var getter = selector.Compile();
 
-        _definition.Collections.RemoveAll(collection => string.Equals(collection.SubSegmentPath, propertyName, StringComparison.Ordinal));
+        this.definition.Collections.RemoveAll(collection => string.Equals(collection.SubSegmentPath, propertyName, StringComparison.Ordinal));
 
         var collectionDefinition = new KVCollectionDefinition
         {
@@ -214,7 +133,7 @@ public sealed class KVBindBuilder<TEntity>
         };
         collectionDefinition.AddItemDefinition(typeof(TModel), typeof(TModel).Name, TModel.Definition);
 
-        _definition.Collections.Add(collectionDefinition);
+        this.definition.Collections.Add(collectionDefinition);
     }
 
     public void Collection<TModel>(
@@ -240,7 +159,7 @@ public sealed class KVBindBuilder<TEntity>
             throw new InvalidOperationException($"Collection '{propertyName}' must declare at least one item type with Item<TItem>(...).");
         }
 
-        _definition.Collections.RemoveAll(collection => string.Equals(collection.SubSegmentPath, propertyName, StringComparison.Ordinal));
+        this.definition.Collections.RemoveAll(collection => string.Equals(collection.SubSegmentPath, propertyName, StringComparison.Ordinal));
 
         var collectionDefinition = new KVCollectionDefinition
         {
@@ -254,7 +173,7 @@ public sealed class KVBindBuilder<TEntity>
             collectionDefinition.AddItemDefinition(itemDefinition.ModelType, itemDefinition.TypeToken, itemDefinition.NodeDefinition);
         }
 
-        EnsureInheritedAllowed(options.IsInherited, collectionDefinition.SubSegmentPath);
+        this.EnsureInheritedAllowed(options.IsInherited, collectionDefinition.SubSegmentPath);
         collectionDefinition.IsInherited = options.IsInherited;
         collectionDefinition.NotEmpty = options.NotEmptyRule;
         collectionDefinition.MinCount = options.MinCountValue;
@@ -268,7 +187,7 @@ public sealed class KVBindBuilder<TEntity>
 
         collectionDefinition.AddAnnotations(options.Annotations);
         collectionDefinition.DefaultSeed = options.DefaultSeedAction;
-        _definition.Collections.Add(collectionDefinition);
+        this.definition.Collections.Add(collectionDefinition);
     }
 
     public void NestedNode<TBase>(
@@ -293,7 +212,7 @@ public sealed class KVBindBuilder<TEntity>
             throw new InvalidOperationException($"Nested node '{propertyName}' must declare at least one subtype with Bind<TSubtype>(...).");
         }
 
-        _definition.NestedNodes.RemoveAll(nestedNode => string.Equals(nestedNode.SubSegmentPath, propertyName, StringComparison.Ordinal));
+        this.definition.NestedNodes.RemoveAll(nestedNode => string.Equals(nestedNode.SubSegmentPath, propertyName, StringComparison.Ordinal));
 
         var nestedNodeDefinition = new KVNestedNodeDefinition
         {
@@ -306,11 +225,11 @@ public sealed class KVBindBuilder<TEntity>
             nestedNodeDefinition.AddTypeDefinition(typeDefinition.ModelType, typeDefinition.TypeToken, typeDefinition.NodeDefinition);
         }
 
-        EnsureInheritedAllowed(options.IsInherited, nestedNodeDefinition.SubSegmentPath);
+        this.EnsureInheritedAllowed(options.IsInherited, nestedNodeDefinition.SubSegmentPath);
         nestedNodeDefinition.AddAnnotations(options.Annotations);
         nestedNodeDefinition.IsInherited = options.IsInherited;
         nestedNodeDefinition.DefaultTypeToken = options.DefaultTypeTokenValue;
-        _definition.NestedNodes.Add(nestedNodeDefinition);
+        this.definition.NestedNodes.Add(nestedNodeDefinition);
     }
 
     /// <summary>
@@ -321,48 +240,39 @@ public sealed class KVBindBuilder<TEntity>
     public void Migration(int toVersion, Action<KVMigrationBuilder> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        if (!string.IsNullOrEmpty(_definition.SubSegmentPath))
+        if (!string.IsNullOrEmpty(this.definition.SubSegmentPath))
         {
             throw new InvalidOperationException("Migrations can only be declared on the root definition.");
         }
 
-        if (_definition.Migrations.Exists(migration => migration.ToVersion == toVersion))
+        if (this.definition.Migrations.Exists(migration => migration.ToVersion == toVersion))
         {
             throw new InvalidOperationException($"A migration to version {toVersion} is already declared.");
         }
 
-        _definition.Migrations.Add(KVMigration.Define(toVersion, configure));
-    }
-
-    // Inherited members are a root concept: a child inherits root members from its parent's snapshot.
-    private void EnsureInheritedAllowed(bool isInherited, string member)
-    {
-        if (isInherited && !string.IsNullOrEmpty(_definition.SubSegmentPath))
-        {
-            throw new InvalidOperationException($"Inherited members can only be declared on the root definition ('{member}').");
-        }
+        this.definition.Migrations.Add(KVMigration.Define(toVersion, configure));
     }
 
     public void Validation(Action<KVGroupRuleBuilder<TEntity>> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
 
-        var scopeKeys = ResolveValidationScopeKeys();
+        var scopeKeys = this.ResolveValidationScopeKeys();
         var builder = new KVGroupRuleBuilder<TEntity>(ResolveSelectorKey);
         configure(builder);
         var rules = builder.BuildGlobalRules();
-        RegisterValidationRules(scopeKeys, rules);
+        this.RegisterValidationRules(scopeKeys, rules);
     }
 
     public void Validation(Action<KVGroupValidationProfileBuilder<TEntity>> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
 
-        var scopeKeys = ResolveValidationScopeKeys();
+        var scopeKeys = this.ResolveValidationScopeKeys();
         var builder = new KVGroupValidationProfileBuilder<TEntity>(ResolveSelectorKey);
         configure(builder);
         var rules = builder.Build();
-        RegisterValidationRules(scopeKeys, rules);
+        this.RegisterValidationRules(scopeKeys, rules);
     }
 
     public void OnChange(
@@ -374,36 +284,27 @@ public sealed class KVBindBuilder<TEntity>
 
         var builder = new KVChangePathBuilder<TEntity>(ResolveSelectorKey);
         var changePath = path(builder);
-        _definition.ChangeReactions.Add(KVChangeReactionDescriptor.Create(changePath, action));
+        this.definition.ChangeReactions.Add(KVChangeReactionDescriptor.Create(changePath, action));
     }
 
-    private void RegisterValidationRules(IReadOnlyList<string> scopeKeys, IReadOnlyList<KVCompiledValidationRule> rules)
+    private static KVNodeDefinition RehomeFieldGroup(KVNodeDefinition source, string subSegmentPath, Func<KVNode, KVNode> getChildNode)
     {
-        if (rules.Count == 0)
+        var definition = new KVNodeDefinition
         {
-            return;
-        }
+            SubSegmentPath = subSegmentPath,
+            GetChildNode = getChildNode
+        };
 
-        foreach (var scope in scopeKeys)
-        {
-            _definition.ValidationRegistrations.Add(new KVValidationRegistration(scope, false, rules));
-        }
-    }
+        // Child definitions are immutable at bind time, so they can be shared by reference.
+        definition.Fields.AddRange(source.Fields);
+        definition.Nodes.AddRange(source.Nodes);
+        definition.Collections.AddRange(source.Collections);
+        definition.NestedNodes.AddRange(source.NestedNodes);
+        definition.ValidationRegistrations.AddRange(source.ValidationRegistrations);
+        definition.ChangeReactions.AddRange(source.ChangeReactions);
+        definition.AddAnnotations(source.Annotations);
 
-    private IReadOnlyList<string> ResolveValidationScopeKeys()
-    {
-        var scopeKeys = _definition.Fields.ConvertAll(field => field.SubSegmentPath);
-        scopeKeys.AddRange(_definition.Nodes.ConvertAll(node => node.SubSegmentPath));
-        scopeKeys.AddRange(_definition.Collections.ConvertAll(collection => collection.SubSegmentPath));
-        scopeKeys.AddRange(_definition.NestedNodes.ConvertAll(nestedNode => nestedNode.SubSegmentPath));
-
-        var distinct = new HashSet<string>(scopeKeys, StringComparer.Ordinal);
-        if (distinct.Count == 0)
-        {
-            throw new InvalidOperationException("Validation requires at least one field or collection declared in the same definition.");
-        }
-
-        return [.. distinct];
+        return definition;
     }
 
     private static string ResolveSelectorKey(LambdaExpression selector)
@@ -441,4 +342,104 @@ public sealed class KVBindBuilder<TEntity>
             : null;
     }
 
+    private void AddStaticFieldGroup<TGroup>(
+        Expression<Func<TEntity, TGroup>> selector,
+        Action<KVFieldGroupOptionsBuilder>? configure)
+        where TGroup : KVFieldGroupNode, IKVNodeDefinition
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+
+        var propertyName = ResolveSelectorKey(selector);
+        var getter = selector.Compile();
+        var options = new KVFieldGroupOptionsBuilder();
+        configure?.Invoke(options);
+
+        this.definition.Nodes.RemoveAll(node => string.Equals(node.SubSegmentPath, propertyName, StringComparison.Ordinal));
+
+        // The type's static Definition describes only its internal structure (SubSegmentPath = "" and a
+        // throwing GetChildNode), so re-home it under this property with the parent's getter.
+        var nodeDefinition = RehomeFieldGroup(TGroup.Definition, propertyName, owner => getter((TEntity)owner));
+
+        nodeDefinition.AddAnnotations(options.Annotations);
+        this.EnsureInheritedAllowed(options.IsInherited, nodeDefinition.SubSegmentPath);
+        nodeDefinition.IsResettable = options.IsResettable;
+        nodeDefinition.IsInherited = options.IsInherited;
+        nodeDefinition.DisplayName = options.DisplayNameValue ?? ResolveDisplayName(selector);
+        this.definition.Nodes.Add(nodeDefinition);
+    }
+
+    private void AddFieldGroup<TGroup>(
+        Expression<Func<TEntity, TGroup>> selector,
+        Action<KVBindBuilder<TGroup>>? define,
+        Action<KVFieldGroupOptionsBuilder>? configure)
+        where TGroup : KVFieldGroupNode
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        if (typeof(KVRootNode).IsAssignableFrom(typeof(TGroup)))
+        {
+            throw new InvalidOperationException($"Field group type '{typeof(TGroup).FullName}' cannot inherit KVRootNode.");
+        }
+
+        if (typeof(KVNestedNode).IsAssignableFrom(typeof(TGroup)))
+        {
+            throw new InvalidOperationException($"Nested node type '{typeof(TGroup).FullName}' cannot be declared as a field group. Use NestedNode(...).");
+        }
+
+        var propertyName = ResolveSelectorKey(selector);
+        var getter = selector.Compile();
+        var options = new KVFieldGroupOptionsBuilder();
+        configure?.Invoke(options);
+
+        this.definition.Nodes.RemoveAll(node => string.Equals(node.SubSegmentPath, propertyName, StringComparison.Ordinal));
+        var childBuilder = new KVBindBuilder<TGroup>(
+            propertyName,
+            owner => getter((TEntity)owner));
+        define?.Invoke(childBuilder);
+        var nodeDefinition = childBuilder.Build();
+
+        nodeDefinition.AddAnnotations(options.Annotations);
+        this.EnsureInheritedAllowed(options.IsInherited, nodeDefinition.SubSegmentPath);
+        nodeDefinition.IsResettable = options.IsResettable;
+        nodeDefinition.IsInherited = options.IsInherited;
+        nodeDefinition.DisplayName = options.DisplayNameValue ?? ResolveDisplayName(selector);
+        this.definition.Nodes.Add(nodeDefinition);
+    }
+
+    // Inherited members are a root concept: a child inherits root members from its parent's snapshot.
+    private void EnsureInheritedAllowed(bool isInherited, string member)
+    {
+        if (isInherited && !string.IsNullOrEmpty(this.definition.SubSegmentPath))
+        {
+            throw new InvalidOperationException($"Inherited members can only be declared on the root definition ('{member}').");
+        }
+    }
+
+    private void RegisterValidationRules(IReadOnlyList<string> scopeKeys, IReadOnlyList<KVCompiledValidationRule> rules)
+    {
+        if (rules.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var scope in scopeKeys)
+        {
+            this.definition.ValidationRegistrations.Add(new KVValidationRegistration(scope, false, rules));
+        }
+    }
+
+    private IReadOnlyList<string> ResolveValidationScopeKeys()
+    {
+        var scopeKeys = this.definition.Fields.ConvertAll(field => field.SubSegmentPath);
+        scopeKeys.AddRange(this.definition.Nodes.ConvertAll(node => node.SubSegmentPath));
+        scopeKeys.AddRange(this.definition.Collections.ConvertAll(collection => collection.SubSegmentPath));
+        scopeKeys.AddRange(this.definition.NestedNodes.ConvertAll(nestedNode => nestedNode.SubSegmentPath));
+
+        var distinct = new HashSet<string>(scopeKeys, StringComparer.Ordinal);
+        if (distinct.Count == 0)
+        {
+            throw new InvalidOperationException("Validation requires at least one field or collection declared in the same definition.");
+        }
+
+        return [.. distinct];
+    }
 }

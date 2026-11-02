@@ -9,10 +9,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 builder.Services.AddCors(options =>
 {
+#pragma warning disable S5122 // Cross-Origin Resource Sharing (CORS) policy should be restricted to trusted origins
     options.AddPolicy("AngularDev", policy => policy
         .AllowAnyOrigin()
         .AllowAnyHeader()
         .AllowAnyMethod());
+#pragma warning restore S5122 // Cross-Origin Resource Sharing (CORS) policy should be restricted to trusted origins
 });
 
 var kvbindConnectionString = builder.Configuration.GetConnectionString("kvbind")
@@ -23,6 +25,7 @@ builder.AddNpgsqlDataSource("kvbind");
 builder.Services.AddMarten(options =>
 {
     options.Connection(kvbindConnectionString);
+
     // Pin the serializer explicitly (Marten 8+ already defaults to STJ) so a future default change can't
     // silently switch it, and to fix enum/casing conventions for the jsonb representation in one place.
     options.UseSystemTextJsonForSerialization(EnumStorage.AsString, Casing.CamelCase);
@@ -61,17 +64,6 @@ app.MapDefaultEndpoints();
 app.MapGet("/", () => Results.Redirect("/swagger"))
     .ExcludeFromDescription();
 
-app.MapGet("/api/demo/status", (IConfiguration configuration) =>
-{
-    return Results.Ok(new DemoStatusResponse(
-        "KVBind sample API",
-        !string.IsNullOrWhiteSpace(configuration.GetConnectionString("kvbind"))));
-})
-.WithName("GetDemoStatus")
-.WithSummary("Reports whether the sample API is configured with the Aspire PostgreSQL database.");
-
 app.MapClaimEndpoints();
 
 app.Run();
-
-public sealed record DemoStatusResponse(string Name, bool PostgresConfigured);

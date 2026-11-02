@@ -8,10 +8,10 @@ namespace x86cc.KVBind.SourceGenerator;
 [Generator]
 public sealed class SourceGenerator : IIncrementalGenerator
 {
-    private const string KvBindAttributeFqn       = "x86cc.KVBind.Core.KVBindAttribute";
-    private const string KvCoreNamespace          = "x86cc.KVBind.Core";
-    private const string KvNodeTypeName           = "KVNode";
-    private const string KvNestedNodeTypeName     = "KVNestedNode";
+    private const string KvBindAttributeFqn = "x86cc.KVBind.Core.KVBindAttribute";
+    private const string KvCoreNamespace = "x86cc.KVBind.Core";
+    private const string KvNodeTypeName = "KVNode";
+    private const string KvNestedNodeTypeName = "KVNestedNode";
     private const string KvCollectionNodeTypeName = "KVCollectionNode";
 
     private static readonly SymbolDisplayFormat FullyQualifiedNullableFormat =
@@ -191,9 +191,7 @@ public sealed class SourceGenerator : IIncrementalGenerator
         return new TypeModel(
             TypeName: typeSymbol.Name,
             FullyQualifiedTypeName: typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-            NamespaceName: typeSymbol.ContainingNamespace.IsGlobalNamespace
-                ? null
-                : typeSymbol.ContainingNamespace.ToDisplayString(),
+            NamespaceName: typeSymbol.ContainingNamespace.IsGlobalNamespace ? null : typeSymbol.ContainingNamespace.ToDisplayString(),
             Properties: new EquatableArray<PropertyModel>(properties.ToImmutableArray()));
     }
 
@@ -257,19 +255,25 @@ public sealed class SourceGenerator : IIncrementalGenerator
 
             // KVB006: field group or collection with a setter — unbound replacement is a silent runtime failure
             if ((property.IsNodeProperty || property.IsCollectionProperty) && property.HasSetter)
+            {
                 context.ReportDiagnostic(Diagnostic.Create(
                     MutableNavigationProperty, property.Location.Value, property.PropertyName, property.PropertyTypeName));
+            }
 
             // KVB007: field group or collection declared as partial — no generated implementation exists
             if ((property.IsNodeProperty || property.IsCollectionProperty) && property.HasPartialModifier)
+            {
                 context.ReportDiagnostic(Diagnostic.Create(
                     PartialNavigationProperty, property.Location.Value, property.PropertyName, property.PropertyTypeName));
+            }
 
             // KVB008: nested node with a public setter — should use private set to route through INIT/DROP
             if (property.IsNestedNodeProperty && property.HasSetter
                 && string.IsNullOrEmpty(property.SetterAccessibility))
+            {
                 context.ReportDiagnostic(Diagnostic.Create(
                     PublicNestedNodeSetter, property.Location.Value, property.PropertyName, property.NonNullablePropertyTypeName));
+            }
         }
 
         // KVB003: report on every member of each duplicate group, not just the first
@@ -279,9 +283,13 @@ public sealed class SourceGenerator : IIncrementalGenerator
             .Where(static g => g.Count() > 1);
 
         foreach (var group in duplicateGroups)
+        {
             foreach (var duplicate in group)
+            {
                 context.ReportDiagnostic(Diagnostic.Create(
                     DuplicateCanonicalKey, duplicate.Location.Value, model.TypeName, group.Key));
+            }
+        }
 
         // Emit valid field and nested-node properties
         var validFields = model.Properties.AsImmutableArray()
@@ -436,7 +444,7 @@ public sealed class SourceGenerator : IIncrementalGenerator
                 && a.Span.End == b.Span.End;
         }
 
-        public override bool Equals(object? obj) => obj is EquatableLocation e && Equals(e);
+        public override bool Equals(object? obj) => obj is EquatableLocation e && this.Equals(e);
 
         public override int GetHashCode()
         {
@@ -444,9 +452,9 @@ public sealed class SourceGenerator : IIncrementalGenerator
             unchecked
             {
                 var hash = 17;
-                hash = hash * 31 + (span.Path?.GetHashCode() ?? 0);
-                hash = hash * 31 + span.Span.Start.Line;
-                hash = hash * 31 + span.Span.Start.Character;
+                hash = (hash * 31) + (span.Path?.GetHashCode() ?? 0);
+                hash = (hash * 31) + span.Span.Start.Line;
+                hash = (hash * 31) + span.Span.Start.Character;
                 return hash;
             }
         }
@@ -456,29 +464,32 @@ public sealed class SourceGenerator : IIncrementalGenerator
     private readonly struct EquatableArray<T>(ImmutableArray<T> array) : IEquatable<EquatableArray<T>>
         where T : IEquatable<T>
     {
-        private readonly ImmutableArray<T> _array = array.IsDefault ? ImmutableArray<T>.Empty : array;
+        private readonly ImmutableArray<T> array = array.IsDefault ? ImmutableArray<T>.Empty : array;
 
-        public ImmutableArray<T> AsImmutableArray() => _array;
+        public ImmutableArray<T> AsImmutableArray() => this.array;
 
         public bool Equals(EquatableArray<T> other)
         {
-            if (_array.Length != other._array.Length)
+            if (this.array.Length != other.array.Length)
                 return false;
-            for (var i = 0; i < _array.Length; i++)
-                if (!_array[i].Equals(other._array[i]))
+            for (var i = 0; i < this.array.Length; i++)
+            {
+                if (!this.array[i].Equals(other.array[i]))
                     return false;
+            }
+
             return true;
         }
 
-        public override bool Equals(object? obj) => obj is EquatableArray<T> e && Equals(e);
+        public override bool Equals(object? obj) => obj is EquatableArray<T> e && this.Equals(e);
 
         public override int GetHashCode()
         {
             unchecked
             {
                 var hash = 17;
-                foreach (var item in _array)
-                    hash = hash * 31 + item.GetHashCode();
+                foreach (var item in this.array)
+                    hash = (hash * 31) + item.GetHashCode();
                 return hash;
             }
         }
