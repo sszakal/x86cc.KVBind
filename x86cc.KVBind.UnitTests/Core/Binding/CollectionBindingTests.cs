@@ -164,7 +164,7 @@ public class CollectionBindingTests : KVModelTestBase
         var loaded = model.CollectionKey1.GetById(id);
 
         loaded.Should().NotBeNull();
-        loaded!.Field1.Should().Be("lookup");
+        loaded.Field1.Should().Be("lookup");
     }
 
     [Fact]
@@ -182,7 +182,7 @@ public class CollectionBindingTests : KVModelTestBase
 
         var hydrated = model.Items.GetById(id);
         hydrated.Should().BeOfType<SpecialFieldGroupNode>();
-        hydrated!.Field1.Should().Be("Subtype1");
+        hydrated.Field1.Should().Be("Subtype1");
         hydrated.Field2.Should().Be("Subtype2");
         hydrated.As<SpecialFieldGroupNode>().SubtypeNotes.Should().Be("SubtypeNotes");
     }
@@ -195,7 +195,7 @@ public class CollectionBindingTests : KVModelTestBase
 
         var act = () => model.CollectionKey1.Create<SpecialFieldGroupNode>();
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("Collection item type 'x86cc.KVBind.UnitTests.Core.SpecialFieldGroupNode' is not declared for collection 'CollectionKey1'.");
     }
 
     [Fact]
@@ -209,7 +209,7 @@ public class CollectionBindingTests : KVModelTestBase
 
         var act = () => this.CreateRoot<PolymorphicCollectionTestModel>(data);
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("Collection item token 'unknown' is not declared for collection 'Items'.");
     }
 
     [Fact]
@@ -235,7 +235,7 @@ public class CollectionBindingTests : KVModelTestBase
             });
         };
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("Collection item token 'same_token' is already declared.");
     }
 
     [Fact]

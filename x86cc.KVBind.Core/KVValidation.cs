@@ -204,12 +204,16 @@ public sealed class KVCollectionRuleBuilder<TModel>
         where TItem : KVCollectionItemNode
     {
         ArgumentNullException.ThrowIfNull(selector);
-        if (selector.Body is not MemberExpression memberExpression || memberExpression.Member is not PropertyInfo property)
+        var body = selector.Body is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary
+            ? unary.Operand
+            : selector.Body;
+        if (body is not MemberExpression memberExpression || memberExpression.Member is not PropertyInfo property)
         {
             throw new ArgumentException("Aggregate selector must target a property.", nameof(selector));
         }
 
-        var fieldKey = property.Name;
+        // The stored key is the [KVBind] canonical key, which may differ from the C# property name.
+        var fieldKey = property.GetCustomAttribute<KVBindAttribute>()?.CanonicalKey ?? property.Name;
         return new KVCollectionAggregateRuleBuilder<TModel>(this, fieldKey);
     }
 
@@ -253,28 +257,7 @@ public sealed class KVCollectionRuleBuilder<TModel>
 
         foreach (var aggregateRule in this.aggregateRules)
         {
-            decimal sum = 0m;
-            foreach (var child in children)
-            {
-                var itemNode = collectionNode?.GetById(child) as KVNode;
-                if (itemNode is null) continue;
-
-                var rawValue = itemNode.Model.Get<object?>(aggregateRule.FieldKey);
-                if (rawValue is null) continue;
-
-                try
-                {
-                    sum += Convert.ToDecimal(rawValue);
-                }
-                catch
-                {
-                }
-            }
-
-            if (!Compare(sum, aggregateRule.Threshold, aggregateRule.Comparison))
-            {
-                errors.Add(new KVValidationError(path, aggregateRule.ErrorCode, $"'{path}' aggregate sum for '{aggregateRule.FieldKey}' is invalid."));
-            }
+            KVValidationRuntime.ValidateAggregateRule(errors, path, collectionNode, children, aggregateRule);
         }
     }
 
@@ -284,17 +267,6 @@ public sealed class KVCollectionRuleBuilder<TModel>
         return this;
     }
 
-    private static bool Compare(decimal value, decimal threshold, KVCollectionAggregateComparison comparison)
-    {
-        return comparison switch
-        {
-            KVCollectionAggregateComparison.LessThan => value < threshold,
-            KVCollectionAggregateComparison.LessThanOrEqual => value <= threshold,
-            KVCollectionAggregateComparison.GreaterThan => value > threshold,
-            KVCollectionAggregateComparison.GreaterThanOrEqual => value >= threshold,
-            _ => false
-        };
-    }
 }
 
 public sealed class KVCollectionAggregateRuleBuilder<TModel>

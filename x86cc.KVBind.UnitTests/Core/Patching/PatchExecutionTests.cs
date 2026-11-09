@@ -133,7 +133,7 @@ public class PatchExecutionTests : KVModelTestBase
     {
         var act = () => new KVPatchOperation(KVPatchOperationType.Add, "/Items");
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("ADD patch operations require a KVAddPatchPayload value.");
     }
 
     [Fact]
@@ -146,7 +146,7 @@ public class PatchExecutionTests : KVModelTestBase
         model.Patch(KVPatchOperation.Add("/Items", new KVAddPatchPayload(itemId)));
         var act = () => model.Patch(KVPatchOperation.Add("/Items", new KVAddPatchPayload(itemId)));
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("Collection item id '44444444-4444-4444-4444-444444444444' already exists.");
     }
 
     [Fact]
@@ -158,7 +158,7 @@ public class PatchExecutionTests : KVModelTestBase
 
         var act = () => model.Patch(KVPatchOperation.Add("/Items", new KVAddPatchPayload(Guid.NewGuid(), "special")));
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("Collection item token 'special' is not declared for collection 'Items'.");
     }
 
     [Fact]
@@ -205,7 +205,7 @@ public class PatchExecutionTests : KVModelTestBase
         model.Patch(KVPatchOperation.Remove($"/Items/{itemId}"));
         var act = () => model.Patch(KVPatchOperation.Set($"/Items/{itemId}/Amount", 42));
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage($"Collection child '{itemId}' not found for path '/Items/{itemId}/Amount'.");
     }
 
     [Fact]
@@ -240,7 +240,7 @@ public class PatchExecutionTests : KVModelTestBase
 
         var patchedInnerItem = model.OuterItems.GetById(outerId)!.InnerItems.GetById(innerId);
         patchedInnerItem.Should().NotBeNull();
-        patchedInnerItem!.Name.Should().Be("nested");
+        patchedInnerItem.Name.Should().Be("nested");
         patchedInnerItem.Amount.Should().Be(9);
     }
 
@@ -255,7 +255,7 @@ public class PatchExecutionTests : KVModelTestBase
         model.CommitSetup();
         var act = () => model.Patch(KVPatchOperation.Set("/Items(Name='entry-1')/Amount", 99));
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("Unable to resolve path segment 'Items(Name='entry-1')' in patch path '/Items(Name='entry-1')/Amount'.");
     }
 
     [Fact]
@@ -279,7 +279,7 @@ public class PatchExecutionTests : KVModelTestBase
         model.CommitSetup();
         var act = () => model.Patch(KVPatchOperation.Custom("GROUP", "/Items", new ItemsToGroup(Guid.NewGuid())));
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("Patch operation 'GROUP' is not valid for path '/Items' resolved to 'Items'.");
     }
 
     [Fact]
@@ -323,7 +323,7 @@ public class PatchExecutionTests : KVModelTestBase
 
         Action act = () => this.CreateRoot<BuiltInOverridePatchModel>();
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("Patch operation 'SET' is built in and cannot be overridden.");
     }
 
     [Fact]

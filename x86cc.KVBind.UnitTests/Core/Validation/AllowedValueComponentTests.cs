@@ -86,7 +86,7 @@ public class AllowedValueComponentTests : KVModelTestBase
 
         var act = () => rootNode.Patch(KVPatchOperation.Set("/CompensationType/$args/Hours", "bad"));
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("Field 'CompensationType' in patch path '/CompensationType/$args/Hours' must be the final path segment.");
     }
 
     [Fact]

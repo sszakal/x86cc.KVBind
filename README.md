@@ -311,6 +311,8 @@ builder.Collection(x => x.LineItems, collection =>
 });
 ```
 
+Aggregate sums skip unset values and parse numeric text with the invariant culture. A value that is not a number is reported as `aggregate_non_numeric` at the item field (for example `LineItems/{id}/Amount`), and the threshold check is skipped for that validation run.
+
 Validation profiles are marker objects selected by the root:
 
 ```csharp

@@ -92,18 +92,18 @@ public class ProfileAndCollectionValidationTests : KVModelTestBase
     }
 
     [Fact]
-    public void CollectionValidation_WhenAggregateFieldIsNotNumeric_CurrentRuntimeDoesNotThrow()
+    public void CollectionValidation_WhenAggregateFieldIsNotNumeric_ReportsNonNumericValue()
     {
         var model = this.CreateRoot<CollectionBadAggregateValidationModel>();
         model.Mode = ValidationMode.Full;
         var item = model.Items.Create();
         item.AmountText = "abc";
+        var itemId = model.Items.GetItemId(item);
 
         model.CommitSetup();
-        var act = () => model.Validate();
+        var errors = model.Validate().Errors;
 
-        act.Should().NotThrow();
-        model.Validate().Errors.Should().BeEmpty();
+        errors.Should().ContainSingle().Which.Should().BeEquivalentTo(new { Path = $"Items/{itemId}/AmountText", Code = "aggregate_non_numeric" });
     }
 
     [Fact]

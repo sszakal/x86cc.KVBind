@@ -62,7 +62,7 @@ public class NestedNodeBindingTests : KVModelTestBase
         root.CommitSetup();
         var act = () => root.Patch(KVPatchOperation.Set("/Animal/DogName", "Rex"));
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("Nested node 'Animal' is not initialized for path '/Animal/DogName'.");
     }
 
     [Fact]
@@ -121,7 +121,7 @@ public class NestedNodeBindingTests : KVModelTestBase
         root.Patch(KVPatchOperation.Init("/Animal", "DOG"));
 
         var act = () => cat.CatName = "stale";
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("'CatNestedNode' has been detached because its parent was rebound (e.g., after Clear() or Discard()). Re-read this node from its parent property to get the current bound instance.");
     }
 
     [Fact]

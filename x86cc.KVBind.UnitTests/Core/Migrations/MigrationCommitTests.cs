@@ -92,7 +92,7 @@ public class MigrationCommitTests
 
         var act = () => builder.Migration(2, _ => { });
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("A migration to version 2 is already declared.");
     }
 
     [Fact]

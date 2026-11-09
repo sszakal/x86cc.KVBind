@@ -5,6 +5,17 @@ namespace x86cc.KVBind.UnitTests.Core;
 
 public class RebaseTests
 {
+    public static TheoryData<string, KVValue?, string[]> ItemIdSources => new()
+    {
+        { "null", null, [] },
+        { "tombstone", KVValue.Tombstone, [] },
+        { "string[]", KVValue.FromObject(new[] { "a", "b" }), ["a", "b"] },
+        { "object[] skips non-strings", KVValue.FromObject(new object[] { "a", 1, "b" }), ["a", "b"] },
+        { "JsonElement array skips empty", KVValue.FromObject(System.Text.Json.JsonDocument.Parse("""["a","","b"]""").RootElement.Clone()), ["a", "b"] },
+        { "JsonElement non-array", KVValue.FromObject(System.Text.Json.JsonDocument.Parse("""{"a":1}""").RootElement.Clone()), [] },
+        { "scalar", KVValue.FromObject("a"), [] },
+    };
+
     // ── Incoming review (non-conflicting upstream changes) ───────────────────
 
     [Fact]
@@ -967,17 +978,6 @@ public class RebaseTests
         EffectiveItems(overlay, "Col/$items").Should().Equal("a", "y", "x");
     }
 
-    public static TheoryData<string, KVValue?, string[]> ItemIdSources => new()
-    {
-        { "null", null, [] },
-        { "tombstone", KVValue.Tombstone, [] },
-        { "string[]", KVValue.FromObject(new[] { "a", "b" }), ["a", "b"] },
-        { "object[] skips non-strings", KVValue.FromObject(new object[] { "a", 1, "b" }), ["a", "b"] },
-        { "JsonElement array skips empty", KVValue.FromObject(System.Text.Json.JsonDocument.Parse("""["a","","b"]""").RootElement.Clone()), ["a", "b"] },
-        { "JsonElement non-array", KVValue.FromObject(System.Text.Json.JsonDocument.Parse("""{"a":1}""").RootElement.Clone()), [] },
-        { "scalar", KVValue.FromObject("a"), [] },
-    };
-
     [Theory]
     [MemberData(nameof(ItemIdSources))]
     public void ExtractItemIds_ReadsEachStoredShape(string shape, KVValue? value, string[] expected)
@@ -1000,7 +1000,7 @@ public class RebaseTests
         // Persist the same parts a draft document stores, then rebuild a fresh overlay from them.
         var json = System.Text.Json.JsonSerializer.Serialize(new PersistedRebase(overlay.Snapshot, overlay.Changes, overlay.RebaseTarget!, overlay.Conflicts));
         var persisted = System.Text.Json.JsonSerializer.Deserialize<PersistedRebase>(json)!;
-        var restored = KVOverlay.Create(persisted.Snapshot, "editor");
+        var restored = KVOverlay.Create(persisted.BaseSnapshot, "editor");
         restored.Changes = persisted.Changes;
         restored.RestoreRebaseState(persisted.RebaseTarget, persisted.Conflicts);
 
@@ -1090,8 +1090,6 @@ public class RebaseTests
         return overlay;
     }
 
-    private sealed record PersistedRebase(KVSnapshot Snapshot, KVDictionary Changes, KVSnapshot RebaseTarget, List<KVConflict> Conflicts);
-
     private static KVSnapshot Snapshot(params (string Path, string Value)[] data)
     {
         var snapshot = new KVSnapshot();
@@ -1161,4 +1159,6 @@ public class RebaseTests
             commit.Changes[path] = value;
         return commit;
     }
+
+    private sealed record PersistedRebase(KVSnapshot BaseSnapshot, KVDictionary Changes, KVSnapshot RebaseTarget, List<KVConflict> Conflicts);
 }

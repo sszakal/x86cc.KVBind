@@ -42,7 +42,7 @@ public class DeepGraphPatchTests : DeepGraphTestBase
 
         var level1 = root.Level1Collection.GetById(TestIds.Level1Text);
         level1.Should().NotBeNull();
-        level1!.Level2Collection.GetById(TestIds.Level2Text).Should().BeNull();
+        level1.Level2Collection.GetById(TestIds.Level2Text).Should().BeNull();
         root.GetAllChanges().Changes.Should().ContainSingle(change => change.Path == Level2Path && change.ChangeType == KVChangeDeltaType.Removed);
     }
 

@@ -218,7 +218,6 @@ public class FieldBindingTests : KVModelTestBase
         this.CommitSetup(model);
 
         var restoredSnapshot = JsonSerializer.Deserialize<KVSnapshot>(JsonSerializer.Serialize(model.Snapshot))!;
-        var definition = this.CreateRegistry().Get<FieldTestModel>();
         var restoredModel = new KVModelRoot(KVOverlay.Create(restoredSnapshot, TestUser));
         var restoredRoot = this.CreateRoot<FieldTestModel>(restoredModel);
 
@@ -245,7 +244,7 @@ public class FieldBindingTests : KVModelTestBase
 
         var act = () => _ = rootNode.SmartEnumField;
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("Stored value token is not part of allowed values.");
     }
 }
 

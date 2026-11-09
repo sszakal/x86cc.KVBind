@@ -128,13 +128,15 @@ internal static class KVValidationRuntime
         }
     }
 
-    private static void ValidateAggregateRule(List<KVValidationError> errors, string collectionPath, IKVCollectionNode collectionNode, IReadOnlyList<string> children, KVCollectionAggregateRule aggregateRule)
+    // Shared by collection-level rules and profile rules. Null values are skipped; a value that is not a number
+    // is reported at its item field and suppresses the threshold check, since a partial sum would be misleading.
+    internal static void ValidateAggregateRule(List<KVValidationError> errors, string collectionPath, IKVCollectionNode? collectionNode, IReadOnlyList<string> children, KVCollectionAggregateRule aggregateRule)
     {
         decimal sum = 0m;
+        var hasNonNumeric = false;
         foreach (var child in children)
         {
-            var itemNode = collectionNode.GetById(child);
-            if (itemNode is not KVNode kvItem) continue;
+            if (collectionNode?.GetById(child) is not { } kvItem) continue;
 
             var raw = kvItem.Model.Get<object?>(aggregateRule.FieldKey);
             if (raw is null)
@@ -142,18 +144,50 @@ internal static class KVValidationRuntime
                 continue;
             }
 
-            try
+            if (TryConvertToDecimal(raw, out var value))
             {
-                sum += Convert.ToDecimal(raw, CultureInfo.InvariantCulture);
+                sum += value;
+                continue;
             }
-            catch
-            {
-            }
+
+            hasNonNumeric = true;
+            var fieldPath = BuildPath(BuildPath(collectionPath, child), aggregateRule.FieldKey);
+            errors.Add(new KVValidationError(fieldPath, "aggregate_non_numeric", $"'{fieldPath}' value '{raw}' is not a number and cannot be summed for '{collectionPath}'."));
         }
 
-        if (!Compare(sum, aggregateRule.Threshold, aggregateRule.Comparison))
+        if (!hasNonNumeric && !Compare(sum, aggregateRule.Threshold, aggregateRule.Comparison))
         {
             errors.Add(new KVValidationError(collectionPath, aggregateRule.ErrorCode, $"'{collectionPath}' aggregate sum for '{aggregateRule.FieldKey}' is invalid."));
+        }
+    }
+
+    private static bool TryConvertToDecimal(object raw, out decimal value)
+    {
+        switch (raw)
+        {
+            case decimal number:
+                value = number;
+                return true;
+            case string text:
+                return decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out value);
+            case bool:
+                value = 0m;
+                return false;
+            case IConvertible convertible:
+                try
+                {
+                    value = convertible.ToDecimal(CultureInfo.InvariantCulture);
+                    return true;
+                }
+                catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException)
+                {
+                    value = 0m;
+                    return false;
+                }
+
+            default:
+                value = 0m;
+                return false;
         }
     }
 

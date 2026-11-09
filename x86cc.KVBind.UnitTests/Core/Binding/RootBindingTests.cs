@@ -40,7 +40,7 @@ public class RootBindingTests : KVModelTestBase
 
         var act = () => _ = root.RootModel();
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("KVRootNode is not bound to KVModelRoot.");
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public class RootBindingTests : KVModelTestBase
 
         var act = () => root.BindPlainModelForTest(new KVModel(), definition);
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("KVRootNode must be bound to KVModelRoot.");
     }
 
     [Fact]
@@ -87,7 +87,7 @@ public class RootBindingTests : KVModelTestBase
 
         var act = () => root.ReadNotDefined();
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("Field 'NotDefined' is not declared under ''.");
     }
 
     [Fact]
@@ -135,7 +135,7 @@ public class RootBindingTests : KVModelTestBase
 
         var hydrated = root.Items.GetById(id);
         hydrated.Should().BeOfType<NewSpecialCollectionItemNode>();
-        hydrated!.As<NewSpecialCollectionItemNode>().Special.Should().Be("Subtype");
+        hydrated.As<NewSpecialCollectionItemNode>().Special.Should().Be("Subtype");
     }
 
     [Fact]
@@ -146,7 +146,7 @@ public class RootBindingTests : KVModelTestBase
 
         var act = () => root.Items.Create<NewUnregisteredCollectionItemNode>();
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("Collection item type 'x86cc.KVBind.UnitTests.Core.RootBindingTests+NewUnregisteredCollectionItemNode' is not declared for collection 'Items'.");
     }
 
     [Fact]
@@ -160,7 +160,7 @@ public class RootBindingTests : KVModelTestBase
 
         var act = () => this.CreateRoot<NewRootNode>(model);
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("Collection item token 'unknown' is not declared for collection 'Items'.");
     }
 
     private sealed class NewRootNode : KVRootNode

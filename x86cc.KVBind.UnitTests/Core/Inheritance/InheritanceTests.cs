@@ -43,7 +43,7 @@ public class InheritanceTests
 
         var act = () => child.MasterTerms = "tampered";
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("Path 'MasterTerms' is inherited from the parent and is read-only.");
     }
 
     [Fact]
@@ -51,9 +51,10 @@ public class InheritanceTests
     {
         var child = BindChild(BuildDefinition(), ParentSnapshot());
 
-        ((Action)(() => child.Header.Region = "US")).Should().Throw<InvalidOperationException>();
-        ((Action)(() => child.Parties.Create(Guid.NewGuid()))).Should().Throw<InvalidOperationException>();
-        ((Action)(() => child.Signatory!.Name = "Other")).Should().Throw<InvalidOperationException>();
+        ((Action)(() => child.Header.Region = "US")).Should().Throw<InvalidOperationException>().WithMessage("Path 'Header/Region' is inherited from the parent and is read-only.");
+        var partyId = Guid.NewGuid();
+        ((Action)(() => child.Parties.Create(partyId))).Should().Throw<InvalidOperationException>().WithMessage($"Path 'Parties/{partyId}/$type' is inherited from the parent and is read-only.");
+        ((Action)(() => child.Signatory!.Name = "Other")).Should().Throw<InvalidOperationException>().WithMessage("Path 'Signatory/Name' is inherited from the parent and is read-only.");
     }
 
     [Fact]
@@ -63,7 +64,7 @@ public class InheritanceTests
 
         var act = () => child.Patch(KVPatchOperation.Set("/MasterTerms", "tampered"));
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("Path 'MasterTerms' is inherited from the parent and is read-only.");
     }
 
     [Fact]
@@ -133,7 +134,7 @@ public class InheritanceTests
             group => group.Field(x => x.Region, f => f.Inherited()),
             options => { });
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("Inherited members can only be declared on the root definition ('Region').");
     }
 
     [Fact]
@@ -159,7 +160,7 @@ public class InheritanceTests
         var child = BindChild(BuildDefinition(), ParentSnapshot());
 
         // Before detach: inherited, read-only.
-        ((Action)(() => child.MasterTerms = "x")).Should().Throw<InvalidOperationException>();
+        ((Action)(() => child.MasterTerms = "x")).Should().Throw<InvalidOperationException>().WithMessage("Path 'MasterTerms' is inherited from the parent and is read-only.");
 
         child.Detach();
 
@@ -221,7 +222,7 @@ public class InheritanceTests
 
         var act = () => KVRootNode.Create<Contract>(overlay, BuildDefinition());
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("This aggregate is a child and must be bound with its parent snapshot.");
     }
 
     [Fact]
@@ -231,7 +232,7 @@ public class InheritanceTests
 
         var act = () => KVRootNode.Create<Contract>(overlay, BuildDefinition(), ParentSnapshot());
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("This aggregate is not a child; a parent snapshot cannot be supplied.");
     }
 
     [Fact]
@@ -273,7 +274,7 @@ public class InheritanceTests
         var rebind = () => KVRootNode.Create<Contract>(KVOverlay.Create(childSnapshot.Clone(), "child"), definition);
         rebind.Should().NotThrow();
         var rebindWithParent = () => KVRootNode.Create<Contract>(KVOverlay.Create(childSnapshot.Clone(), "child"), definition, ParentSnapshot());
-        rebindWithParent.Should().Throw<InvalidOperationException>();
+        rebindWithParent.Should().Throw<InvalidOperationException>().WithMessage("This aggregate is not a child; a parent snapshot cannot be supplied.");
     }
 
     [Fact]

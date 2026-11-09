@@ -71,7 +71,7 @@ public class ProtectedNodePatchTests : KVModelTestBase
         root.CommitSetup();
         var act = () => root.Patch(KVPatchOperation.Add("/Items", new KVAddPatchPayload(Guid.NewGuid(), "special")));
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>().WithMessage("Collection item token 'special' is not declared for collection 'Items'.");
     }
 
     [Fact]

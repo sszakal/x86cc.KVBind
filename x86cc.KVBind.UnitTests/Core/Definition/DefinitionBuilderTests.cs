@@ -67,6 +67,8 @@ public class DefinitionBuilderTests
 
         var definition = builder.Build();
 
+        definition.Nodes.Should().ContainSingle().Which.GetChildNode(root).Should().BeSameAs(root.General);
+        definition.Collections.Should().ContainSingle().Which.GetCollection(root).Should().BeSameAs(root.Items);
         InlineSnapshot.Validate(ProjectDefinition(definition), """
             Fields: []
             Nodes:
