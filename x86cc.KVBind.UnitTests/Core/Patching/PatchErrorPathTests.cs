@@ -163,6 +163,31 @@ public class PatchErrorPathTests : KVModelTestBase
     }
 
     [Fact]
+    public void CustomOperation_WhenJsonArgumentUsesCamelCase_BindsProperties()
+    {
+        var model = this.CreateRoot<PatchErrorModel>();
+        model.CommitSetup();
+        var itemId = Guid.NewGuid();
+        using var document = JsonDocument.Parse($$"""{"itemId":"{{itemId}}"}""");
+
+        model.Patch(KVPatchOperation.Custom("NOTE", "/Items", document.RootElement.Clone()));
+
+        model.Notes.Should().ContainSingle().Which!.ItemId.Should().Be(itemId);
+    }
+
+    [Fact]
+    public void CustomOperation_WhenNumericArgumentIsSentAsJsonString_ConvertsIt()
+    {
+        var model = this.CreateRoot<PatchErrorModel>();
+        model.CommitSetup();
+        using var document = JsonDocument.Parse("\"12\"");
+
+        model.Patch(KVPatchOperation.Custom("BUMP", "/Items", document.RootElement.Clone()));
+
+        model.Bumps.Should().Equal(12);
+    }
+
+    [Fact]
     public void CustomOperation_WhenArgumentHasMatchingShape_ConvertsIt()
     {
         var model = this.CreateRoot<PatchErrorModel>();

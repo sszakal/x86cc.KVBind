@@ -267,6 +267,9 @@ internal sealed class KVPatchOperationRegistry
 
 internal sealed class KVPatchOperationDescriptor
 {
+    // Payloads usually arrive from web clients: camelCase names, and numbers that may be sent as strings.
+    private static readonly JsonSerializerOptions ArgumentJsonOptions = new(JsonSerializerDefaults.Web);
+
     private readonly Action<KVPatchTarget, KVPatchOperation, KVPatchExecutionContext> invoke;
 
     private KVPatchOperationDescriptor(
@@ -376,8 +379,8 @@ internal sealed class KVPatchOperationDescriptor
         try
         {
             return value is JsonElement jsonElement
-                ? jsonElement.Deserialize(argumentType)
-                : JsonSerializer.Deserialize(JsonSerializer.Serialize(value), argumentType);
+                ? jsonElement.Deserialize(argumentType, ArgumentJsonOptions)
+                : JsonSerializer.Deserialize(JsonSerializer.Serialize(value, ArgumentJsonOptions), argumentType, ArgumentJsonOptions);
         }
         catch (JsonException exception)
         {
