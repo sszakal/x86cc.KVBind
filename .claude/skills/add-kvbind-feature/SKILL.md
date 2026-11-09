@@ -14,7 +14,7 @@ A KVBind feature is never just a C# property — model attributes alone declare 
 public partial string? Title { get; set; }
 ```
 
-Rules (enforced by the source generator — getting these wrong yields `KVB001`–`KVB004`):
+Rules (enforced by the source generator — getting these wrong yields `KVB001`–`KVB009`):
 
 - Canonical keys may contain only `A-Z`, `a-z`, `0-9`, `_`.
 - **Scalar** and **nested-node** properties MUST be `partial`.

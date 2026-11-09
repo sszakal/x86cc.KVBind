@@ -3,7 +3,7 @@
 ## Project Shape
 
 - `x86cc.KVBind.Core` is the runtime library: snapshots, overlays, typed nodes, DSL definitions, patching, validation, collections, nested nodes, and change reactions.
-- `x86cc.KVBind.SourceGenerator` is a Roslyn incremental generator targeting `netstandard2.0`; it emits accessors for `[KVBind]` partial properties and diagnostics `KVB001`-`KVB004`.
+- `x86cc.KVBind.SourceGenerator` is a Roslyn incremental generator targeting `netstandard2.0`; it emits accessors for `[KVBind]` partial properties and diagnostics `KVB001`-`KVB009` (see KVBind Conventions).
 - `x86cc.KVBind.UnitTests` exercises both runtime and generator behavior; it references the generator both as a project and as an analyzer.
 
 ## Commands
@@ -26,7 +26,8 @@
 
 ## KVBind Conventions
 
-- `[KVBind]` canonical keys may only contain `A-Z`, `a-z`, `0-9`, and `_`; invalid keys are source-generator errors.
+- `[KVBind]` canonical keys may only contain `A-Z`, `a-z`, `0-9`, and `_`; invalid keys are source-generator errors. Keys are case-sensitive everywhere (generator, definitions, storage, patch paths).
+- Generator diagnostics: `KVB001` scalar/nested-node property not `partial`; `KVB002` missing key; `KVB003` duplicate key (checked across all partial declarations of a type); `KVB004` invalid key characters; `KVB005` (warning) `[KVBind]` on a non-`KVNode` type; `KVB006` field-group/collection property has a setter; `KVB007` field-group/collection property is `partial`; `KVB008` (warning) nested-node property has a public setter; `KVB009` model declared inside a non-`partial` containing type.
 - Scalar and nested-node `[KVBind]` properties must be `partial`; field-group and `KVCollectionNode<T>` properties do not.
 - Runtime schema is defined with `KVBindBuilder<T>`; model attributes alone do not declare fields, collections, nested-node types, validation, or reactions.
 - Collections require at least one `Item<TItem>(...)` definition; nested nodes require at least one `Bind<TSubtype>(...)` definition.

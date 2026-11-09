@@ -182,6 +182,90 @@ public class SourceGeneratorCompilationTests
     }
 
     [Fact]
+    public void Generator_WhenTypeIsSplitAcrossPartialDeclarations_EmitsOneCompilableFile()
+    {
+        var compilation = CreateCompilation(
+            CSharpSyntaxTree.ParseText("""
+                using x86cc.KVBind.Core;
+                namespace Demo;
+                public partial class Model : KVRootNode
+                {
+                    [KVBind("Name")] public partial string? Name { get; set; }
+                }
+                """),
+            CSharpSyntaxTree.ParseText("""
+                using x86cc.KVBind.Core;
+                namespace Demo;
+                public partial class Model
+                {
+                    [KVBind("Code")] public partial string? Code { get; set; }
+                }
+                """));
+
+        var (driver, outputCompilation) = RunGenerator(compilation);
+
+        driver.GetRunResult().Diagnostics.Should().BeEmpty();
+        driver.GetRunResult().GeneratedTrees.Should().ContainSingle()
+            .Which.ToString().Should().Contain("GetField<string?>(\"Name\")").And.Contain("GetField<string?>(\"Code\")");
+        outputCompilation.GetDiagnostics()
+            .Where(static d => d.Severity == DiagnosticSeverity.Error)
+            .Select(static d => d.ToString())
+            .Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Generator_WhenCanonicalKeyIsDuplicatedAcrossPartialDeclarations_ReportsKVB003()
+    {
+        var compilation = CreateCompilation(
+            CSharpSyntaxTree.ParseText("""
+                using x86cc.KVBind.Core;
+                namespace Demo;
+                public partial class Model : KVRootNode
+                {
+                    [KVBind("Number")] public partial string? Number { get; set; }
+                }
+                """),
+            CSharpSyntaxTree.ParseText("""
+                using x86cc.KVBind.Core;
+                namespace Demo;
+                public partial class Model
+                {
+                    [KVBind("Number")] public partial string? LegacyNumber { get; set; }
+                }
+                """));
+
+        var (driver, _) = RunGenerator(compilation);
+
+        driver.GetRunResult().Diagnostics.Where(static d => d.Id == "KVB003").Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void Generator_WhenContainingTypeIsNotPartial_ReportsKVB009AndEmitsNothing()
+    {
+        var source = """
+            using x86cc.KVBind.Core;
+            namespace Demo;
+            public static class Outer
+            {
+                public partial class Model : KVRootNode
+                {
+                    [KVBind("Name")] public partial string? Name { get; set; }
+                }
+            }
+            """;
+
+        var (driver, _) = RunGenerator(CreateCompilation(source));
+
+        var runResult = driver.GetRunResult();
+        runResult.Diagnostics.Should().ContainSingle()
+            .Which.Should().Match<Diagnostic>(d => d.Id == "KVB009"
+                && d.Severity == DiagnosticSeverity.Error
+                && d.GetMessage().Contains("'Model'", StringComparison.Ordinal)
+                && d.GetMessage().Contains("'Outer'", StringComparison.Ordinal));
+        runResult.GeneratedTrees.Should().BeEmpty();
+    }
+
+    [Fact]
     public void Generator_WhenUnrelatedFileChanges_ReusesCachedModelOutput()
     {
         var modelTree = CSharpSyntaxTree.ParseText("""
