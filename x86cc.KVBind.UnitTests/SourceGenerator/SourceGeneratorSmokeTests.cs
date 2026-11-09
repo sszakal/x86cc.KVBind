@@ -470,6 +470,56 @@ public class SourceGeneratorSmokeTests
             d.Id == "KVB006" || d.Id == "KVB007" || d.Id == "KVB008");
     }
 
+    [Fact]
+    public void Generator_WhenCanonicalKeyIsDuplicated_ReportsKVB003OnEachProperty()
+    {
+        var source = """
+            using x86cc.KVBind.Core;
+            namespace Demo;
+            public partial class ContractModel : KVRootNode
+            {
+                [KVBind("Number")]
+                public partial string? ContractNumber { get; set; }
+
+                [KVBind("Number")]
+                public partial string? LegacyNumber { get; set; }
+
+                [KVBind("Title")]
+                public partial string? Title { get; set; }
+            }
+            """;
+
+        var runResult = RunGenerator(source);
+
+        var duplicates = runResult.Diagnostics.Where(d => d.Id == "KVB003").ToArray();
+        duplicates.Should().HaveCount(2);
+        duplicates.Should().OnlyContain(d => d.Severity == DiagnosticSeverity.Error
+            && d.GetMessage().Contains("ContractModel", StringComparison.Ordinal)
+            && d.GetMessage().Contains("Number", StringComparison.Ordinal));
+        duplicates.Select(d => d.Location.SourceSpan.Start).Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public void Generator_WhenCanonicalKeysDifferOnlyByCase_DoesNotReportKVB003()
+    {
+        var source = """
+            using x86cc.KVBind.Core;
+            namespace Demo;
+            public partial class ContractModel : KVRootNode
+            {
+                [KVBind("Number")]
+                public partial string? ContractNumber { get; set; }
+
+                [KVBind("number")]
+                public partial string? LegacyNumber { get; set; }
+            }
+            """;
+
+        var runResult = RunGenerator(source);
+
+        runResult.Diagnostics.Should().NotContain(d => d.Id == "KVB003");
+    }
+
     private static GeneratorDriverRunResult RunGenerator(string source)
     {
         var syntaxTree = CSharpSyntaxTree.ParseText(source);
