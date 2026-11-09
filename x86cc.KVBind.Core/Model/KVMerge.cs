@@ -138,17 +138,19 @@ public static class KVMerge
             var oursTouchedItems = changes.TryGetValue(key, out var oursItemsValue);
             var ourIds = oursTouchedItems ? ExtractItemIds(oursItemsValue) : baseIds;
 
-            var addedByOurs = ourIds.Except(baseIds, System.StringComparer.Ordinal).ToHashSet(System.StringComparer.Ordinal);
+            // Except keeps the order of its first sequence, so these lists carry array order; the sets are lookups only.
+            var addedByOurs = ourIds.Except(baseIds, System.StringComparer.Ordinal).ToList();
+            var removedByTarget = baseIds.Except(targetIds, System.StringComparer.Ordinal).ToList();
+            var addedByTarget = targetIds.Except(baseIds, System.StringComparer.Ordinal);
+            var addedByOursSet = addedByOurs.ToHashSet(System.StringComparer.Ordinal);
             var removedByOurs = baseIds.Except(ourIds, System.StringComparer.Ordinal).ToHashSet(System.StringComparer.Ordinal);
-            var addedByTarget = targetIds.Except(baseIds, System.StringComparer.Ordinal).ToHashSet(System.StringComparer.Ordinal);
-            var removedByTarget = baseIds.Except(targetIds, System.StringComparer.Ordinal).ToHashSet(System.StringComparer.Ordinal);
 
             bool ItemEditedByOurs(string id) =>
                 changes.Keys.Any(k =>
                     !string.Equals(k, key, System.StringComparison.Ordinal) &&
                     KVPath.IsSameOrDescendant(k, KVPath.Combine(collectionPath, id)));
 
-            var caseBConflicted = new HashSet<string>(System.StringComparer.Ordinal);
+            var caseBConflicted = new List<string>();
 
             // Conflict: target deleted an item ours edited (Case B).
             foreach (var id in removedByTarget)
@@ -170,7 +172,7 @@ public static class KVMerge
             // Incoming: target added an item ours did not.
             foreach (var id in addedByTarget)
             {
-                if (addedByOurs.Contains(id)) continue;      // both added the same id — degenerate, treat as ours.
+                if (addedByOursSet.Contains(id)) continue;   // both added the same id — degenerate, treat as ours.
                 var itemPath = KVPath.Combine(collectionPath, id);
                 if (OverlayTouchedUnder(itemPath)) continue; // ours also touched — not a clean incoming add.
 
@@ -187,7 +189,7 @@ public static class KVMerge
             foreach (var id in removedByTarget)
             {
                 if (removedByOurs.Contains(id)) continue;
-                if (caseBConflicted.Contains(id)) continue;
+                if (caseBConflicted.Contains(id, System.StringComparer.Ordinal)) continue;
                 var itemPath = KVPath.Combine(collectionPath, id);
 
                 incoming.Add(new KVConflict
@@ -200,18 +202,18 @@ public static class KVMerge
             }
 
             // Build the default (accept-all) merged membership array:
-            //   target order, minus items ours cleanly deleted, plus ours' additions, plus Case B items (tentative).
+            //   target order, minus items ours cleanly deleted, then ours' additions in ours' order, then Case B
+            //   items (tentative) in base order.
             var mergedIds = new List<string>();
+            var mergedSet = new HashSet<string>(System.StringComparer.Ordinal);
             foreach (var id in targetIds)
             {
-                if (removedByOurs.Contains(id) && !caseBConflicted.Contains(id)) continue;
-                mergedIds.Add(id);
+                if (removedByOurs.Contains(id) && !caseBConflicted.Contains(id, System.StringComparer.Ordinal)) continue;
+                if (mergedSet.Add(id)) mergedIds.Add(id);
             }
 
-            foreach (var id in addedByOurs)
-                if (!mergedIds.Contains(id, System.StringComparer.Ordinal)) mergedIds.Add(id);
-            foreach (var id in caseBConflicted)
-                if (!mergedIds.Contains(id, System.StringComparer.Ordinal)) mergedIds.Add(id);
+            foreach (var id in addedByOurs.Concat(caseBConflicted))
+                if (mergedSet.Add(id)) mergedIds.Add(id);
 
             consumed.Add(key);
 
@@ -305,19 +307,20 @@ public static class KVMerge
 
     // ── Helpers ──────────────────────────────────────────────────────────────────
 
-    internal static HashSet<string> ExtractItemIds(KVValue? value)
+    // Membership ids in array order, first occurrence wins. Order is part of the value: the merge
+    // rebuilds $items from these lists, so a set here would make collection order depend on hashing.
+    internal static List<string> ExtractItemIds(KVValue? value)
     {
         if (value is null || value == KVValue.Tombstone) return [];
-        return value.Value switch
+        IEnumerable<string> ids = value.Value switch
         {
-            string[] arr => new HashSet<string>(arr, System.StringComparer.Ordinal),
-            object[] arr => new HashSet<string>(arr.OfType<string>(), System.StringComparer.Ordinal),
+            string[] arr => arr,
+            object[] arr => arr.OfType<string>(),
             JsonElement je when je.ValueKind == JsonValueKind.Array =>
-                new HashSet<string>(
-                    je.EnumerateArray().Select(e => e.GetString() ?? string.Empty).Where(s => s.Length > 0),
-                    System.StringComparer.Ordinal),
+                je.EnumerateArray().Select(e => e.GetString() ?? string.Empty).Where(s => s.Length > 0),
             _ => []
         };
+        return ids.Distinct(System.StringComparer.Ordinal).ToList();
     }
 
     internal static KVValue BuildItemsValue(IEnumerable<string> ids) => KVValue.FromObject(ids.ToArray());

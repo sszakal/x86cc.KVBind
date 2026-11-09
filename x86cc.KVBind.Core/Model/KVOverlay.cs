@@ -517,11 +517,11 @@ public sealed class KVOverlay
         if (currentItems == KVValue.Tombstone)
             return;
 
-        var ids = KVMerge.ExtractItemIds(currentItems).ToList();
+        var ids = KVMerge.ExtractItemIds(currentItems);
 
         // Decided by base membership rather than by data under the item path: an item can have no fields.
         this.Snapshot.Data.TryGetValue(itemsPath, out var baseItems);
-        var wasIncomingAdd = !KVMerge.ExtractItemIds(baseItems).Contains(itemId);
+        var wasIncomingAdd = !KVMerge.ExtractItemIds(baseItems).Contains(itemId, System.StringComparer.Ordinal);
 
         if (wasIncomingAdd)
             ids.Remove(itemId);
@@ -550,7 +550,7 @@ public sealed class KVOverlay
         if (!this.Changes.TryGetValue(itemsPath, out var currentItems) || currentItems == KVValue.Tombstone)
             return;
 
-        var ids = KVMerge.ExtractItemIds(currentItems).ToList();
+        var ids = KVMerge.ExtractItemIds(currentItems);
 
         if (conflict.OursValue is null)
         {

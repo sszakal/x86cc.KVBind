@@ -893,6 +893,62 @@ public class RebaseTests
         EffectiveItems(overlay, "Col/$items").Should().Equal("a", "b", "c");
     }
 
+    // ── $items order ──
+
+    [Fact]
+    public void FinishRebase_WhenTargetReorderedAndDraftAdded_KeepsTargetOrderThenDraftAdditionsInDraftOrder()
+    {
+        var v1 = SnapshotV(("Col/$items", Items("a", "b", "c")));
+        var overlay = KVOverlay.Create(v1.Clone(), "editor");
+        overlay.Set("Col/$items", Items("a", "b", "c", "y", "x"));
+        var v2 = SnapshotV(("Col/$items", Items("c", "b", "a")));
+
+        Rebase(overlay, v2).Should().Be(KVRebaseOutcome.CanAutomerge);
+        overlay.FinishRebase();
+
+        EffectiveItems(overlay, "Col/$items").Should().Equal("c", "b", "a", "y", "x");
+    }
+
+    [Fact]
+    public void BeginRebase_WhenTargetDeletedItemsDraftEdited_AppendsThemInBaseOrderAfterDraftAdditions()
+    {
+        var v1 = SnapshotV(("Col/$items", Items("c", "b", "a")), ("Col/a/Name", "a"), ("Col/c/Name", "c"));
+        var overlay = KVOverlay.Create(v1.Clone(), "editor");
+        overlay.Set("Col/c/Name", "c mine");
+        overlay.Set("Col/a/Name", "a mine");
+        overlay.Set("Col/$items", Items("c", "b", "a", "z"));
+        var v2 = SnapshotV(("Col/$items", Items("b")));
+
+        Rebase(overlay, v2);
+
+        overlay.Conflicts.Select(c => c.Path).Should().Equal("Col/a", "Col/c");
+        EffectiveItems(overlay, "Col/$items").Should().Equal("b", "z", "c", "a");
+    }
+
+    [Fact]
+    public void Merge_ItemsArrayOrder_IsTheSameForRepeatedRuns()
+    {
+        var ids = Enumerable.Range(0, 200).Select(i => $"id{i:D3}").ToArray();
+        var baseSnapshot = SnapshotV(("Col/$items", Items(ids[..100])));
+        var theirs = new Dictionary<string, KVValue>(StringComparer.Ordinal) { ["Col/$items"] = Items([.. ids[..100].Reverse()]) };
+        var oursIds = ids[..100].Where((_, i) => i % 3 != 0).Concat(ids[100..].Reverse()).ToArray();
+        var ours = new Dictionary<string, KVValue>(StringComparer.Ordinal) { ["Col/$items"] = Items(oursIds) };
+
+        var merged = KVMerge.ExtractItemIds(KVMerge.Merge(baseSnapshot, theirs, ours).MergedItemArrays["Col/$items"]);
+
+        var expected = ids[..100].Reverse().Where(id => oursIds.Contains(id)).Concat(ids[100..].Reverse());
+        merged.Should().Equal(expected);
+    }
+
+    [Fact]
+    public void ExtractItemIds_KeepsArrayOrderAndDropsLaterDuplicates()
+    {
+        using var document = System.Text.Json.JsonDocument.Parse("""["b","a","b"]""");
+
+        KVMerge.ExtractItemIds(Items("b", "a", "b")).Should().Equal("b", "a");
+        KVMerge.ExtractItemIds(KVValue.FromObject(document.RootElement.Clone())).Should().Equal("b", "a");
+    }
+
     // ── $items arrays as they come back from JSON (object[] / JsonElement) ──
 
     [Fact]
@@ -908,7 +964,7 @@ public class RebaseTests
         overlay.Conflicts.Should().ContainSingle().Which.Path.Should().Be("Col/y");
 
         overlay.FinishRebase();
-        EffectiveItems(overlay, "Col/$items").Should().Equal("a", "x", "y");
+        EffectiveItems(overlay, "Col/$items").Should().Equal("a", "y", "x");
     }
 
     public static TheoryData<string, KVValue?, string[]> ItemIdSources => new()
@@ -926,7 +982,7 @@ public class RebaseTests
     [MemberData(nameof(ItemIdSources))]
     public void ExtractItemIds_ReadsEachStoredShape(string shape, KVValue? value, string[] expected)
     {
-        KVMerge.ExtractItemIds(value).Should().BeEquivalentTo(expected, because: shape);
+        KVMerge.ExtractItemIds(value).Should().Equal(expected, because: shape);
     }
 
     // ── Persisted in-progress rebase ─────────────────────────────────────────
@@ -1061,7 +1117,7 @@ public class RebaseTests
     private static string[] EffectiveItems(KVOverlay overlay, string path)
     {
         if (!overlay.TryGet(path, out var value) || value is null) return [];
-        return KVMerge.ExtractItemIds(value).OrderBy(x => x, StringComparer.Ordinal).ToArray();
+        return [.. KVMerge.ExtractItemIds(value)];
     }
 
     // Test bridge: rebase against a target snapshot by deriving the single upstream commit that takes the
