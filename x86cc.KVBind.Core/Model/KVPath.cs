@@ -89,45 +89,4 @@ internal static class KVPath
         var slash = path.LastIndexOf('/');
         return slash < 0 ? string.Empty : path[..slash];
     }
-
-    public static bool TryGetDirectSegment(string path, string parentPath, Func<string, bool>? excludeSegment, out string segment)
-    {
-        segment = string.Empty;
-        var relative = RelativeTo(path, parentPath);
-        if (relative is null || relative.Length == 0)
-        {
-            return false;
-        }
-
-        if (string.IsNullOrWhiteSpace(parentPath))
-        {
-            if (excludeSegment is not null && excludeSegment(relative))
-            {
-                return false;
-            }
-
-            var firstSlash = relative.IndexOf('/');
-            var firstSegment = firstSlash < 0 ? relative : relative[..firstSlash];
-            if (excludeSegment is not null && excludeSegment(firstSegment))
-            {
-                return false;
-            }
-
-            segment = relative;
-            return true;
-        }
-
-        if (relative.Contains('/'))
-        {
-            return false;
-        }
-
-        if (excludeSegment is not null && excludeSegment(relative))
-        {
-            return false;
-        }
-
-        segment = relative;
-        return true;
-    }
 }

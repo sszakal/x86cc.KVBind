@@ -122,6 +122,51 @@ public class MigrationCommitTests
     }
 
     [Fact]
+    public void Stamping_an_existing_snapshot_sets_current_version_and_keeps_its_data()
+    {
+        var builder = new KVBindBuilder<MigrationRootNode>();
+        builder.Field(x => x.Title);
+        builder.Migration(2, m => m.Backfill(KVTarget.Root.Seg("A"), _ => "a"));
+        builder.Migration(3, m => m.Backfill(KVTarget.Root.Seg("B"), _ => "b"));
+        var definition = builder.Build();
+        var snapshot = new KVSnapshot();
+        snapshot.Data["Title"] = "kept";
+
+        var stamped = snapshot.StampCurrentSchemaVersion(definition);
+
+        stamped.Should().BeSameAs(snapshot);
+        stamped.SchemaVersion.Should().Be(3);
+        stamped.Data.Should().ContainKey("Title");
+        KVMigrator.BuildCommits(stamped, definition).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Stamping_with_no_migrations_sets_version_zero()
+    {
+        var builder = new KVBindBuilder<MigrationRootNode>();
+        builder.Field(x => x.Title);
+        var definition = builder.Build();
+
+        var stamped = new KVSnapshot { SchemaVersion = 5 }.StampCurrentSchemaVersion(definition);
+
+        stamped.SchemaVersion.Should().Be(0);
+    }
+
+    [Fact]
+    public void Stamping_rejects_null_arguments()
+    {
+        var builder = new KVBindBuilder<MigrationRootNode>();
+        builder.Field(x => x.Title);
+        var definition = builder.Build();
+
+        var nullSnapshot = () => ((KVSnapshot)null!).StampCurrentSchemaVersion(definition);
+        var nullDefinition = () => new KVSnapshot().StampCurrentSchemaVersion(null!);
+
+        nullSnapshot.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("snapshot");
+        nullDefinition.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("definition");
+    }
+
+    [Fact]
     public void Up_to_date_snapshot_produces_no_commits_without_running_migrations()
     {
         var builder = new KVBindBuilder<MigrationRootNode>();

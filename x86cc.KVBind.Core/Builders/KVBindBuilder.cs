@@ -257,22 +257,20 @@ public sealed class KVBindBuilder<TEntity>
     {
         ArgumentNullException.ThrowIfNull(configure);
 
-        var scopeKeys = this.ResolveValidationScopeKeys();
+        this.EnsureValidationScope();
         var builder = new KVGroupRuleBuilder<TEntity>(ResolveSelectorKey);
         configure(builder);
-        var rules = builder.BuildGlobalRules();
-        this.RegisterValidationRules(scopeKeys, rules);
+        this.RegisterValidationRules(builder.BuildGlobalRules());
     }
 
     public void Validation(Action<KVGroupValidationProfileBuilder<TEntity>> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
 
-        var scopeKeys = this.ResolveValidationScopeKeys();
+        this.EnsureValidationScope();
         var builder = new KVGroupValidationProfileBuilder<TEntity>(ResolveSelectorKey);
         configure(builder);
-        var rules = builder.Build();
-        this.RegisterValidationRules(scopeKeys, rules);
+        this.RegisterValidationRules(builder.Build());
     }
 
     public void OnChange(
@@ -414,32 +412,26 @@ public sealed class KVBindBuilder<TEntity>
         }
     }
 
-    private void RegisterValidationRules(IReadOnlyList<string> scopeKeys, IReadOnlyList<KVCompiledValidationRule> rules)
+    private void RegisterValidationRules(IReadOnlyList<KVCompiledValidationRule> rules)
     {
         if (rules.Count == 0)
         {
             return;
         }
 
-        foreach (var scope in scopeKeys)
-        {
-            this.definition.ValidationRegistrations.Add(new KVValidationRegistration(scope, false, rules));
-        }
+        // Group rules evaluate against the whole node, so they are registered once for the definition
+        // (empty scope). One registration per member would run every rule once per member.
+        this.definition.ValidationRegistrations.Add(new KVValidationRegistration(string.Empty, false, rules));
     }
 
-    private IReadOnlyList<string> ResolveValidationScopeKeys()
+    private void EnsureValidationScope()
     {
-        var scopeKeys = this.definition.Fields.ConvertAll(field => field.SubSegmentPath);
-        scopeKeys.AddRange(this.definition.Nodes.ConvertAll(node => node.SubSegmentPath));
-        scopeKeys.AddRange(this.definition.Collections.ConvertAll(collection => collection.SubSegmentPath));
-        scopeKeys.AddRange(this.definition.NestedNodes.ConvertAll(nestedNode => nestedNode.SubSegmentPath));
-
-        var distinct = new HashSet<string>(scopeKeys, StringComparer.Ordinal);
-        if (distinct.Count == 0)
+        if (this.definition.Fields.Count == 0
+            && this.definition.Nodes.Count == 0
+            && this.definition.Collections.Count == 0
+            && this.definition.NestedNodes.Count == 0)
         {
             throw new InvalidOperationException("Validation requires at least one field or collection declared in the same definition.");
         }
-
-        return [.. distinct];
     }
 }

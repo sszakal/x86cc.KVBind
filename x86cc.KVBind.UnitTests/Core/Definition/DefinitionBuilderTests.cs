@@ -138,7 +138,7 @@ public class DefinitionBuilderTests
                     ErrorCode: aggregate_greater_than_or_equal
                 ValidationRules: 1
             ValidationRegistrations:
-              - ScopePath: Title
+              - ScopePath:
                 Rules: 1
             Annotations: []
             SubSegmentPath:
