@@ -755,6 +755,287 @@ public class RebaseTests
         act.Should().Throw<InvalidOperationException>().WithMessage("*already in progress*");
     }
 
+    // ── Incoming $type change on a node the draft left untouched ─────────────
+
+    [Fact]
+    public void BeginRebase_WhenTargetChangedTypeOfUntouchedNode_ProducesSingleIncomingAtNode()
+    {
+        var overlay = DraftOverPersonClaimant();
+        var v2 = Snapshot(("Title", "A"), ("Claimant/$type", "COMPANY"), ("Claimant/CompanyName", "Acme"));
+
+        Rebase(overlay, v2).Should().Be(KVRebaseOutcome.CanAutomerge);
+
+        // One entry at the node; the $type and field changes beneath it are not listed separately.
+        var incoming = overlay.Conflicts.Should().ContainSingle().Subject;
+        incoming.Path.Should().Be("Claimant");
+        incoming.Kind.Should().Be(KVConflictKind.Incoming);
+        incoming.RequiresResolution.Should().BeFalse();
+        incoming.Resolution.Should().Be(KVConflictResolution.Theirs);
+        (incoming.BaseValue?.Value as string).Should().Be("PERSON");
+        (incoming.MainValue?.Value as string).Should().Be("COMPANY");
+    }
+
+    [Fact]
+    public void FinishRebase_AcceptIncomingTypeChange_ShowsTargetNode()
+    {
+        var overlay = DraftOverPersonClaimant();
+        var v2 = Snapshot(("Title", "A"), ("Claimant/$type", "COMPANY"), ("Claimant/CompanyName", "Acme"));
+
+        Rebase(overlay, v2);
+        overlay.FinishRebase();
+
+        Effective(overlay, "Claimant/$type").Should().Be("COMPANY");
+        Effective(overlay, "Claimant/CompanyName").Should().Be("Acme");
+        Effective(overlay, "Claimant/FullName").Should().BeNull();
+        Effective(overlay, "Title").Should().Be("Mine");
+    }
+
+    [Fact]
+    public void FinishRebase_RejectIncomingTypeChange_KeepsBaseNodeWithoutBleedThrough()
+    {
+        var overlay = DraftOverPersonClaimant();
+        var v2 = Snapshot(("Title", "A"), ("Claimant/$type", "COMPANY"), ("Claimant/CompanyName", "Acme"));
+
+        Rebase(overlay, v2);
+        overlay.ResolveConflict("Claimant", KVConflictResolution.Ours);
+        overlay.FinishRebase();
+
+        Effective(overlay, "Claimant/$type").Should().Be("PERSON");
+        Effective(overlay, "Claimant/FullName").Should().Be("John");
+        overlay.IsRemoved("Claimant/CompanyName").Should().BeTrue();
+        Effective(overlay, "Title").Should().Be("Mine");
+    }
+
+    // ── Incoming item removal (target deleted an item the draft left untouched) ──
+
+    [Fact]
+    public void BeginRebase_WhenTargetRemovedUntouchedItem_ProducesIncomingItemRemoval()
+    {
+        var overlay = DraftOverCollection(("Col/b/Name", "item b"));
+        var v2 = SnapshotV(("Title", "A"), ("Col/$items", Items("a")));
+
+        Rebase(overlay, v2).Should().Be(KVRebaseOutcome.CanAutomerge);
+
+        var incoming = overlay.Conflicts.Should().ContainSingle().Subject;
+        incoming.Path.Should().Be("Col/b");
+        incoming.Kind.Should().Be(KVConflictKind.IncomingItem);
+        incoming.RequiresResolution.Should().BeFalse();
+        incoming.BaseValue?.Value.Should().Be(true);
+        incoming.MainValue.Should().BeNull();
+    }
+
+    [Fact]
+    public void FinishRebase_AcceptIncomingItemRemoval_RemovesItem()
+    {
+        var overlay = DraftOverCollection(("Col/b/Name", "item b"));
+        var v2 = SnapshotV(("Title", "A"), ("Col/$items", Items("a")));
+
+        Rebase(overlay, v2);
+        overlay.FinishRebase();
+
+        EffectiveItems(overlay, "Col/$items").Should().Equal("a");
+        Effective(overlay, "Col/b/Name").Should().BeNull();
+        Effective(overlay, "Title").Should().Be("Mine");
+    }
+
+    [Fact]
+    public void FinishRebase_RejectIncomingItemRemoval_RestoresItemAndRepairsItemsArray()
+    {
+        var overlay = DraftOverCollection(("Col/b/Name", "item b"));
+        var v2 = SnapshotV(("Title", "A"), ("Col/$items", Items("a")));
+
+        Rebase(overlay, v2);
+        overlay.ResolveConflict("Col/b", KVConflictResolution.Ours);
+        overlay.FinishRebase();
+
+        EffectiveItems(overlay, "Col/$items").Should().Equal("a", "b");
+        Effective(overlay, "Col/b/Name").Should().Be("item b");
+    }
+
+    [Fact]
+    public void FinishRebase_RejectIncomingRemovalOfItemWithNoFields_RestoresItemInItemsArray()
+    {
+        // The removed item exists only as an id in $items — there is no field data under its path.
+        var overlay = DraftOverCollection();
+        var v2 = SnapshotV(("Title", "A"), ("Col/$items", Items("a")));
+
+        Rebase(overlay, v2);
+        overlay.ResolveConflict("Col/b", KVConflictResolution.Ours);
+        overlay.FinishRebase();
+
+        EffectiveItems(overlay, "Col/$items").Should().Equal("a", "b");
+    }
+
+    [Fact]
+    public void FinishRebase_WhenNeitherSideTouchedCollection_KeepsItsMembershipOutOfTheDraft()
+    {
+        var overlay = DraftOverCollection(("Col/b/Name", "item b"));
+        var v2 = SnapshotV(("Title", "A"), ("Desc", "upstream"), ("Col/$items", Items("a", "b")), ("Col/b/Name", "item b"));
+
+        Rebase(overlay, v2);
+        overlay.Changes.Should().NotContainKey("Col/$items");
+        overlay.FinishRebase();
+
+        EffectiveItems(overlay, "Col/$items").Should().Equal("a", "b");
+        overlay.Changes.Keys.Should().Equal("Title");
+    }
+
+    [Fact]
+    public void FinishRebase_WhenOnlyTargetAddedItem_KeepsExistingItems()
+    {
+        var overlay = DraftOverCollection(("Col/b/Name", "item b"));
+        var v2 = SnapshotV(("Title", "A"), ("Col/$items", Items("a", "b", "c")), ("Col/b/Name", "item b"), ("Col/c/Name", "item c"));
+
+        Rebase(overlay, v2);
+        overlay.Conflicts.Should().ContainSingle().Which.Path.Should().Be("Col/c");
+        overlay.FinishRebase();
+
+        EffectiveItems(overlay, "Col/$items").Should().Equal("a", "b", "c");
+    }
+
+    // ── $items arrays as they come back from JSON (object[] / JsonElement) ──
+
+    [Fact]
+    public void BeginRebase_WhenItemsArraysAreUntypedJson_MergesMembership()
+    {
+        using var baseItems = System.Text.Json.JsonDocument.Parse("""["a"]""");
+        var v1 = SnapshotV(("Col/$items", KVValue.FromObject(baseItems.RootElement.Clone())));
+        var overlay = KVOverlay.Create(v1.Clone(), "editor");
+        overlay.Set("Col/$items", Items("a", "x"));
+        var v2 = SnapshotV(("Col/$items", KVValue.FromObject(new object[] { "a", "y" })), ("Col/y/Name", "item y"));
+
+        Rebase(overlay, v2).Should().Be(KVRebaseOutcome.CanAutomerge);
+        overlay.Conflicts.Should().ContainSingle().Which.Path.Should().Be("Col/y");
+
+        overlay.FinishRebase();
+        EffectiveItems(overlay, "Col/$items").Should().Equal("a", "x", "y");
+    }
+
+    public static TheoryData<string, KVValue?, string[]> ItemIdSources => new()
+    {
+        { "null", null, [] },
+        { "tombstone", KVValue.Tombstone, [] },
+        { "string[]", KVValue.FromObject(new[] { "a", "b" }), ["a", "b"] },
+        { "object[] skips non-strings", KVValue.FromObject(new object[] { "a", 1, "b" }), ["a", "b"] },
+        { "JsonElement array skips empty", KVValue.FromObject(System.Text.Json.JsonDocument.Parse("""["a","","b"]""").RootElement.Clone()), ["a", "b"] },
+        { "JsonElement non-array", KVValue.FromObject(System.Text.Json.JsonDocument.Parse("""{"a":1}""").RootElement.Clone()), [] },
+        { "scalar", KVValue.FromObject("a"), [] },
+    };
+
+    [Theory]
+    [MemberData(nameof(ItemIdSources))]
+    public void ExtractItemIds_ReadsEachStoredShape(string shape, KVValue? value, string[] expected)
+    {
+        KVMerge.ExtractItemIds(value).Should().BeEquivalentTo(expected, because: shape);
+    }
+
+    // ── Persisted in-progress rebase ─────────────────────────────────────────
+
+    [Fact]
+    public void RestoreRebaseState_AfterJsonRoundTrip_ResumesAndFinishesLikeTheOriginal()
+    {
+        var v1 = Snapshot(("Title", "A"), ("Desc", "X"));
+        var overlay = KVOverlay.Create(v1.Clone(), "editor");
+        overlay.Set("Title", "Mine");
+        var v2 = Snapshot(("Title", "Theirs"), ("Desc", "Y"));
+        Rebase(overlay, v2).Should().Be(KVRebaseOutcome.HasUnresolvedConflicts);
+        overlay.ResolveConflict("Desc", KVConflictResolution.Ours); // reject the incoming Desc change
+
+        // Persist the same parts a draft document stores, then rebuild a fresh overlay from them.
+        var json = System.Text.Json.JsonSerializer.Serialize(new PersistedRebase(overlay.Snapshot, overlay.Changes, overlay.RebaseTarget!, overlay.Conflicts));
+        var persisted = System.Text.Json.JsonSerializer.Deserialize<PersistedRebase>(json)!;
+        var restored = KVOverlay.Create(persisted.Snapshot, "editor");
+        restored.Changes = persisted.Changes;
+        restored.RestoreRebaseState(persisted.RebaseTarget, persisted.Conflicts);
+
+        restored.IsRebasing.Should().BeTrue();
+        restored.HasUnresolvedConflicts.Should().BeTrue();
+        restored.Conflicts.Select(c => (c.Path, c.Kind, c.Resolution)).Should().Equal(
+            ("Desc", KVConflictKind.Incoming, KVConflictResolution.Ours),
+            ("Title", KVConflictKind.Value, KVConflictResolution.Unresolved));
+
+        restored.ResolveConflict("Title", KVConflictResolution.Custom, "Merged");
+        restored.FinishRebase();
+
+        restored.IsRebasing.Should().BeFalse();
+        Effective(restored, "Title").Should().Be("Merged");
+        Effective(restored, "Desc").Should().Be("X");
+        restored.Snapshot.Data.Should().ContainKey("Desc").WhoseValue.Value.Should().Be("Y"); // base swapped to target
+    }
+
+    // ── Rebase state guards ──────────────────────────────────────────────────
+
+    [Fact]
+    public void RebaseCommands_WhenNoRebaseInProgress_Throw()
+    {
+        var overlay = KVOverlay.Create(Snapshot(("Title", "A")), "editor");
+
+        ((Action)(() => overlay.ResolveConflict("Title", KVConflictResolution.Ours)))
+            .Should().Throw<InvalidOperationException>().WithMessage("No rebase is in progress.");
+        ((Action)overlay.FinishRebase)
+            .Should().Throw<InvalidOperationException>().WithMessage("No rebase is in progress.");
+        ((Action)overlay.CancelRebase)
+            .Should().Throw<InvalidOperationException>().WithMessage("No rebase is in progress.");
+    }
+
+    [Fact]
+    public void ResolveConflict_WhenPathHasNoConflict_Throws()
+    {
+        var overlay = KVOverlay.Create(Snapshot(("Title", "A")), "editor");
+        overlay.Set("Title", "Mine");
+        Rebase(overlay, Snapshot(("Title", "Theirs")));
+
+        var act = () => overlay.ResolveConflict("Desc", KVConflictResolution.Ours);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("No conflict at path 'Desc'.");
+    }
+
+    [Fact]
+    public void Resolve_IncomingChange_WithCustom_Throws()
+    {
+        var overlay = KVOverlay.Create(Snapshot(("Title", "A"), ("Desc", "X")), "editor");
+        overlay.Set("Desc", "Y");
+        Rebase(overlay, Snapshot(("Title", "B"), ("Desc", "X")));
+
+        var act = () => overlay.ResolveConflict("Title", KVConflictResolution.Custom, "C");
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*not valid for an incoming change*");
+    }
+
+    [Fact]
+    public void Resolve_BackToUnresolved_Throws()
+    {
+        var overlay = KVOverlay.Create(Snapshot(("Title", "A")), "editor");
+        overlay.Set("Title", "Mine");
+        Rebase(overlay, Snapshot(("Title", "Theirs")));
+
+        var act = () => overlay.ResolveConflict("Title", KVConflictResolution.Unresolved);
+
+        act.Should().Throw<ArgumentException>().WithMessage("Cannot resolve an entry back to Unresolved.*");
+    }
+
+    // Base: PERSON claimant with a field, plus Title. Draft only edits Title, so Claimant is untouched.
+    private static KVOverlay DraftOverPersonClaimant()
+    {
+        var v1 = Snapshot(("Title", "A"), ("Claimant/$type", "PERSON"), ("Claimant/FullName", "John"));
+        var overlay = KVOverlay.Create(v1.Clone(), "editor");
+        overlay.Set("Title", "Mine");
+        return overlay;
+    }
+
+    // Base: collection [a, b] (plus optional item fields) and Title. Draft only edits Title.
+    private static KVOverlay DraftOverCollection(params (string Path, string Value)[] itemFields)
+    {
+        var v1 = SnapshotV(("Title", "A"), ("Col/$items", Items("a", "b")));
+        foreach (var (path, value) in itemFields)
+            v1.Data[path] = value;
+        var overlay = KVOverlay.Create(v1.Clone(), "editor");
+        overlay.Set("Title", "Mine");
+        return overlay;
+    }
+
+    private sealed record PersistedRebase(KVSnapshot Snapshot, KVDictionary Changes, KVSnapshot RebaseTarget, List<KVConflict> Conflicts);
+
     private static KVSnapshot Snapshot(params (string Path, string Value)[] data)
     {
         var snapshot = new KVSnapshot();

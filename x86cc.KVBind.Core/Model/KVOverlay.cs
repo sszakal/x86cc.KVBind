@@ -511,11 +511,17 @@ public sealed class KVOverlay
         var itemsPath = KVPath.Combine(parentPath, "$items");
         var itemId = KVMerge.LastSegment(conflict.Path);
 
-        if (!this.Changes.TryGetValue(itemsPath, out var currentItems) || currentItems == KVValue.Tombstone)
+        // No draft entry means the merge left membership to the target, so start the repair from the target's.
+        if (!this.Changes.TryGetValue(itemsPath, out var currentItems))
+            this.RebaseTarget!.Data.TryGetValue(itemsPath, out currentItems);
+        if (currentItems == KVValue.Tombstone)
             return;
 
         var ids = KVMerge.ExtractItemIds(currentItems).ToList();
-        var wasIncomingAdd = !this.Snapshot.Data.Keys.Any(k => KVPath.IsSameOrDescendant(k, conflict.Path));
+
+        // Decided by base membership rather than by data under the item path: an item can have no fields.
+        this.Snapshot.Data.TryGetValue(itemsPath, out var baseItems);
+        var wasIncomingAdd = !KVMerge.ExtractItemIds(baseItems).Contains(itemId);
 
         if (wasIncomingAdd)
             ids.Remove(itemId);

@@ -133,7 +133,10 @@ public static class KVMerge
             TheirsGet(key, out var theirsItemsValue);
             var baseIds = ExtractItemIds(baseSnapshot.Data.GetValueOrDefault(key));
             var targetIds = ExtractItemIds(theirsItemsValue);
-            var ourIds = ExtractItemIds(changes.GetValueOrDefault(key));
+
+            // A draft that never touched this membership still has the base items, not an empty collection.
+            var oursTouchedItems = changes.TryGetValue(key, out var oursItemsValue);
+            var ourIds = oursTouchedItems ? ExtractItemIds(oursItemsValue) : baseIds;
 
             var addedByOurs = ourIds.Except(baseIds, System.StringComparer.Ordinal).ToHashSet(System.StringComparer.Ordinal);
             var removedByOurs = baseIds.Except(ourIds, System.StringComparer.Ordinal).ToHashSet(System.StringComparer.Ordinal);
@@ -211,7 +214,12 @@ public static class KVMerge
                 if (!mergedIds.Contains(id, System.StringComparer.Ordinal)) mergedIds.Add(id);
 
             consumed.Add(key);
-            mergedItemArrays[key] = BuildItemsValue(mergedIds);
+
+            // A draft that edited $items always gets the merged array (it replaces the draft's own). An
+            // untouched one is only seeded when the merge differs from the target; otherwise the target
+            // shows through after the base swap and the draft stays free of a redundant $items entry.
+            if (oursTouchedItems || !mergedIds.SequenceEqual(targetIds, System.StringComparer.Ordinal))
+                mergedItemArrays[key] = BuildItemsValue(mergedIds);
         }
 
         // ── Pass 2 — tombstone (delete/edit) conflicts ───────────────────────────────
