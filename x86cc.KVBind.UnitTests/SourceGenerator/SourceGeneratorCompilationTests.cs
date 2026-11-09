@@ -70,6 +70,38 @@ public class SourceGeneratorCompilationTests
             """
         },
         {
+            "internal properties",
+            """
+            public partial class Model : KVRootNode
+            {
+                [KVBind("Name")] internal partial string? Name { get; set; }
+                [KVBind("Code")] internal partial string? Code { get; private set; }
+                [KVBind("Detail")] internal partial Detail? Detail { get; private set; }
+            }
+            public abstract partial class Detail : KVNestedNode;
+            """
+        },
+        {
+            "generic model type",
+            """
+            public partial class Model<T> : KVRootNode
+                where T : class
+            {
+                [KVBind("Name")] public partial string? Name { get; set; }
+            }
+            """
+        },
+        {
+            "nested node with init accessor",
+            """
+            public partial class Model : KVRootNode
+            {
+                [KVBind("Detail")] public partial Detail? Detail { get; init; }
+            }
+            public abstract partial class Detail : KVNestedNode;
+            """
+        },
+        {
             "nested node with each setter accessibility",
             """
             public partial class Model : KVRootNode

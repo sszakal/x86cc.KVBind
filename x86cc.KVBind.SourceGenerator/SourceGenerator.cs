@@ -179,7 +179,8 @@ public sealed class SourceGenerator : IIncrementalGenerator
                 HasPartialModifier: hasPartialModifier,
                 HasSetter: setter is not null && !isInitOnly,
                 IsInitOnlySetter: isInitOnly,
-                SetterAccessibility: GetSetterAccessibility(setter),
+                PropertyAccessibility: GetAccessibilityModifier(propertySymbol.DeclaredAccessibility),
+                SetterAccessibility: GetSetterAccessibility(propertySymbol, setter),
                 Location: new EquatableLocation(
                     propertySymbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax().GetLocation()
                     ?? member.GetLocation())));
@@ -188,10 +189,17 @@ public sealed class SourceGenerator : IIncrementalGenerator
         if (properties.Count == 0)
             return null;
 
+        // Outermost first, so emission can open the containing types in order.
+        var containingTypes = new List<string>();
+        for (var containing = typeSymbol.ContainingType; containing is not null; containing = containing.ContainingType)
+            containingTypes.Insert(0, BuildTypeDeclaration(containing));
+
         return new TypeModel(
             TypeName: typeSymbol.Name,
             FullyQualifiedTypeName: typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
             NamespaceName: typeSymbol.ContainingNamespace.IsGlobalNamespace ? null : typeSymbol.ContainingNamespace.ToDisplayString(),
+            TypeDeclaration: BuildTypeDeclaration(typeSymbol),
+            ContainingTypeDeclarations: new EquatableArray<string>(containingTypes.ToImmutableArray()),
             Properties: new EquatableArray<PropertyModel>(properties.ToImmutableArray()));
     }
 
@@ -269,6 +277,7 @@ public sealed class SourceGenerator : IIncrementalGenerator
 
             // KVB008: nested node with a public setter — should use private set to route through INIT/DROP
             if (property.IsNestedNodeProperty && property.HasSetter
+                && property.PropertyAccessibility == "public "
                 && string.IsNullOrEmpty(property.SetterAccessibility))
             {
                 context.ReportDiagnostic(Diagnostic.Create(
@@ -315,34 +324,49 @@ public sealed class SourceGenerator : IIncrementalGenerator
             sb.AppendLine();
         }
 
-        sb.AppendLine($"public partial class {model.TypeName}");
-        sb.AppendLine("{");
+        // Containing types are re-opened so a model declared inside another type lands in the right scope.
+        var indent = string.Empty;
+        foreach (var containing in model.ContainingTypeDeclarations.AsImmutableArray())
+        {
+            sb.AppendLine($"{indent}{containing}");
+            sb.AppendLine($"{indent}{{");
+            indent += "    ";
+        }
 
+        sb.AppendLine($"{indent}{model.TypeDeclaration}");
+        sb.AppendLine($"{indent}{{");
+
+        var member = indent + "    ";
         foreach (var prop in validFields)
         {
             var key = Escape(prop.CanonicalKey!);
-            sb.AppendLine($"    public partial {prop.PropertyTypeName} {prop.PropertyName}");
-            sb.AppendLine("    {");
-            sb.AppendLine($"        get => GetField<{prop.PropertyTypeName}>(\"{key}\");");
-            if (prop.HasSetter)
-                sb.AppendLine($"        set => SetField(\"{key}\", value);");
-            sb.AppendLine("    }");
+            sb.AppendLine($"{member}{prop.PropertyAccessibility}partial {prop.PropertyTypeName} {prop.PropertyName}");
+            sb.AppendLine($"{member}{{");
+            sb.AppendLine($"{member}    get => GetField<{prop.PropertyTypeName}>(\"{key}\");");
+            if (prop.HasSetter || prop.IsInitOnlySetter)
+                sb.AppendLine($"{member}    {prop.SetterAccessibility}{SetterKeyword(prop)} => SetField(\"{key}\", value);");
+            sb.AppendLine($"{member}}}");
             sb.AppendLine();
         }
 
         foreach (var prop in validNestedNodes)
         {
             var key = Escape(prop.CanonicalKey!);
-            sb.AppendLine($"    public partial {prop.PropertyTypeName} {prop.PropertyName}");
-            sb.AppendLine("    {");
-            sb.AppendLine($"        get => GetNestedNode<{prop.NonNullablePropertyTypeName}>(\"{key}\");");
-            if (prop.HasSetter)
-                sb.AppendLine($"        {prop.SetterAccessibility}set => SetNestedNode(\"{key}\", value);");
-            sb.AppendLine("    }");
+            sb.AppendLine($"{member}{prop.PropertyAccessibility}partial {prop.PropertyTypeName} {prop.PropertyName}");
+            sb.AppendLine($"{member}{{");
+            sb.AppendLine($"{member}    get => GetNestedNode<{prop.NonNullablePropertyTypeName}>(\"{key}\");");
+            if (prop.HasSetter || prop.IsInitOnlySetter)
+                sb.AppendLine($"{member}    {prop.SetterAccessibility}{SetterKeyword(prop)} => SetNestedNode(\"{key}\", value);");
+            sb.AppendLine($"{member}}}");
             sb.AppendLine();
         }
 
-        sb.AppendLine("}");
+        sb.AppendLine($"{indent}}}");
+        while (indent.Length > 0)
+        {
+            indent = indent.Substring(4);
+            sb.AppendLine($"{indent}}}");
+        }
 
         // Unique hint name using fully qualified type name to avoid collisions
         // e.g. global::Demo.Claims.InsuranceClaim → Demo_Claims_InsuranceClaim.KVBind.g.cs
@@ -417,9 +441,17 @@ public sealed class SourceGenerator : IIncrementalGenerator
         return false;
     }
 
-    private static string? GetSetterAccessibility(IMethodSymbol? setter) =>
-        setter?.DeclaredAccessibility switch
+    // The accessor modifier is only written when it narrows the property's accessibility; repeating the
+    // property's own accessibility on an accessor is a compile error.
+    private static string GetSetterAccessibility(IPropertySymbol property, IMethodSymbol? setter) =>
+        setter is null || setter.DeclaredAccessibility == property.DeclaredAccessibility
+            ? string.Empty
+            : GetAccessibilityModifier(setter.DeclaredAccessibility);
+
+    private static string GetAccessibilityModifier(Accessibility accessibility) =>
+        accessibility switch
         {
+            Accessibility.Public => "public ",
             Accessibility.Private => "private ",
             Accessibility.Protected => "protected ",
             Accessibility.Internal => "internal ",
@@ -427,6 +459,27 @@ public sealed class SourceGenerator : IIncrementalGenerator
             Accessibility.ProtectedOrInternal => "protected internal ",
             _ => string.Empty
         };
+
+    private static string SetterKeyword(PropertyModel property) => property.IsInitOnlySetter ? "init" : "set";
+
+    // e.g. "internal partial class Model<T>". Constraints and base types may be omitted on a partial part.
+    private static string BuildTypeDeclaration(INamedTypeSymbol type)
+    {
+        var keyword = type.IsRecord
+            ? (type.TypeKind == TypeKind.Struct ? "record struct" : "record")
+            : type.TypeKind switch
+            {
+                TypeKind.Struct => "struct",
+                TypeKind.Interface => "interface",
+                _ => "class"
+            };
+
+        var name = type.TypeParameters.Length == 0
+            ? type.Name
+            : $"{type.Name}<{string.Join(", ", type.TypeParameters.Select(static p => p.Name))}>";
+
+        return $"{GetAccessibilityModifier(type.DeclaredAccessibility)}partial {keyword} {name}";
+    }
 
     // ── Data models (value-equatable for incremental pipeline caching) ─────────
 
@@ -499,6 +552,8 @@ public sealed class SourceGenerator : IIncrementalGenerator
         string TypeName,
         string FullyQualifiedTypeName,
         string? NamespaceName,
+        string TypeDeclaration,
+        EquatableArray<string> ContainingTypeDeclarations,
         EquatableArray<PropertyModel> Properties);
 
     private readonly record struct PropertyModel(
@@ -512,7 +567,8 @@ public sealed class SourceGenerator : IIncrementalGenerator
         bool HasPartialModifier,
         bool HasSetter,
         bool IsInitOnlySetter,
-        string? SetterAccessibility,
+        string PropertyAccessibility,
+        string SetterAccessibility,
         EquatableLocation Location);
 
     private readonly record struct NonKvNodeWarning(

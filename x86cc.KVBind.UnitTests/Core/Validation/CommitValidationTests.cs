@@ -69,12 +69,6 @@ public class CommitValidationTests : KVModelTestBase
               - Path: Items
                 Code: min_count
                 Message: 'Items' collection must contain at least 1 item(s).
-              - Path: Items
-                Code: not_empty
-                Message: 'Items' collection cannot be empty.
-              - Path: Items
-                Code: min_count
-                Message: 'Items' collection must contain at least 1 item(s).
               - Path: General/Code
                 Code: required
                 Message: 'General/Code' is required.
@@ -116,12 +110,6 @@ public class CommitValidationTests : KVModelTestBase
 
         InlineSnapshot.Validate(validation, """
             Errors:
-              - Path: Items
-                Code: not_empty
-                Message: 'Items' collection cannot be empty.
-              - Path: Items
-                Code: min_count
-                Message: 'Items' collection must contain at least 1 item(s).
               - Path: Items
                 Code: not_empty
                 Message: 'Items' collection cannot be empty.

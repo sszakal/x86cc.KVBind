@@ -238,7 +238,7 @@ public class SourceGeneratorSmokeTests
     // ── New tests covering plan items 4, 5, 7, 9 ──────────────────────────────
 
     [Fact]
-    public void Generator_WhenPropertyHasInitAccessor_EmitsGetterButNoSetter()
+    public void Generator_WhenPropertyHasInitAccessor_EmitsInitAccessor()
     {
         var source = """
             using x86cc.KVBind.Core;
@@ -257,6 +257,7 @@ public class SourceGeneratorSmokeTests
             .ToArray();
 
         generatedSources.Should().Contain(t => t.Contains("get => GetField<string?>(\"ContractNumber\")", StringComparison.Ordinal));
+        generatedSources.Should().Contain(t => t.Contains("init => SetField(\"ContractNumber\", value);", StringComparison.Ordinal));
         generatedSources.Should().NotContain(t => t.Contains("set => SetField", StringComparison.Ordinal));
         runResult.Diagnostics.Should().NotContain(d =>
             d.Id == "KVB001" || d.Id == "KVB002" || d.Id == "KVB003" || d.Id == "KVB004");

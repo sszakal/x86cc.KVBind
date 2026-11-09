@@ -28,9 +28,8 @@ public abstract partial class KVNode
         this.EnsureBound();
         ArgumentNullException.ThrowIfNull(fieldKey);
         var fieldDefinition = this.GetFieldDefinition(fieldKey);
-        if (fieldDefinition.AllowedValues is not null && this.Model.TryGetValue(fieldKey, out var storedValue) && storedValue is not null)
+        if (fieldDefinition.AllowedValues is not null && this.Model.TryGetValue(fieldKey, out var storedValue) && storedValue?.Value is { } storedObject)
         {
-            var storedObject = storedValue.Value;
             try
             {
                 return (TValue)fieldDefinition.AllowedValues.DenormalizeFromStorage(storedObject, typeof(TValue))!;
@@ -77,7 +76,9 @@ public abstract partial class KVNode
         var fieldDefinition = this.GetFieldDefinition(fieldKey);
         var oldValue = this.Model.Get<object?>(fieldKey);
         var storageValue = value;
-        if (fieldDefinition.AllowedValues is not null)
+
+        // null clears the field; it is never an allowed-value token, so it bypasses normalization.
+        if (fieldDefinition.AllowedValues is not null && value is not null)
         {
             try
             {

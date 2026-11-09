@@ -170,7 +170,8 @@ public sealed class KVCollectionOptionsBuilder<TParent, TModel>
             rules.AddRange(factory.Build());
         }
 
-        rules.AddRange(this.globalRules.BuildGlobalRules());
+        // Collection-level NotEmpty/MinCount/MaxCount/AggregateSum are copied onto the definition and
+        // evaluated by KVValidationRuntime, so they must not also be compiled into ValidationRules.
         this.ValidationRules = rules;
     }
 

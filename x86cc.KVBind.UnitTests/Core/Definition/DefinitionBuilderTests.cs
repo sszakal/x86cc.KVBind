@@ -136,7 +136,7 @@ public class DefinitionBuilderTests
                   - FieldKey: Amount
                     Comparison: GreaterThanOrEqual
                     ErrorCode: aggregate_greater_than_or_equal
-                ValidationRules: 2
+                ValidationRules: 1
             ValidationRegistrations:
               - ScopePath: Title
                 Rules: 1

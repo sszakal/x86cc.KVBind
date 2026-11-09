@@ -126,6 +126,32 @@ public class AllowedElementValuesTests : KVModelTestBase
     }
 
     [Fact]
+    public void AllowedElementValues_WhenSetToNull_ClearsField()
+    {
+        var root = this.CreateRoot<ElementValuesModel>();
+        root.StatusArray = [SmartEnum.First];
+        root.CommitSetup();
+
+        root.StatusArray = null;
+
+        root.StatusArray.Should().BeNull();
+        root.GetAllChanges().Changes.Should().ContainSingle(change => change.Path == "StatusArray");
+        root.Validate().Errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void AllowedElementValues_WhenPatchedWithNull_ClearsField()
+    {
+        var root = this.CreateRoot<ElementValuesModel>();
+        root.CompensationTypes = [CompensationEmployeeType.Manager];
+        root.CommitSetup();
+
+        root.Patch(KVPatchOperation.Set("/CompensationTypes", null));
+
+        root.CompensationTypes.Should().BeNull();
+    }
+
+    [Fact]
     public void AllowedElementValues_WhenSnapshotRoundTripsThroughJson_ReadsBackElements()
     {
         var model = new KVModelRoot();
