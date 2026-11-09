@@ -38,7 +38,10 @@ builder.NestedNode(x => x.Party, n =>
 Invariants:
 - A collection requires at least one `Item<TItem>(...)`.
 - A nested node requires at least one `Bind<TSubtype>(...)` with a string discriminator token.
-- Collection rows use client-provided GUID identity (`collection.Create(Guid.NewGuid())`).
+- Collection items have immutable string ids that form their canonical path segment (`A-Z a-z 0-9 _ -`): `collection.Create()` generates a GUID, `collection.Create("shipping")` uses a stable id.
+- Predefined items: `c.Seed<TItem>(id?, configure?)` — created when the collection is born, never re-seeded. Restrict client patches with `c.AllowOperations(KVPatchOperations.Move, ...)` (custom operations must be listed too).
+- Reset a subgraph in place with `node.Reset()` / `RESET <path>` (items keep id and position); a field group needs `Resettable()` to be reset by patch.
+- Defaults apply once, when an object is born (`CreateNew`, item creation/`ADD`, `INIT`) — never when binding an existing aggregate.
 
 ## 3. Optional behavior
 

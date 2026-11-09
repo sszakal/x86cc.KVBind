@@ -36,12 +36,21 @@ public class KVCollectionDefinition : KVDefinition
 
     public List<KVCompiledValidationRule> ValidationRules { get; } = new();
 
+    // Predefined items with stable ids, in declaration order.
+    public IReadOnlyList<KVCollectionSeed> Seeds { get; internal set; } = [];
+
+    // Structural patch operations (ADD/REMOVE/MOVE/custom) clients may apply. Null = unrestricted.
+    public IReadOnlySet<string>? AllowedOperations { get; internal set; }
+
     public Func<KVNode, IKVCollectionNode> GetCollection { get; init; } = _ => throw new NotImplementedException();
 
     // Seeds initial items into a fresh, empty collection (ApplyDefaults). Null = default to empty.
     internal Action<IKVCollectionNode>? DefaultSeed { get; set; }
 
     internal Dictionary<string, KVPatchOperationDescriptor> PatchOperations { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public bool IsOperationAllowed(string operation)
+        => this.AllowedOperations is null || this.AllowedOperations.Contains(operation);
 
     public KVCollectionItemDefinition GetItemDefinition(Type modelType)
     {

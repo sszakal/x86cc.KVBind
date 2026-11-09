@@ -50,6 +50,17 @@ internal static class KVPatchTargetResolver
         {
             var childNode = nodeDefinition.GetChildNode(node)
                             ?? throw new InvalidOperationException($"Node segment '{segment}' resolved to null.");
+            if (segments.Length == depth + 1
+                && string.Equals(operation.OperationCode, KVPatchOperations.Reset, StringComparison.OrdinalIgnoreCase))
+            {
+                return new KVNodePatchTarget
+                {
+                    Node = childNode,
+                    Definition = nodeDefinition,
+                    CanonicalPath = BuildPath(currentCanonicalPath, nodeDefinition.SubSegmentPath)
+                };
+            }
+
             return Resolve(childNode, operation, segments, depth + 1, BuildPath(currentCanonicalPath, nodeDefinition.SubSegmentPath));
         }
 

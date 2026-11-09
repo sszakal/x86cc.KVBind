@@ -216,6 +216,38 @@ public sealed class KVOverlay
             this.Changes.Remove(path);
     }
 
+    // Un-delete a tombstoned path as an empty subtree: the direct tombstone is lifted and every snapshot
+    // key beneath it is tombstoned individually, so re-creating the path never resurrects old values.
+    public void ReviveRemovedPath(string path)
+    {
+        if (!this.Changes.TryGetValue(path, out var v) || v != KVValue.Tombstone) return;
+
+        this.Changes.Remove(path);
+        foreach (var key in this.Snapshot.Data.Keys)
+        {
+            if (KVPath.IsSameOrDescendant(key, path))
+                this.Changes[key] = KVValue.Tombstone;
+        }
+    }
+
+    // Wipes a subtree back to "nothing stored", keeping `keepKey` (e.g. a $type discriminator): draft
+    // entries under the path are dropped and every snapshot key under it is tombstoned individually. The
+    // path itself stays live, so a fresh object can be written into it in place.
+    public void ResetSubtree(string path, string? keepKey = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        this.GuardWritable(path);
+
+        foreach (var key in this.Changes.Keys.Where(k => KVPath.IsSameOrDescendant(k, path) && !string.Equals(k, keepKey, StringComparison.Ordinal)).ToList())
+            this.Changes.Remove(key);
+
+        foreach (var key in this.Snapshot.Data.Keys)
+        {
+            if (KVPath.IsSameOrDescendant(key, path) && !string.Equals(key, keepKey, StringComparison.Ordinal))
+                this.Changes[key] = KVValue.Tombstone;
+        }
+    }
+
     public void Set(string path, KVValue value)
     {
         this.GuardWritable(path);

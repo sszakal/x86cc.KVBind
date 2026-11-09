@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.Json;
@@ -8,13 +9,15 @@ using x86cc.KVBind.Core.Model;
 
 namespace x86cc.KVBind.Core;
 
+[Flags]
 internal enum KVPatchTargetKind
 {
-    Path,
-    Field,
-    Collection,
-    CollectionItem,
-    NestedNode
+    Path = 1,
+    Field = 2,
+    Collection = 4,
+    CollectionItem = 8,
+    NestedNode = 16,
+    Node = 32
 }
 
 internal static class KVPatchRuntime
@@ -77,6 +80,14 @@ internal sealed class KVCollectionItemPatchTarget : KVPatchTarget
     public required string ItemId { get; init; }
 }
 
+// A field group (KVFieldGroupNode) addressed as a whole — currently only by RESET.
+internal sealed class KVNodePatchTarget : KVPatchTarget
+{
+    public required KVNode Node { get; init; }
+
+    public required KVNodeDefinition Definition { get; init; }
+}
+
 internal sealed class KVNestedNodePatchTarget : KVPatchTarget
 {
     public required KVNode Owner { get; init; }
@@ -103,7 +114,11 @@ internal sealed class KVPatchOperationRegistry
             [KVPatchOperations.Move] = KVPatchOperationDescriptor.BuiltIn(KVPatchOperations.Move, KVPatchTargetKind.CollectionItem, ApplyMove),
             [KVPatchOperations.Init] = KVPatchOperationDescriptor.BuiltIn(KVPatchOperations.Init, KVPatchTargetKind.NestedNode, ApplyInit),
             [KVPatchOperations.Drop] = KVPatchOperationDescriptor.BuiltIn(KVPatchOperations.Drop, KVPatchTargetKind.NestedNode, ApplyDrop),
-            [KVPatchOperations.Discard] = KVPatchOperationDescriptor.BuiltIn(KVPatchOperations.Discard, KVPatchTargetKind.Path, ApplyDiscard)
+            [KVPatchOperations.Discard] = KVPatchOperationDescriptor.BuiltIn(KVPatchOperations.Discard, KVPatchTargetKind.Path, ApplyDiscard),
+            [KVPatchOperations.Reset] = KVPatchOperationDescriptor.BuiltIn(
+                KVPatchOperations.Reset,
+                KVPatchTargetKind.CollectionItem | KVPatchTargetKind.NestedNode | KVPatchTargetKind.Node,
+                ApplyReset)
         };
 
     public static KVPatchOperationRegistry CreateDefault() => new();
@@ -121,12 +136,111 @@ internal sealed class KVPatchOperationRegistry
     {
         var descriptor = Resolve(target, operation);
         var targetKind = GetTargetKind(target);
-        if (descriptor.TargetKind != targetKind)
+        if ((descriptor.TargetKind & targetKind) == 0)
         {
             throw Unsupported(target, operation);
         }
 
+        EnsureCollectionOperationAllowed(target, operation, context);
         descriptor.Invoke(target, operation, context);
+    }
+
+    private static void EnsureCollectionOperationAllowed(KVPatchTarget target, KVPatchOperation operation, KVPatchExecutionContext context)
+    {
+        var collectionDefinition = target switch
+        {
+            KVCollectionPatchTarget collectionTarget => collectionTarget.Definition,
+            KVCollectionItemPatchTarget itemTarget => itemTarget.Definition,
+            _ => null
+        };
+
+        if (collectionDefinition is not null)
+        {
+            if (!collectionDefinition.IsOperationAllowed(operation.OperationCode))
+                throw Disallowed(operation.OperationCode, collectionDefinition, operation);
+            return;
+        }
+
+        if (target is KVPathPatchTarget)
+            EnsureDiscardKeepsRestrictedMembership(context.Root, target.CanonicalPath, operation);
+    }
+
+    // DISCARD reverts a restricted collection's $items to the snapshot, which can add, remove or reorder
+    // items. Require the structural operation that the revert would amount to.
+    private static void EnsureDiscardKeepsRestrictedMembership(KVNode root, string discardPath, KVPatchOperation operation)
+    {
+        foreach (var collection in EnumerateCollections(root, discardPath))
+        {
+            var definition = collection.Definition;
+            if (definition.AllowedOperations is null) continue;
+
+            var itemsPath = KVPath.Combine(collection.Model.DataPath, "$items");
+            if (discardPath.Length > 0 && !KVPath.IsSameOrDescendant(itemsPath, discardPath)) continue;
+
+            var current = collection.GetActiveItemIds();
+            var snapshot = collection.Model.Overlay.TryGetSnapshotValue(itemsPath, out var snapshotValue)
+                ? KVMerge.ExtractItemIds(snapshotValue)
+                : [];
+
+            var currentSet = new HashSet<string>(current, StringComparer.Ordinal);
+            var snapshotSet = new HashSet<string>(snapshot, StringComparer.Ordinal);
+
+            if (!snapshotSet.IsSubsetOf(currentSet) && !definition.IsOperationAllowed(KVPatchOperations.Add))
+                throw Disallowed(KVPatchOperations.Add, definition, operation);
+            if (!currentSet.IsSubsetOf(snapshotSet) && !definition.IsOperationAllowed(KVPatchOperations.Remove))
+                throw Disallowed(KVPatchOperations.Remove, definition, operation);
+
+            var currentOrder = current.Where(snapshotSet.Contains);
+            var snapshotOrder = snapshot.Where(currentSet.Contains);
+            if (!currentOrder.SequenceEqual(snapshotOrder, StringComparer.Ordinal) && !definition.IsOperationAllowed(KVPatchOperations.Move))
+                throw Disallowed(KVPatchOperations.Move, definition, operation);
+        }
+    }
+
+    // Bound collections whose subtree a discard of `discardPath` may touch. Items that exist only in the
+    // draft and lie wholly under the discard path vanish with it, so their nested collections are skipped.
+    private static IEnumerable<KVCollectionNodeBase> EnumerateCollections(KVNode node, string discardPath)
+    {
+        foreach (var nodeDefinition in node.Definition.Nodes)
+        {
+            foreach (var collection in EnumerateCollections(nodeDefinition.GetChildNode(node), discardPath))
+                yield return collection;
+        }
+
+        foreach (var collectionDefinition in node.Definition.Collections)
+        {
+            if (collectionDefinition.GetCollection(node) is not KVCollectionNodeBase collection) continue;
+            yield return collection;
+
+            var itemsPath = KVPath.Combine(collection.Model.DataPath, "$items");
+            var snapshotIds = collection.Model.Overlay.TryGetSnapshotValue(itemsPath, out var snapshotValue)
+                ? new HashSet<string>(KVMerge.ExtractItemIds(snapshotValue), StringComparer.Ordinal)
+                : [];
+
+            foreach (var itemId in collection.GetActiveItemIds())
+            {
+                var itemPath = KVPath.Combine(collection.Model.DataPath, itemId);
+                if (!snapshotIds.Contains(itemId) && (discardPath.Length == 0 || KVPath.IsSameOrDescendant(itemPath, discardPath))) continue;
+                if (((IKVCollectionNode)collection).GetById(itemId) is not { } item) continue;
+
+                foreach (var nested in EnumerateCollections(item, discardPath))
+                    yield return nested;
+            }
+        }
+
+        foreach (var nestedDefinition in node.Definition.NestedNodes)
+        {
+            var nestedModel = node.GetNestedNodeModel(nestedDefinition.SubSegmentPath);
+            if (node.GetActiveNestedNode(nestedDefinition, nestedModel) is not { } nestedNode) continue;
+
+            foreach (var collection in EnumerateCollections(nestedNode, discardPath))
+                yield return collection;
+        }
+    }
+
+    private static InvalidOperationException Disallowed(string disallowed, KVCollectionDefinition definition, KVPatchOperation operation)
+    {
+        return new InvalidOperationException($"Patch operation '{operation.OperationCode}' for '{operation.Path}' is not allowed: collection '{definition.SubSegmentPath}' does not allow '{disallowed}'.");
     }
 
     private static KVPatchOperationDescriptor Resolve(KVPatchTarget target, KVPatchOperation operation)
@@ -154,6 +268,7 @@ internal sealed class KVPatchOperationRegistry
             KVCollectionPatchTarget => KVPatchTargetKind.Collection,
             KVCollectionItemPatchTarget => KVPatchTargetKind.CollectionItem,
             KVNestedNodePatchTarget => KVPatchTargetKind.NestedNode,
+            KVNodePatchTarget => KVPatchTargetKind.Node,
             _ => throw new InvalidOperationException($"Unknown patch target type '{target.GetType().FullName}'.")
         };
     }
@@ -242,6 +357,9 @@ internal sealed class KVPatchOperationRegistry
         KVNestedNode.SetItemType(nestedTarget.SlotModel, typeToken);
         nestedTarget.Owner.DetachNestedNodeForPatch(nestedTarget.Definition.SubSegmentPath);
         nestedTarget.Owner.RebindCurrentContextForPatch();
+
+        // The slot was cleared above, so this is a newly born node: apply its declared defaults.
+        nestedTarget.Owner.GetActiveNestedNode(nestedTarget.Definition, nestedTarget.SlotModel)?.ApplyDefaultsRecursive();
     }
 
     private static void ApplyDrop(KVPatchTarget target, KVPatchOperation operation, KVPatchExecutionContext context)
@@ -251,6 +369,29 @@ internal sealed class KVPatchOperationRegistry
         KVNestedNode.ClearItemType(nestedTarget.SlotModel);
         nestedTarget.Owner.DetachNestedNodeForPatch(nestedTarget.Definition.SubSegmentPath);
         nestedTarget.Owner.RebindCurrentContextForPatch();
+    }
+
+    private static void ApplyReset(KVPatchTarget target, KVPatchOperation operation, KVPatchExecutionContext context)
+    {
+        switch (target)
+        {
+            case KVCollectionItemPatchTarget itemTarget:
+                itemTarget.Item.Reset();
+                break;
+            case KVNestedNodePatchTarget nestedTarget:
+                var nested = nestedTarget.Owner.GetActiveNestedNode(nestedTarget.Definition, nestedTarget.SlotModel)
+                             ?? throw new InvalidOperationException($"Nested node '{nestedTarget.CanonicalPath}' is not initialized and cannot be reset.");
+                nested.Reset();
+                break;
+            case KVNodePatchTarget nodeTarget:
+                if (nodeTarget.Definition.IsResettable != true)
+                {
+                    throw new InvalidOperationException($"Field group '{nodeTarget.CanonicalPath}' is not resettable; declare it with Resettable().");
+                }
+
+                nodeTarget.Node.Reset();
+                break;
+        }
     }
 
     private static void ApplyDiscard(KVPatchTarget target, KVPatchOperation operation, KVPatchExecutionContext context)

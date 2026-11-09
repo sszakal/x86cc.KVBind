@@ -407,6 +407,50 @@ public class RebaseTests
         Effective(overlay, "Col/y/Name").Should().Be("item y");
     }
 
+    // ── Collection membership: stable (seeded) ids added on both sides ───────
+
+    [Fact]
+    public void BeginRebase_WhenBothSeededSameStableIds_MergesWithoutDuplicatesOrBlockingConflicts()
+    {
+        // Two drafts from the same empty base both ran ApplyDefaults with seeds Snake/Lizard; upstream
+        // committed first. Same ids, same values: nothing should need resolution and $items must not duplicate.
+        var v1 = new KVSnapshot();
+        var overlay = KVOverlay.Create(v1.Clone(), "editor");
+        overlay.Set("Animals/$items", Items("Snake", "Lizard"));
+        overlay.Set("Animals/Snake/$type", "Snake");
+        overlay.Set("Animals/Lizard/$type", "Lizard");
+        var v2 = SnapshotV(
+            ("Animals/$items", Items("Snake", "Lizard")),
+            ("Animals/Snake/$type", "Snake"),
+            ("Animals/Lizard/$type", "Lizard"));
+
+        Rebase(overlay, v2).Should().Be(KVRebaseOutcome.CanAutomerge);
+        overlay.HasUnresolvedConflicts.Should().BeFalse();
+
+        overlay.FinishRebase();
+        EffectiveItems(overlay, "Animals/$items").Should().Equal("Snake", "Lizard");
+        Effective(overlay, "Animals/Snake/$type").Should().Be("Snake");
+    }
+
+    [Fact]
+    public void BeginRebase_WhenBothSeededSameIdWithDifferentFieldValues_ProducesFieldConflict()
+    {
+        var v1 = new KVSnapshot();
+        var overlay = KVOverlay.Create(v1.Clone(), "editor");
+        overlay.Set("Animals/$items", Items("Snake"));
+        overlay.Set("Animals/Snake/$type", "Snake");
+        overlay.Set("Animals/Snake/Name", "Monty");
+        var v2 = SnapshotV(
+            ("Animals/$items", Items("Snake")),
+            ("Animals/Snake/$type", "Snake"),
+            ("Animals/Snake/Name", "Kaa"));
+
+        Rebase(overlay, v2);
+
+        overlay.HasUnresolvedConflicts.Should().BeTrue();
+        overlay.Conflicts.Should().Contain(c => c.Path == "Animals/Snake/Name" && c.RequiresResolution);
+    }
+
     [Fact]
     public void FinishRebase_RejectIncomingItemAdd_RemovesItAndRepairsItemsArray()
     {

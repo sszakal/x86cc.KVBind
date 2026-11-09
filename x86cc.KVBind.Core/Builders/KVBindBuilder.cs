@@ -187,6 +187,11 @@ public sealed class KVBindBuilder<TEntity>
 
         collectionDefinition.AddAnnotations(options.Annotations);
         collectionDefinition.DefaultSeed = options.DefaultSeedAction;
+        collectionDefinition.Seeds = options.BuildSeeds(propertyName);
+        options.ValidateAllowedOperations(propertyName);
+        collectionDefinition.AllowedOperations = options.AllowedOperationsValue is null
+            ? null
+            : new HashSet<string>(options.AllowedOperationsValue, StringComparer.OrdinalIgnoreCase);
         this.definition.Collections.Add(collectionDefinition);
     }
 

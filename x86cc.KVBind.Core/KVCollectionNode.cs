@@ -23,7 +23,9 @@ public abstract class KVCollectionNodeBase : KVNodeBase, IKVCollectionNode
     // IKVCollectionNode.GetById is explicitly implemented; subclasses provide GetByIdCore.
     KVNode? IKVCollectionNode.GetById(string itemId) => this.GetByIdCore(itemId);
 
-    public abstract KVNode Create(Guid itemId, string? typeToken = null);
+    public abstract KVNode Create(string itemId, string? typeToken = null);
+
+    public KVNode Create(Guid itemId, string? typeToken = null) => this.Create(KVCollectionItemIds.FromGuid(itemId), typeToken);
 
     public abstract bool RemoveById(string itemId);
 
@@ -75,7 +77,9 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
 
     public TItem Create() => this.Create(Guid.NewGuid());
 
-    public TItem Create(Guid itemId) => (TItem)this.CreateCore(this.Definition.GetItemDefinition(typeof(TItem)), NormalizeItemId(itemId));
+    public TItem Create(Guid itemId) => this.Create(KVCollectionItemIds.FromGuid(itemId));
+
+    public TItem Create(string itemId) => (TItem)this.CreateCore(this.Definition.GetItemDefinition(typeof(TItem)), itemId);
 
     public TSubtype Create<TSubtype>()
         where TSubtype : TItem, new()
@@ -83,12 +87,30 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
 
     public TSubtype Create<TSubtype>(Guid itemId)
         where TSubtype : TItem, new()
-        => (TSubtype)this.CreateCore(this.Definition.GetItemDefinition(typeof(TSubtype)), NormalizeItemId(itemId));
+        => this.Create<TSubtype>(KVCollectionItemIds.FromGuid(itemId));
 
-    public override KVNode Create(Guid itemId, string? typeToken = null)
+    public TSubtype Create<TSubtype>(string itemId)
+        where TSubtype : TItem, new()
+        => (TSubtype)this.CreateCore(this.Definition.GetItemDefinition(typeof(TSubtype)), itemId);
+
+    public override KVNode Create(string itemId, string? typeToken = null)
     {
         var itemDefinition = string.IsNullOrWhiteSpace(typeToken) ? this.Definition.GetItemDefinition(typeof(TItem)) : this.Definition.GetItemDefinition(typeToken);
-        return this.CreateCore(itemDefinition, NormalizeItemId(itemId));
+        return this.CreateCore(itemDefinition, itemId);
+    }
+
+    // Typed lookup for polymorphic collections: null when the id is absent, throws when the stored item is
+    // a different subtype.
+    public TSubtype? Get<TSubtype>(string itemId)
+        where TSubtype : TItem
+    {
+        var item = this.GetById(itemId);
+        return item switch
+        {
+            null => null,
+            TSubtype typed => typed,
+            _ => throw new InvalidOperationException($"Collection item '{itemId}' is '{item.GetType().FullName}', not '{typeof(TSubtype).FullName}'.")
+        };
     }
 
     public TItem? GetById(string itemId)
@@ -204,24 +226,9 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
         return [];
     }
 
-    private static bool IsValidItemId(string? itemId)
-    {
-        return !string.IsNullOrWhiteSpace(itemId) && !itemId.Contains('/');
-    }
-
-    private static string NormalizeItemId(Guid itemId)
-    {
-        if (itemId == Guid.Empty)
-            throw new ArgumentException("Collection item id cannot be empty.", nameof(itemId));
-        return itemId.ToString("D");
-    }
-
     private KVNode CreateCore(KVCollectionItemDefinition itemDefinition, string itemId)
     {
-        if (!IsValidItemId(itemId))
-        {
-            throw new InvalidOperationException("Collection item id cannot be empty or contain '/'.");
-        }
+        KVCollectionItemIds.EnsureValid(itemId);
 
         if (this.items.ContainsKey(itemId))
         {
@@ -230,9 +237,10 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
 
         var item = (TItem)Activator.CreateInstance(itemDefinition.ModelType)!;
 
-        // Restore the path in case it was previously tombstoned (re-adding a deleted item).
+        // Re-adding a previously removed id must yield a fresh item: lift the tombstone without letting the
+        // old snapshot data underneath it resurface.
         var itemDataPath = KVPath.Combine(this.Model.DataPath, itemId);
-        this.Model.Overlay.RestorePath(itemDataPath);
+        this.Model.Overlay.ReviveRemovedPath(itemDataPath);
 
         var childModel = this.Model.CreateChildModel(itemId);
         KVCollectionItemNode.SetItemType(childModel, itemDefinition.TypeToken);
@@ -242,6 +250,10 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
         this.items[itemId] = item;
         this.orderedItemIds.Add(itemId);
         this.WriteItemsKey();
+
+        // A new item is born here (code, ADD patch, seeding): materialize its declared defaults — field
+        // defaults, default nested types, seeded sub-collections — before anyone observes it.
+        item.ApplyDefaultsRecursive();
         this.EmitCollectionChange(itemId, oldValue: null, newValue: item);
         return item;
     }

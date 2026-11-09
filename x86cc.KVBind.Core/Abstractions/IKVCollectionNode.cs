@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using x86cc.KVBind.Core.Model;
 
@@ -12,7 +11,7 @@ public interface IKVCollectionNode
 
     KVNode? GetById(string itemId);
 
-    KVNode Create(Guid itemId, string? typeToken = null);
+    KVNode Create(string itemId, string? typeToken = null);
 
     bool RemoveById(string itemId);
 

@@ -4,6 +4,8 @@ public abstract class KVCollectionItemNode : KVNode
 {
     internal const string TypeKey = "$type";
 
+    internal override string? ResetKeepKey => x86cc.KVBind.Core.Model.KVPath.Combine(this.Model.DataPath, TypeKey);
+
     // Item ID is the last path segment of the model's DataPath — no need to store it separately.
     public string? ItemId()
     {

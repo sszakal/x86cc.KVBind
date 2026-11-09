@@ -7,7 +7,8 @@ public abstract partial class KVNode
     // Materializes declared defaults into the overlay for any element still unset, recursing as it goes so
     // interdependent defaults resolve (a default nested type pulls in its own field defaults; a seeded
     // collection item pulls in its field defaults). Fill-blanks-only: never overwrites a set value, so it is
-    // safe — though only intended — for a freshly created aggregate. Driven from KVRootNode.ApplyDefaults().
+    // safe — though only intended — for a newly born subgraph. Driven from KVRootNode.ApplyDefaults() (via
+    // CreateNew) and whenever a collection item is created or a nested node is initialized (Create/ADD/INIT).
     internal void ApplyDefaultsRecursive()
     {
         this.EnsureBound();
@@ -34,8 +35,19 @@ public abstract partial class KVNode
         {
             if (hasInheritance && collDef.IsInherited) continue;
             var collection = collDef.GetCollection(this);
-            if (collDef.DefaultSeed is not null && collection.GetActiveItemIds().Count == 0)
-                collDef.DefaultSeed(collection);
+
+            // Seeding belongs to the collection's birth, i.e. while it is still empty: a collection that
+            // already holds items (an existing aggregate, or one whose seeded items were later removed and
+            // committed) is never re-seeded. Each seeded item gets its own defaults when it is created.
+            if (collection.GetActiveItemIds().Count == 0)
+            {
+                collDef.DefaultSeed?.Invoke(collection);
+                foreach (var seed in collDef.Seeds)
+                {
+                    var item = (KVCollectionItemNode)collection.Create(seed.ItemId, seed.ItemDefinition.TypeToken);
+                    seed.Configure?.Invoke(item);
+                }
+            }
 
             foreach (var itemId in collection.GetActiveItemIds().ToArray())
             {

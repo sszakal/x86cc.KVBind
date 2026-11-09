@@ -109,6 +109,17 @@ public class DefaultsTests : KVModelTestBase
         root.Owner.Should().BeOfType<CompanyOwner>();
     }
 
+    [Fact]
+    public void InitPatch_AppliesTheNewNestedNodesDeclaredDefaults()
+    {
+        var root = this.CreateRoot<DefaultsRoot>();
+        root.Patch(KVPatchOperation.Init("/Owner", "CompanyOwner"));
+
+        root.Patch(KVPatchOperation.Init("/Owner", "PersonOwner"));
+
+        root.Owner.Should().BeOfType<PersonOwner>().Which.Name.Should().Be("anonymous");
+    }
+
     private DefaultsRoot CreateWithDefaults()
     {
         var root = this.CreateRoot<DefaultsRoot>();

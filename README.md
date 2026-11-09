@@ -225,6 +225,12 @@ builder.FieldGroup(x => x.General, group =>
 });
 ```
 
+Mark a group with `Resettable()` to let clients reset it to its defaults with a `RESET` patch (see Resetting a subgraph):
+
+```csharp
+builder.FieldGroup(x => x.Settings, group => group.Field(x => x.Theme, f => f.Default("dark")), options => options.Resettable());
+```
+
 ### Collections
 
 ```csharp
@@ -238,11 +244,73 @@ builder.Collection(x => x.LineItems, collection =>
 });
 ```
 
-Collection rows use immutable GUID row identity. 
+Every collection item has an immutable string id, which is also its canonical path segment (`LineItems/<id>`). Ids may contain `A-Z`, `a-z`, `0-9`, `_` and `-`, and are case-sensitive. `Create()` without an id generates a GUID; pass your own id when the item should have a stable, meaningful path.
 
 ```csharp
-var item = agreement.LineItems.Create(Guid.NewGuid());
+var generated = agreement.LineItems.Create();                // LineItems/3f2b…-…
+var fromGuid  = agreement.LineItems.Create(Guid.NewGuid());
+var named     = agreement.LineItems.Create("shipping");      // LineItems/shipping
 ```
+
+In a polymorphic collection the id and the item type are independent: the id is the path segment, the stored `$type` token selects the subtype. `Get<TSubtype>(id)` returns the item typed (or `null` if absent, and throws if the stored item is a different subtype):
+
+```csharp
+var snake = zoo.Animals.Create<Snake>("Snake");              // Animals/Snake, $type = "Snake"
+var python = zoo.Animals.Create<Snake>("Python");            // same type, different id
+var lizard = zoo.Animals.Get<Lizard>("Lizard");
+```
+
+#### Predefined items (seeds)
+
+`Seed<TItem>(...)` declares items every new aggregate starts with, under stable ids, so they are addressable by the same path in every document (for example `/Animals/Snake`). The id defaults to the item's type token:
+
+```csharp
+builder.Collection(x => x.Animals, animals => animals
+    .Item<Snake>(item => item.Field(x => x.Name, f => f.Default("unnamed")))
+    .Item<Lizard>(item => item.Field(x => x.Legs, f => f.Default(4)))
+    .Seed<Snake>()                                  // Animals/Snake
+    .Seed<Lizard>("Gecko", l => l.Legs = 3)         // Animals/Gecko, overrides the default
+    .Seed<Snake>("Python"));                        // Animals/Python
+```
+
+Seeds are created when the collection is born — with a new aggregate, or with the new item that owns the collection — and never afterwards: reopening an aggregate does not re-seed it, and a seeded item that was removed stays removed. Each seeded item first gets its declared defaults, then the optional `configure` callback runs. Existing aggregates do not pick up seeds added to the schema later. Seed ids must be unique and valid, the seeded type must be declared with `Item<TItem>(...)`, and `Seed` cannot be combined with `Default(...)`. Declared seeds are available on `KVCollectionDefinition.Seeds`.
+
+#### Restricting structural patch operations
+
+`AllowOperations(...)` is an allowlist of the structural patch operations clients may apply to a collection — `ADD`, `REMOVE`, `MOVE`, `RESET` of an item, and custom operations registered on it (which must be listed too). Without it, everything is allowed; `AllowOperations()` with no arguments locks both membership and order:
+
+```csharp
+builder.Collection(x => x.Animals, animals => animals
+    .Item<Snake>(...)
+    .Seed<Snake>()
+    .AllowOperations(KVPatchOperations.Move));      // fixed set of items, reorderable
+```
+
+Field patches inside the items (`SET /Animals/Snake/Name`) are unaffected. A `DISCARD` that would add, remove or reorder items of a restricted collection is rejected the same way. The restriction applies to patches only; the in-code collection API (`Create`, `RemoveById`, `MoveById`) used by application code and migrations stays available. `KVCollectionDefinition.AllowedOperations` (`null` = unrestricted) and `IsOperationAllowed(...)` let a UI hide actions that would be rejected.
+
+### Defaults
+
+Fields declare defaults with `f.Default(value)`, nested nodes with `DefaultType<TSubtype>()`, and collections with `Seed<TItem>(...)` or `Default(...)`. Defaults are applied once, when an object is born, and only fill values that are still unset:
+
+- `KVRootNode.CreateNew(...)` applies defaults across the whole new aggregate.
+- Creating a collection item — in code or with an `ADD` patch — applies that item's defaults, including its default nested types and seeded sub-collections.
+- An `INIT` patch applies the defaults of the newly initialized nested node.
+
+Binding an existing aggregate with `KVRootNode.Create(...)`, editing it, merging or rebasing never applies defaults, so previous changes are never overwritten.
+
+### Resetting a subgraph
+
+`node.Reset()` (or a `RESET` patch on the node's path) replaces a node's data with a freshly born object of the same type, in place: everything stored under the node is wiped, its `$type` is kept, and its defaults are applied again, including default nested types and seeded sub-collections (extra items in those sub-collections are dropped).
+
+```csharp
+zoo.Patch(KVPatchOperation.Reset("/Animals/Lizard"));   // same id, same position, fresh data
+zoo.Patch(KVPatchOperation.Reset("/Owner"));            // same nested type, fresh data
+zoo.Patch(KVPatchOperation.Reset("/Settings"));         // field group declared Resettable()
+```
+
+A reset collection item keeps its id and its position, and the change set reports field-level edits of the same item rather than a removal and an addition. In contrast, removing an item and adding one with the same id also yields fresh data but appends the item at the end.
+
+Patch rules: a collection item can be reset unless its collection restricts operations with `AllowOperations(...)` without `RESET`; a nested node can be reset when it is initialized; a field group only when declared `Resettable()`; fields and the root cannot be reset (use `Clear()` to drop the root's draft changes). In code, `Reset()` is available on any non-root node.
 
 ### Nested Nodes
 
@@ -364,12 +432,13 @@ Built-in operations:
 
 - `SET` updates a field value.
 - `UNSET` removes a field value from the draft.
-- `ADD` creates a collection item with a client-provided GUID.
+- `ADD` creates a collection item with a client-provided id (any valid item id, or a GUID) and applies its defaults.
 - `REMOVE` removes a collection item.
 - `MOVE` reorders a collection item.
 - `INIT` selects a nested node subtype.
 - `DROP` clears a nested node slot.
 - `DISCARD` discards draft changes at a path.
+- `RESET` replaces a collection item, nested node or resettable field group with fresh data and its defaults, in place.
 
 Custom collection operations can be registered on collection definitions:
 
@@ -381,7 +450,7 @@ builder.Collection(x => x.LineItems, collection =>
 });
 ```
 
-Built-in operation names are reserved and cannot be overridden.
+Built-in operation names are reserved and cannot be overridden. A collection can restrict which structural operations clients may apply with `AllowOperations(...)` (see Collections).
 
 ## Schema Migrations
 
@@ -404,7 +473,7 @@ builder.Migration(3, m => m
 `KVTarget` is a structural selector, not a regex. It resolves against the data, expanding collection rows as wildcards and filtering polymorphic instances by their stored `$type` discriminator — something a single-key pattern cannot express:
 
 ```csharp
-// Every collection row (matched by GUID id):
+// Every collection row (any item id):
 KVTarget.Root.Seg("LineItems").AnyItem().Seg("Description")
 
 // Only rows whose $type is a given token:

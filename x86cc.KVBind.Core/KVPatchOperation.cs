@@ -12,7 +12,8 @@ public enum KVPatchOperationType
     Remove,
     Move,
     Init,
-    Drop
+    Drop,
+    Reset
 }
 
 public static class KVPatchOperations
@@ -25,6 +26,7 @@ public static class KVPatchOperations
     public const string Move = "MOVE";
     public const string Init = "INIT";
     public const string Drop = "DROP";
+    public const string Reset = "RESET";
 
     private static readonly HashSet<string> BuiltInOperations = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -35,7 +37,8 @@ public static class KVPatchOperations
         Remove,
         Move,
         Init,
-        Drop
+        Drop,
+        Reset
     };
 
     public static bool IsBuiltIn(string operation)
@@ -56,6 +59,7 @@ public static class KVPatchOperations
             KVPatchOperationType.Move => Move,
             KVPatchOperationType.Init => Init,
             KVPatchOperationType.Drop => Drop,
+            KVPatchOperationType.Reset => Reset,
             _ => throw new InvalidOperationException($"Unknown patch operation '{operation}'.")
         };
     }
@@ -111,6 +115,8 @@ public sealed class KVPatchOperation
 
     public static KVPatchOperation Drop(string path) => new(KVPatchOperationType.Drop, path);
 
+    public static KVPatchOperation Reset(string path) => new(KVPatchOperationType.Reset, path);
+
     public static KVPatchOperation Custom(string operation, string path, object? value = null) => new(operation, path, value);
 
     private static void ValidateValue(string operation, object? value)
@@ -121,6 +127,7 @@ public sealed class KVPatchOperation
             case KVPatchOperations.Discard:
             case KVPatchOperations.Remove:
             case KVPatchOperations.Drop:
+            case KVPatchOperations.Reset:
                 if (value is not null)
                 {
                     throw new InvalidOperationException($"Patch operation '{operation}' does not accept values.");
@@ -133,9 +140,14 @@ public sealed class KVPatchOperation
                     throw new InvalidOperationException("ADD patch operations require a KVAddPatchPayload value.");
                 }
 
-                if (payload.ItemId == Guid.Empty)
+                if (string.IsNullOrEmpty(payload.ItemId))
                 {
                     throw new InvalidOperationException("ADD patch operations require a non-empty item id.");
+                }
+
+                if (!KVCollectionItemIds.IsValid(payload.ItemId))
+                {
+                    throw new InvalidOperationException($"ADD patch operations require a valid item id; '{payload.ItemId}' may only contain A-Z, a-z, 0-9, '_' and '-'.");
                 }
 
                 break;
@@ -157,6 +169,12 @@ public sealed class KVPatchOperation
     }
 }
 
-public sealed record KVAddPatchPayload(Guid ItemId, string? TypeToken = null);
+public sealed record KVAddPatchPayload(string ItemId, string? TypeToken = null)
+{
+    public KVAddPatchPayload(Guid itemId, string? typeToken = null)
+        : this(itemId == Guid.Empty ? string.Empty : itemId.ToString("D"), typeToken)
+    {
+    }
+}
 
 public sealed record KVMovePatchPayload(int ToIndex);
