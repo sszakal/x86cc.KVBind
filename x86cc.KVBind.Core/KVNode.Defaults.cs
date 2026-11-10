@@ -66,7 +66,9 @@ public abstract partial class KVNode
             if (!string.IsNullOrWhiteSpace(KVNestedNode.GetItemType(slotModel)))
                 continue; // already initialized — leave it be
 
-            this.InitNestedNodeToToken(nestedDef.SubSegmentPath, nestedDef.DefaultTypeToken).ApplyDefaultsRecursive();
+            var nested = this.InitNestedNodeToToken(nestedDef.SubSegmentPath, nestedDef.DefaultTypeToken);
+            nested.ApplyDefaultsRecursive();
+            this.EmitNestedNodeChange(nestedDef.SubSegmentPath, oldTypeToken: null, nested);
         }
     }
 

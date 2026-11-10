@@ -98,12 +98,14 @@ public abstract partial class KVNode
 
         var definition = this.GetNestedNodeDefinition(nestedNodeKey);
         var nestedModel = this.GetNestedNodeModel(nestedNodeKey);
+        var oldTypeToken = KVNestedNode.GetItemType(nestedModel);
         ClearNestedNodeModel(nestedModel);
         this.DetachActiveNestedNode(nestedNodeKey);
 
         if (value is null)
         {
             KVNestedNode.ClearItemType(nestedModel);
+            this.EmitNestedNodeChange(nestedNodeKey, oldTypeToken, newNode: null);
             return;
         }
 
@@ -111,6 +113,7 @@ public abstract partial class KVNode
         KVNestedNode.SetItemType(nestedModel, typeDefinition.TypeToken);
         value.BindRuntime(nestedModel, typeDefinition.NodeDefinition, this);
         (this.activeNestedNodes ??= new(StringComparer.Ordinal))[nestedNodeKey] = new ActiveNestedNode(value, typeDefinition.TypeToken, nestedModel);
+        this.EmitNestedNodeChange(nestedNodeKey, oldTypeToken, value);
     }
 
     private static void ClearNestedNodeModel(KVModel nestedModel)

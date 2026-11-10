@@ -86,6 +86,7 @@ public abstract class KVRootNode : KVNode
     {
         this.Model.Overlay.Clear();
         this.Bind(this.Model, this.Definition);
+        this.NotifyReplaced();
     }
 
     // Severs the parent link, copying the inherited values into the draft so they become this aggregate's
@@ -101,6 +102,20 @@ public abstract class KVRootNode : KVNode
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         this.Model.Overlay.Discard(KVPath.Normalize(path));
         this.Bind(this.Model, this.Definition);
+        this.NotifyReplaced(path);
+    }
+
+    /// <summary>
+    /// Tells change reactions that the data at <paramref name="path"/> (default: the whole aggregate) was
+    /// replaced without per-value notifications, so derived values can be recomputed: every reaction that
+    /// watches the path or anything beneath it runs once with <see cref="KVChangeKind.Replaced"/>.
+    /// <see cref="Clear"/>, <see cref="Discard"/> and <c>Reset()</c> call this themselves. Call it after
+    /// changing the overlay directly — for example after binding a draft whose rebase just finished.
+    /// </summary>
+    public void NotifyReplaced(string path = "")
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        KVChangeReactionRuntime.EmitReplaced(this, path);
     }
 
     public KVCommit CreateCommit(DateTimeOffset timestamp)

@@ -24,8 +24,22 @@ public abstract partial class KVNode : KVNodeBase
     internal KVChangeDeltaGroup ComputeDeltas(string nodePath, bool isCollectionItem)
         => KVDeltaComputer.Compute(this, nodePath, isCollectionItem);
 
-    internal void EmitChange(string canonicalPath, object? oldValue, object? newValue)
-        => KVChangeReactionRuntime.Emit(this, canonicalPath, oldValue, newValue);
+    internal void EmitChange(string canonicalPath, object? oldValue, object? newValue, KVChangeKind kind = KVChangeKind.Value)
+        => KVChangeReactionRuntime.Emit(this, canonicalPath, oldValue, newValue, kind);
+
+    // Notifies reactions that a nested node slot was initialized (newNode set; oldTypeToken is the type it
+    // replaced, if any) or dropped (newNode null). The change path is the slot itself.
+    internal void EmitNestedNodeChange(string nestedNodeKey, string? oldTypeToken, KVNestedNode? newNode)
+    {
+        if (string.IsNullOrWhiteSpace(oldTypeToken)) oldTypeToken = null;
+        if (oldTypeToken is null && newNode is null) return;
+
+        this.EmitChange(
+            KVPath.Combine(this.GetCanonicalPath(), nestedNodeKey),
+            oldTypeToken,
+            newNode,
+            newNode is null ? KVChangeKind.Removed : KVChangeKind.Added);
+    }
 
     private sealed record ActiveNestedNode(KVNestedNode Node, string TypeToken, KVModel Model);
 }

@@ -474,22 +474,27 @@ internal sealed class KVPatchOperationRegistry
         }
 
         nestedTarget.Definition.GetTypeDefinition(typeToken);
+        var oldTypeToken = KVNestedNode.GetItemType(nestedTarget.SlotModel);
         nestedTarget.Owner.ClearNestedNodeModelForPatch(nestedTarget.SlotModel);
         KVNestedNode.SetItemType(nestedTarget.SlotModel, typeToken);
         nestedTarget.Owner.DetachNestedNodeForPatch(nestedTarget.Definition.SubSegmentPath);
         nestedTarget.Owner.RebindCurrentContextForPatch();
 
         // The slot was cleared above, so this is a newly born node: apply its declared defaults.
-        nestedTarget.Owner.GetActiveNestedNode(nestedTarget.Definition, nestedTarget.SlotModel)?.ApplyDefaultsRecursive();
+        var initialized = nestedTarget.Owner.GetActiveNestedNode(nestedTarget.Definition, nestedTarget.SlotModel);
+        initialized?.ApplyDefaultsRecursive();
+        nestedTarget.Owner.EmitNestedNodeChange(nestedTarget.Definition.SubSegmentPath, oldTypeToken, initialized);
     }
 
     private static void ApplyDrop(KVPatchTarget target, KVPatchOperation operation, KVPatchExecutionContext context)
     {
         var nestedTarget = (KVNestedNodePatchTarget)target;
+        var oldTypeToken = KVNestedNode.GetItemType(nestedTarget.SlotModel);
         nestedTarget.Owner.ClearNestedNodeModelForPatch(nestedTarget.SlotModel);
         KVNestedNode.ClearItemType(nestedTarget.SlotModel);
         nestedTarget.Owner.DetachNestedNodeForPatch(nestedTarget.Definition.SubSegmentPath);
         nestedTarget.Owner.RebindCurrentContextForPatch();
+        nestedTarget.Owner.EmitNestedNodeChange(nestedTarget.Definition.SubSegmentPath, oldTypeToken, newNode: null);
     }
 
     private static void ApplyReset(KVPatchTarget target, KVPatchOperation operation, KVPatchExecutionContext context)

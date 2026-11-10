@@ -145,7 +145,7 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
         this.orderedItemIds.Remove(itemId);
         this.Model.Overlay.Remove(KVPath.Combine(this.Model.DataPath, itemId));
         this.WriteItemsKey();
-        this.EmitCollectionChange(itemId, oldValue: itemId, newValue: null);
+        this.EmitCollectionChange(itemId, oldValue: itemId, newValue: null, KVChangeKind.Removed);
         return true;
     }
 
@@ -162,6 +162,7 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
         this.orderedItemIds.RemoveAt(currentIndex);
         this.orderedItemIds.Insert(toIndex, itemId);
         this.WriteItemsKey();
+        this.EmitCollectionChange(itemId, oldValue: currentIndex, newValue: toIndex, KVChangeKind.Moved);
         return true;
     }
 
@@ -254,7 +255,7 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
         // A new item is born here (code, ADD patch, seeding): materialize its declared defaults — field
         // defaults, default nested types, seeded sub-collections — before anyone observes it.
         item.ApplyDefaultsRecursive();
-        this.EmitCollectionChange(itemId, oldValue: null, newValue: item);
+        this.EmitCollectionChange(itemId, oldValue: null, newValue: item, KVChangeKind.Added);
         return item;
     }
 
@@ -283,9 +284,9 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
         this.Model.Overlay.Set(this.ItemsPath, new KVValue<string[]>(this.orderedItemIds.ToArray()));
     }
 
-    private void EmitCollectionChange(string itemId, object? oldValue, object? newValue)
+    private void EmitCollectionChange(string itemId, object? oldValue, object? newValue, KVChangeKind kind)
     {
         if (this.Parent is not KVNode parentNode) return;
-        parentNode.EmitChange(KVPath.Combine(this.Model.DataPath, itemId), oldValue, newValue);
+        parentNode.EmitChange(KVPath.Combine(this.Model.DataPath, itemId), oldValue, newValue, kind);
     }
 }

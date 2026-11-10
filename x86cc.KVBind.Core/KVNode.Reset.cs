@@ -21,5 +21,6 @@ public abstract partial class KVNode
         this.Model.Overlay.ResetSubtree(this.Model.DataPath, this.ResetKeepKey);
         this.RebindCurrentContextForPatch();
         this.ApplyDefaultsRecursive();
+        KVChangeReactionRuntime.EmitReplaced(this, this.GetCanonicalPath());
     }
 }

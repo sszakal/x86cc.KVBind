@@ -9,8 +9,9 @@ namespace x86cc.KVBind.Core;
 public sealed class KVChangeContext<TNode>
     where TNode : KVNode
 {
-    internal KVChangeContext(TNode node, string changedPath, object? oldValue, object? newValue)
+    internal KVChangeContext(TNode node, string changedPath, object? oldValue, object? newValue, KVChangeKind kind)
     {
+        this.Kind = kind;
         this.Node = node;
         this.ChangedPath = changedPath;
         this.OldValue = oldValue;
@@ -24,6 +25,10 @@ public sealed class KVChangeContext<TNode>
     public object? OldValue { get; }
 
     public object? NewValue { get; }
+
+    // Field value change, or a structural one (item added/removed/moved, nested node initialized/dropped);
+    // see KVChangeKind for what OldValue/NewValue hold in each case.
+    public KVChangeKind Kind { get; }
 }
 
 public sealed class KVChangePath
@@ -94,9 +99,9 @@ public sealed class KVChangePathBuilder<TNode>
 
 internal sealed class KVChangeReactionDescriptor
 {
-    private readonly Action<KVNode, string, object?, object?> invoke;
+    private readonly Action<KVNode, string, object?, object?, KVChangeKind> invoke;
 
-    private KVChangeReactionDescriptor(KVPathPattern pattern, Action<KVNode, string, object?, object?> invoke)
+    private KVChangeReactionDescriptor(KVPathPattern pattern, Action<KVNode, string, object?, object?, KVChangeKind> invoke)
     {
         this.Pattern = pattern;
         this.invoke = invoke;
@@ -127,16 +132,16 @@ internal sealed class KVChangeReactionDescriptor
         var selector = action.Compile();
         return new KVChangeReactionDescriptor(
             path.Pattern,
-            (node, changedPath, oldValue, newValue) =>
+            (node, changedPath, oldValue, newValue, kind) =>
             {
                 var typedNode = (TNode)node;
-                selector(typedNode)(new KVChangeContext<TNode>(typedNode, changedPath, oldValue, newValue));
+                selector(typedNode)(new KVChangeContext<TNode>(typedNode, changedPath, oldValue, newValue, kind));
             });
     }
 
-    internal void Invoke(KVNode node, string changedPath, object? oldValue, object? newValue)
+    internal void Invoke(KVNode node, string changedPath, object? oldValue, object? newValue, KVChangeKind kind)
     {
-        this.invoke(node, changedPath, oldValue, newValue);
+        this.invoke(node, changedPath, oldValue, newValue, kind);
     }
 
     private static MethodInfo GetMethod<TNode>(Expression<Func<TNode, Action<KVChangeContext<TNode>>>> action)
@@ -165,6 +170,26 @@ internal sealed class KVPathPattern
     internal KVPathPattern(IReadOnlyList<string> segments)
     {
         this.segments = segments;
+    }
+
+    // True when the pattern watches `path` itself or something beneath it ("" covers everything).
+    internal bool MatchesAtOrUnder(string path)
+    {
+        var segments = KVPath.Normalize(path).Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length > this.segments.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < segments.Length; i++)
+        {
+            if (this.segments[i] != "*" && !string.Equals(this.segments[i], segments[i], StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     internal bool Matches(string path)
