@@ -288,6 +288,25 @@ builder.Collection(x => x.Animals, animals => animals
 
 Field patches inside the items (`SET /Animals/Snake/Name`) are unaffected. A `DISCARD` that would add, remove or reorder items of a restricted collection is rejected the same way. The restriction applies to patches only; the in-code collection API (`Create`, `RemoveById`, `MoveById`) used by application code and migrations stays available. `KVCollectionDefinition.AllowedOperations` (`null` = unrestricted) and `IsOperationAllowed(...)` let a UI hide actions that would be rejected.
 
+### Patch read-only members
+
+`PatchReadOnly()` marks a field, field group, collection or nested node as off-limits to patches: every patch operation that targets the member or anything beneath it is rejected. The member still changes through application code — typed setters, domain methods, migrations — so state that belongs to the aggregate's behavior (a workflow status, approvals, audit data) cannot be written directly by a client.
+
+```csharp
+builder.Field(x => x.Status, f => f.PatchReadOnly());
+builder.FieldGroup(x => x.Audit, audit => audit.Field(x => x.ApprovedBy), group => group.PatchReadOnly());
+builder.Collection(x => x.Approvals, approvals => approvals.Item<Approval>(...).PatchReadOnly());
+builder.NestedNode(x => x.Approver, approver => approver.Bind<PersonApprover>("PERSON", ...).PatchReadOnly());
+```
+
+Operations on an enclosing object follow from that rule:
+
+- `RESET` of a collection item, nested node or field group that contains a patch read-only member is rejected, because a reset rewrites every value beneath it.
+- `DISCARD` is rejected when it would revert a draft change to a patch read-only member. Objects created in the same draft can still be discarded whole.
+- `ADD`, `REMOVE`, `INIT` and `DROP` of an enclosing object stay available (the member gets its defaults, or goes away with the object); mark the collection or nested node itself `PatchReadOnly()` to lock those too.
+
+`KVDefinition.IsPatchReadOnly` exposes the flag so a UI can render the member read-only.
+
 ### Defaults
 
 Fields declare defaults with `f.Default(value)`, nested nodes with `DefaultType<TSubtype>()`, and collections with `Seed<TItem>(...)` or `Default(...)`. Defaults are applied once, when an object is born, and only fill values that are still unset:

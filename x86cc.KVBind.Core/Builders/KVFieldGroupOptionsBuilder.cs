@@ -13,6 +13,8 @@ public sealed class KVFieldGroupOptionsBuilder
 
     internal bool IsInherited { get; private set; }
 
+    internal bool IsPatchReadOnly { get; private set; }
+
     internal string? DisplayNameValue { get; private set; }
 
     public KVFieldGroupOptionsBuilder DisplayName(string displayName)
@@ -32,6 +34,13 @@ public sealed class KVFieldGroupOptionsBuilder
     public KVFieldGroupOptionsBuilder Resettable(bool isResettable = true)
     {
         this.IsResettable = isResettable;
+        return this;
+    }
+
+    // Patches may not target this group or anything beneath it. See KVDefinition.IsPatchReadOnly.
+    public KVFieldGroupOptionsBuilder PatchReadOnly()
+    {
+        this.IsPatchReadOnly = true;
         return this;
     }
 

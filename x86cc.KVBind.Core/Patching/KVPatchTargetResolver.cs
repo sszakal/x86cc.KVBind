@@ -36,6 +36,7 @@ internal static class KVPatchTargetResolver
             }
 
             var canonicalPath = BuildPath(currentCanonicalPath, segment);
+            EnsurePatchable(fieldDefinition, operation, canonicalPath);
             return new KVFieldPatchTarget
             {
                 Node = node,
@@ -50,6 +51,7 @@ internal static class KVPatchTargetResolver
         {
             var childNode = nodeDefinition.GetChildNode(node)
                             ?? throw new InvalidOperationException($"Node segment '{segment}' resolved to null.");
+            EnsurePatchable(nodeDefinition, operation, BuildPath(currentCanonicalPath, nodeDefinition.SubSegmentPath));
             if (segments.Length == depth + 1
                 && string.Equals(operation.OperationCode, KVPatchOperations.Reset, StringComparison.OrdinalIgnoreCase))
             {
@@ -84,6 +86,7 @@ internal static class KVPatchTargetResolver
         var collectionNode = collectionDefinition.GetCollection(owner)
                              ?? throw new InvalidOperationException($"Collection '{collectionDefinition.SubSegmentPath}' resolved to null.");
         var collectionPath = BuildPath(currentCanonicalPath, collectionDefinition.SubSegmentPath);
+        EnsurePatchable(collectionDefinition, operation, collectionPath);
 
         if (segments.Length == depth + 1)
         {
@@ -119,6 +122,7 @@ internal static class KVPatchTargetResolver
     private static KVPatchTarget ResolveNestedNode(KVNode owner, KVPatchOperation operation, KVNestedNodeDefinition nestedNodeDefinition, string[] segments, int depth, string currentCanonicalPath)
     {
         var nestedPath = BuildPath(currentCanonicalPath, nestedNodeDefinition.SubSegmentPath);
+        EnsurePatchable(nestedNodeDefinition, operation, nestedPath);
         var nestedModel = owner.GetNestedNodeModel(nestedNodeDefinition.SubSegmentPath);
         if (segments.Length == depth + 1)
         {
@@ -134,6 +138,13 @@ internal static class KVPatchTargetResolver
         var activeNode = owner.GetActiveNestedNode(nestedNodeDefinition, nestedModel)
                          ?? throw new InvalidOperationException($"Nested node '{nestedPath}' is not initialized for path '{operation.Path}'.");
         return Resolve(activeNode, operation, segments, depth + 1, nestedPath);
+    }
+
+    // A PatchReadOnly() member rejects every operation that targets it or anything beneath it.
+    private static void EnsurePatchable(KVDefinition definition, KVPatchOperation operation, string memberPath)
+    {
+        if (definition.IsPatchReadOnly)
+            throw KVPatchRuntime.PatchReadOnly(operation, memberPath);
     }
 
     private static string BuildPath(string prefix, string segment)

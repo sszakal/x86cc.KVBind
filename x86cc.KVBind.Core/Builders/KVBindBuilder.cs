@@ -75,6 +75,7 @@ public sealed class KVBindBuilder<TEntity>
             SubSegmentPath = propertyName,
             IsRequired = options.IsRequired,
             IsInherited = options.IsInherited,
+            IsPatchReadOnly = options.IsPatchReadOnly,
             AllowedValues = options.AllowedValuesDefinition,
             HasDefault = options.HasDefault,
             DefaultValue = options.DefaultValue,
@@ -175,6 +176,7 @@ public sealed class KVBindBuilder<TEntity>
 
         this.EnsureInheritedAllowed(options.IsInherited, collectionDefinition.SubSegmentPath);
         collectionDefinition.IsInherited = options.IsInherited;
+        collectionDefinition.IsPatchReadOnly = options.IsPatchReadOnly;
         collectionDefinition.NotEmpty = options.NotEmptyRule;
         collectionDefinition.MinCount = options.MinCountValue;
         collectionDefinition.MaxCount = options.MaxCountValue;
@@ -233,6 +235,7 @@ public sealed class KVBindBuilder<TEntity>
         this.EnsureInheritedAllowed(options.IsInherited, nestedNodeDefinition.SubSegmentPath);
         nestedNodeDefinition.AddAnnotations(options.Annotations);
         nestedNodeDefinition.IsInherited = options.IsInherited;
+        nestedNodeDefinition.IsPatchReadOnly = options.IsPatchReadOnly;
         nestedNodeDefinition.DefaultTypeToken = options.DefaultTypeTokenValue;
         this.definition.NestedNodes.Add(nestedNodeDefinition);
     }
@@ -367,6 +370,7 @@ public sealed class KVBindBuilder<TEntity>
         this.EnsureInheritedAllowed(options.IsInherited, nodeDefinition.SubSegmentPath);
         nodeDefinition.IsResettable = options.IsResettable;
         nodeDefinition.IsInherited = options.IsInherited;
+        nodeDefinition.IsPatchReadOnly = options.IsPatchReadOnly;
         nodeDefinition.DisplayName = options.DisplayNameValue ?? ResolveDisplayName(selector);
         this.definition.Nodes.Add(nodeDefinition);
     }
@@ -404,6 +408,7 @@ public sealed class KVBindBuilder<TEntity>
         this.EnsureInheritedAllowed(options.IsInherited, nodeDefinition.SubSegmentPath);
         nodeDefinition.IsResettable = options.IsResettable;
         nodeDefinition.IsInherited = options.IsInherited;
+        nodeDefinition.IsPatchReadOnly = options.IsPatchReadOnly;
         nodeDefinition.DisplayName = options.DisplayNameValue ?? ResolveDisplayName(selector);
         this.definition.Nodes.Add(nodeDefinition);
     }

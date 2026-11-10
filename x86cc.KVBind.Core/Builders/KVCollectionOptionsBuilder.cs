@@ -35,6 +35,8 @@ public sealed class KVCollectionOptionsBuilder<TParent, TModel>
 
     internal bool IsInherited { get; private set; }
 
+    internal bool IsPatchReadOnly { get; private set; }
+
     internal Action<Abstractions.IKVCollectionNode>? DefaultSeedAction { get; private set; }
 
     internal bool NotEmptyRule => this.globalRules.NotEmptyRule;
@@ -55,6 +57,14 @@ public sealed class KVCollectionOptionsBuilder<TParent, TModel>
     public KVCollectionOptionsBuilder<TParent, TModel> Inherited()
     {
         this.IsInherited = true;
+        return this;
+    }
+
+    // Patches may not target this collection, its items or anything beneath them (stricter than
+    // AllowOperations(), which leaves item fields patchable). See KVDefinition.IsPatchReadOnly.
+    public KVCollectionOptionsBuilder<TParent, TModel> PatchReadOnly()
+    {
+        this.IsPatchReadOnly = true;
         return this;
     }
 

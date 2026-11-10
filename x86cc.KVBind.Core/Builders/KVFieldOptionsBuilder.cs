@@ -24,6 +24,8 @@ public class KVFieldOptionsBuilder<TValue>
 
     internal bool IsInherited { get; private set; }
 
+    internal bool IsPatchReadOnly { get; private set; }
+
     public KVFieldOptionsBuilder<TValue> Required()
     {
         this.IsRequired = true;
@@ -35,6 +37,13 @@ public class KVFieldOptionsBuilder<TValue>
     public KVFieldOptionsBuilder<TValue> Inherited()
     {
         this.IsInherited = true;
+        return this;
+    }
+
+    // Patches may not write this field; it only changes through application code. See KVDefinition.IsPatchReadOnly.
+    public KVFieldOptionsBuilder<TValue> PatchReadOnly()
+    {
+        this.IsPatchReadOnly = true;
         return this;
     }
 

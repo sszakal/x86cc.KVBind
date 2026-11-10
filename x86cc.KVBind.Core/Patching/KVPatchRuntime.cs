@@ -40,6 +40,37 @@ internal static class KVPatchRuntime
             registry.Apply(target, operation, context);
         }
     }
+
+    internal static InvalidOperationException PatchReadOnly(KVPatchOperation operation, string memberPath)
+    {
+        return new InvalidOperationException($"Patch operation '{operation.OperationCode}' for '{operation.Path}' is not allowed: '{memberPath}' is patch read-only.");
+    }
+
+    // True when the definition declares a PatchReadOnly() member anywhere beneath it.
+    internal static bool ContainsPatchReadOnly(KVNodeDefinition definition)
+    {
+        foreach (var field in definition.Fields)
+            if (field.IsPatchReadOnly) return true;
+
+        foreach (var node in definition.Nodes)
+            if (node.IsPatchReadOnly || ContainsPatchReadOnly(node)) return true;
+
+        foreach (var collection in definition.Collections)
+        {
+            if (collection.IsPatchReadOnly) return true;
+            foreach (var item in collection.ItemDefinitionsByToken.Values)
+                if (ContainsPatchReadOnly(item.NodeDefinition)) return true;
+        }
+
+        foreach (var nested in definition.NestedNodes)
+        {
+            if (nested.IsPatchReadOnly) return true;
+            foreach (var type in nested.TypeDefinitionsByToken.Values)
+                if (ContainsPatchReadOnly(type.NodeDefinition)) return true;
+        }
+
+        return false;
+    }
 }
 
 internal abstract class KVPatchTarget
@@ -162,7 +193,97 @@ internal sealed class KVPatchOperationRegistry
         }
 
         if (target is KVPathPatchTarget)
+        {
             EnsureDiscardKeepsRestrictedMembership(context.Root, target.CanonicalPath, operation);
+            EnsureDiscardKeepsPatchReadOnly(context.Root, target.CanonicalPath, operation);
+        }
+    }
+
+    // DISCARD reverts draft changes; reject it when that would revert a change made (by application code)
+    // to a PatchReadOnly() member.
+    private static void EnsureDiscardKeepsPatchReadOnly(KVNode root, string discardPath, KVPatchOperation operation)
+    {
+        var overlay = root.Model.Overlay;
+        foreach (var memberPath in EnumeratePatchReadOnlyPaths(root, discardPath))
+        {
+            string affectedPath;
+            if (discardPath.Length == 0 || KVPath.IsSameOrDescendant(memberPath, discardPath))
+                affectedPath = memberPath;
+            else if (KVPath.IsSameOrDescendant(discardPath, memberPath))
+                affectedPath = discardPath;
+            else
+                continue;
+
+            if (overlay.HasDraftState(affectedPath))
+                throw KVPatchRuntime.PatchReadOnly(operation, memberPath);
+        }
+    }
+
+    // Data paths of the PatchReadOnly() members of the bound graph. Objects born in the draft that lie
+    // wholly under the discard path vanish with it, so their members are skipped.
+    private static IEnumerable<string> EnumeratePatchReadOnlyPaths(KVNode node, string discardPath)
+    {
+        foreach (var fieldDefinition in node.Definition.Fields)
+        {
+            if (fieldDefinition.IsPatchReadOnly)
+                yield return KVPath.Combine(node.Model.DataPath, fieldDefinition.SubSegmentPath);
+        }
+
+        foreach (var nodeDefinition in node.Definition.Nodes)
+        {
+            var child = nodeDefinition.GetChildNode(node);
+            if (nodeDefinition.IsPatchReadOnly)
+            {
+                yield return child.Model.DataPath;
+                continue;
+            }
+
+            foreach (var path in EnumeratePatchReadOnlyPaths(child, discardPath))
+                yield return path;
+        }
+
+        foreach (var collectionDefinition in node.Definition.Collections)
+        {
+            if (collectionDefinition.GetCollection(node) is not KVCollectionNodeBase collection) continue;
+            if (collectionDefinition.IsPatchReadOnly)
+            {
+                yield return collection.Model.DataPath;
+                continue;
+            }
+
+            foreach (var itemId in collection.GetActiveItemIds())
+            {
+                var itemPath = KVPath.Combine(collection.Model.DataPath, itemId);
+                if (IsBornInDraftUnder(node.Model.Overlay, itemPath, discardPath)) continue;
+                if (((IKVCollectionNode)collection).GetById(itemId) is not { } item) continue;
+
+                foreach (var path in EnumeratePatchReadOnlyPaths(item, discardPath))
+                    yield return path;
+            }
+        }
+
+        foreach (var nestedDefinition in node.Definition.NestedNodes)
+        {
+            var nestedModel = node.GetNestedNodeModel(nestedDefinition.SubSegmentPath);
+            if (nestedDefinition.IsPatchReadOnly)
+            {
+                yield return nestedModel.DataPath;
+                continue;
+            }
+
+            if (node.GetActiveNestedNode(nestedDefinition, nestedModel) is not { } nestedNode) continue;
+            if (IsBornInDraftUnder(node.Model.Overlay, nestedModel.DataPath, discardPath)) continue;
+
+            foreach (var path in EnumeratePatchReadOnlyPaths(nestedNode, discardPath))
+                yield return path;
+        }
+    }
+
+    // A collection item or nested node created in the draft carries its $type in the draft.
+    private static bool IsBornInDraftUnder(KVOverlay overlay, string objectPath, string discardPath)
+    {
+        if (discardPath.Length > 0 && !KVPath.IsSameOrDescendant(objectPath, discardPath)) return false;
+        return overlay.TryGetDraftValue(KVPath.Combine(objectPath, KVNestedNode.TypeKey), out _);
     }
 
     // DISCARD reverts a restricted collection's $items to the snapshot, which can add, remove or reorder
@@ -373,14 +494,23 @@ internal sealed class KVPatchOperationRegistry
 
     private static void ApplyReset(KVPatchTarget target, KVPatchOperation operation, KVPatchExecutionContext context)
     {
+        // A reset rewrites every value under the node, so it may not contain PatchReadOnly() members.
+        void EnsureNoPatchReadOnly(KVNode node)
+        {
+            if (KVPatchRuntime.ContainsPatchReadOnly(node.Definition))
+                throw new InvalidOperationException($"Patch operation '{operation.OperationCode}' for '{operation.Path}' is not allowed: '{target.CanonicalPath}' contains patch read-only members.");
+        }
+
         switch (target)
         {
             case KVCollectionItemPatchTarget itemTarget:
+                EnsureNoPatchReadOnly(itemTarget.Item);
                 itemTarget.Item.Reset();
                 break;
             case KVNestedNodePatchTarget nestedTarget:
                 var nested = nestedTarget.Owner.GetActiveNestedNode(nestedTarget.Definition, nestedTarget.SlotModel)
                              ?? throw new InvalidOperationException($"Nested node '{nestedTarget.CanonicalPath}' is not initialized and cannot be reset.");
+                EnsureNoPatchReadOnly(nested);
                 nested.Reset();
                 break;
             case KVNodePatchTarget nodeTarget:
@@ -389,6 +519,7 @@ internal sealed class KVPatchOperationRegistry
                     throw new InvalidOperationException($"Field group '{nodeTarget.CanonicalPath}' is not resettable; declare it with Resettable().");
                 }
 
+                EnsureNoPatchReadOnly(nodeTarget.Node);
                 nodeTarget.Node.Reset();
                 break;
         }

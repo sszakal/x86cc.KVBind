@@ -19,12 +19,22 @@ public sealed class KVNestedNodeOptionsBuilder<TBase>
 
     internal bool IsInherited { get; private set; }
 
+    internal bool IsPatchReadOnly { get; private set; }
+
     internal string? DefaultTypeTokenValue { get; private set; }
 
     // Root-only: the whole nested node is inherited — read-only and parent-sourced when bound with a parent.
     public KVNestedNodeOptionsBuilder<TBase> Inherited()
     {
         this.IsInherited = true;
+        return this;
+    }
+
+    // Patches may not INIT, DROP or RESET this slot, nor target anything beneath it. See
+    // KVDefinition.IsPatchReadOnly.
+    public KVNestedNodeOptionsBuilder<TBase> PatchReadOnly()
+    {
+        this.IsPatchReadOnly = true;
         return this;
     }
 

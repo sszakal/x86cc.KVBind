@@ -26,6 +26,13 @@ public class KVDefinition
     /// </summary>
     public IReadOnlyDictionary<string, object?> Annotations => this.annotations ?? EmptyAnnotations;
 
+    /// <summary>
+    /// Declared in the DSL via <c>PatchReadOnly()</c>: patch operations may not target this member or
+    /// anything beneath it, so it only changes through application code (typed setters, domain methods,
+    /// migrations). Like <c>AllowOperations(...)</c>, it restricts patches only, never the in-code API.
+    /// </summary>
+    public bool IsPatchReadOnly { get; set; }
+
     internal void Annotate(string key, object? value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
