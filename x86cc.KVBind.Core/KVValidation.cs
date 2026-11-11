@@ -76,8 +76,8 @@ public sealed class KVFieldValidationProfileBuilder<TValue> : IKVFieldValidation
 
 public sealed class KVFieldValueRuleBuilder<TValue>
 {
+    private readonly KVValueConstraints constraints = new();
     private bool required;
-    private int? maxLength;
 
     public KVFieldValueRuleBuilder<TValue> Required()
     {
@@ -87,14 +87,40 @@ public sealed class KVFieldValueRuleBuilder<TValue>
 
     public KVFieldValueRuleBuilder<TValue> MaxLength(int maxLength)
     {
-        if (maxLength <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maxLength), "MaxLength must be greater than zero.");
-        }
-
-        this.maxLength = maxLength;
+        this.constraints.SetMaxLength(maxLength);
         return this;
     }
+
+    public KVFieldValueRuleBuilder<TValue> MinLength(int minLength)
+    {
+        KVValueConstraints.EnsureTextField(typeof(TValue), nameof(this.MinLength));
+        this.constraints.SetMinLength(minLength);
+        return this;
+    }
+
+    // A regular expression the whole text must match.
+    public KVFieldValueRuleBuilder<TValue> Pattern(string pattern)
+    {
+        KVValueConstraints.EnsureTextField(typeof(TValue), nameof(this.Pattern));
+        this.constraints.SetPattern(pattern);
+        return this;
+    }
+
+    // Inclusive lower bound; numbers, dates and other comparable values.
+    public KVFieldValueRuleBuilder<TValue> Min(TValue min)
+    {
+        this.constraints.SetMin(min);
+        return this;
+    }
+
+    // Inclusive upper bound; numbers, dates and other comparable values.
+    public KVFieldValueRuleBuilder<TValue> Max(TValue max)
+    {
+        this.constraints.SetMax(max);
+        return this;
+    }
+
+    public KVFieldValueRuleBuilder<TValue> Range(TValue min, TValue max) => this.Min(min).Max(max);
 
     internal void Evaluate(string path, object? value, List<KVValidationError> errors)
     {
@@ -107,10 +133,7 @@ public sealed class KVFieldValueRuleBuilder<TValue>
             }
         }
 
-        if (this.maxLength.HasValue && value is string text && text.Length > this.maxLength.Value)
-        {
-            errors.Add(new KVValidationError(path, "max_length", $"'{path}' must be at most {this.maxLength.Value} characters."));
-        }
+        this.constraints.Evaluate(path, value, errors);
     }
 }
 
@@ -345,8 +368,11 @@ public sealed class KVGroupRuleBuilder<TNode>
         var fieldKey = this.resolveFieldKey(fieldSelector);
         this.steps.Add((accessor, errors) =>
         {
-            var value = accessor.GetRaw(fieldKey);
-            if (value is null || (value is string text && string.IsNullOrWhiteSpace(text)))
+            // A nested node slot is "set" when a subtype is initialized; a field when it holds a value.
+            var missing = accessor.TryGetNestedNodeInitialized(fieldKey, out var initialized)
+                ? !initialized
+                : IsUnset(accessor.GetRaw(fieldKey));
+            if (missing)
             {
                 var path = accessor.ResolveCanonicalPath(fieldKey);
                 errors.Add(new KVValidationError(path, "required", $"'{path}' is required."));
@@ -354,6 +380,45 @@ public sealed class KVGroupRuleBuilder<TNode>
         });
 
         return this;
+    }
+
+    public KVGroupRuleBuilder<TNode> MinLength(Expression<Func<TNode, string?>> fieldSelector, int minLength)
+    {
+        var constraints = new KVValueConstraints();
+        constraints.SetMinLength(minLength);
+        return this.AddConstraints(fieldSelector, constraints);
+    }
+
+    // A regular expression the whole text must match.
+    public KVGroupRuleBuilder<TNode> Pattern(Expression<Func<TNode, string?>> fieldSelector, string pattern)
+    {
+        var constraints = new KVValueConstraints();
+        constraints.SetPattern(pattern);
+        return this.AddConstraints(fieldSelector, constraints);
+    }
+
+    // Inclusive lower bound; numbers, dates and other comparable values.
+    public KVGroupRuleBuilder<TNode> Min<TValue>(Expression<Func<TNode, TValue>> fieldSelector, TValue min)
+    {
+        var constraints = new KVValueConstraints();
+        constraints.SetMin(min);
+        return this.AddConstraints(fieldSelector, constraints);
+    }
+
+    // Inclusive upper bound; numbers, dates and other comparable values.
+    public KVGroupRuleBuilder<TNode> Max<TValue>(Expression<Func<TNode, TValue>> fieldSelector, TValue max)
+    {
+        var constraints = new KVValueConstraints();
+        constraints.SetMax(max);
+        return this.AddConstraints(fieldSelector, constraints);
+    }
+
+    public KVGroupRuleBuilder<TNode> Range<TValue>(Expression<Func<TNode, TValue>> fieldSelector, TValue min, TValue max)
+    {
+        var constraints = new KVValueConstraints();
+        constraints.SetMin(min);
+        constraints.SetMax(max);
+        return this.AddConstraints(fieldSelector, constraints);
     }
 
     public KVGroupRuleBuilder<TNode> MaxLength(Expression<Func<TNode, string?>> fieldSelector, int maxLength)
@@ -433,6 +498,18 @@ public sealed class KVGroupRuleBuilder<TNode>
             step(accessor, errors);
         }
     }
+
+    private KVGroupRuleBuilder<TNode> AddConstraints(LambdaExpression fieldSelector, KVValueConstraints constraints)
+    {
+        ArgumentNullException.ThrowIfNull(fieldSelector);
+
+        var fieldKey = this.resolveFieldKey(fieldSelector);
+        this.steps.Add((accessor, errors) =>
+            constraints.Evaluate(accessor.ResolveCanonicalPath(fieldKey), accessor.GetRaw(fieldKey), errors));
+        return this;
+    }
+
+    private static bool IsUnset(object? value) => value is null || (value is string text && string.IsNullOrWhiteSpace(text));
 }
 
 public sealed class KVGroupValueAccessor<TNode>
@@ -471,6 +548,12 @@ public sealed class KVGroupValueAccessor<TNode>
 
     public bool HasValue<TValue>(Expression<Func<TNode, TValue>> fieldSelector)
     {
+        ArgumentNullException.ThrowIfNull(fieldSelector);
+        if (this.TryGetNestedNodeInitialized(this.resolveFieldKey(fieldSelector), out var initialized))
+        {
+            return initialized;
+        }
+
         var value = this.Get(fieldSelector);
         return value switch
         {
@@ -503,6 +586,20 @@ public sealed class KVGroupValueAccessor<TNode>
 
         var collectionNode = collectionDef.GetCollection(this.node);
         return collectionNode?.GetActiveItemIds() ?? [];
+    }
+
+    // True when the key names a nested node slot of this node; 'initialized' then tells whether a subtype
+    // is active in it.
+    internal bool TryGetNestedNodeInitialized(string key, out bool initialized)
+    {
+        initialized = false;
+        if (this.node.Definition.FindNestedNode(key) is null)
+        {
+            return false;
+        }
+
+        initialized = !string.IsNullOrWhiteSpace(KVNestedNode.GetItemType(this.node.GetNestedNodeModel(key)));
+        return true;
     }
 
     internal object? GetRaw(string fieldKey)

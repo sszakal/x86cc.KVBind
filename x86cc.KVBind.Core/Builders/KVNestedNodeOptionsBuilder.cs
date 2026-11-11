@@ -23,6 +23,15 @@ public sealed class KVNestedNodeOptionsBuilder<TBase>
 
     internal string? DefaultTypeTokenValue { get; private set; }
 
+    internal bool IsRequired { get; private set; }
+
+    // The slot must hold a subtype: validation reports "required" at its path while it is empty.
+    public KVNestedNodeOptionsBuilder<TBase> Required()
+    {
+        this.IsRequired = true;
+        return this;
+    }
+
     // Root-only: the whole nested node is inherited — read-only and parent-sourced when bound with a parent.
     public KVNestedNodeOptionsBuilder<TBase> Inherited()
     {

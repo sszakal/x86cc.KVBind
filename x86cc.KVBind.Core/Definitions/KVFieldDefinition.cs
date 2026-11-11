@@ -23,5 +23,20 @@ public class KVFieldDefinition : KVDefinition
 
     public object? DefaultValue { get; init; }
 
+    // Value rules declared on the field itself (they apply under every validation profile). Unset values
+    // are never reported by these; combine with IsRequired.
+    public int? MinLength => this.Constraints?.MinLength;
+
+    public int? MaxLength => this.Constraints?.MaxLength;
+
+    // A regular expression the whole text must match.
+    public string? Pattern => this.Constraints?.Pattern;
+
+    public object? Min => this.Constraints?.Min;
+
+    public object? Max => this.Constraints?.Max;
+
     internal KVAllowedValuesDefinition? AllowedValues { get; init; }
+
+    internal KVValueConstraints? Constraints { get; init; }
 }

@@ -16,6 +16,9 @@ public sealed class KVNestedNodeDefinition : KVDefinition
     // The subtype token a fresh aggregate initializes this slot to (ApplyDefaults). Null = leave unset.
     public string? DefaultTypeToken { get; set; }
 
+    // Validation reports "required" at the slot's path while no subtype is initialized.
+    public bool IsRequired { get; set; }
+
     // Root-only marker: the whole nested node is inherited (read-only, parent-sourced) when bound with a
     // parent snapshot. See KVOverlay inheritance.
     public bool IsInherited { get; set; }

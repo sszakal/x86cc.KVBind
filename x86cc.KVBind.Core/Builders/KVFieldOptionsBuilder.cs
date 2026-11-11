@@ -14,6 +14,8 @@ public class KVFieldOptionsBuilder<TValue>
 
     internal bool IsRequired { get; private set; }
 
+    internal KVValueConstraints? Constraints { get; private set; }
+
     internal string? DisplayNameValue { get; private set; }
 
     internal IReadOnlyDictionary<string, object?> Annotations => this.annotations;
@@ -31,6 +33,44 @@ public class KVFieldOptionsBuilder<TValue>
         this.IsRequired = true;
         return this;
     }
+
+    public KVFieldOptionsBuilder<TValue> MinLength(int minLength)
+    {
+        KVValueConstraints.EnsureTextField(typeof(TValue), nameof(this.MinLength));
+        (this.Constraints ??= new()).SetMinLength(minLength);
+        return this;
+    }
+
+    public KVFieldOptionsBuilder<TValue> MaxLength(int maxLength)
+    {
+        KVValueConstraints.EnsureTextField(typeof(TValue), nameof(this.MaxLength));
+        (this.Constraints ??= new()).SetMaxLength(maxLength);
+        return this;
+    }
+
+    // A regular expression the whole text must match.
+    public KVFieldOptionsBuilder<TValue> Pattern(string pattern)
+    {
+        KVValueConstraints.EnsureTextField(typeof(TValue), nameof(this.Pattern));
+        (this.Constraints ??= new()).SetPattern(pattern);
+        return this;
+    }
+
+    // Inclusive lower bound; numbers, dates and other comparable values.
+    public KVFieldOptionsBuilder<TValue> Min(TValue min)
+    {
+        (this.Constraints ??= new()).SetMin(min);
+        return this;
+    }
+
+    // Inclusive upper bound; numbers, dates and other comparable values.
+    public KVFieldOptionsBuilder<TValue> Max(TValue max)
+    {
+        (this.Constraints ??= new()).SetMax(max);
+        return this;
+    }
+
+    public KVFieldOptionsBuilder<TValue> Range(TValue min, TValue max) => this.Min(min).Max(max);
 
     // Root-only: marks this field as inherited — read-only and sourced from the parent when the aggregate
     // is bound with a parent snapshot. Editable on a parentless master.

@@ -417,6 +417,35 @@ builder.Field(x => x.Title, options =>
 });
 ```
 
+Value rules can be declared in three places, and report the same codes everywhere:
+
+| Rule | Applies to | Error code |
+|---|---|---|
+| `Required()` | fields, and nested node slots (no subtype initialized) | `required` |
+| `MinLength(n)` / `MaxLength(n)` | string fields | `min_length` / `max_length` |
+| `Pattern(regex)` | string fields; the whole value must match | `pattern` |
+| `Min(v)` / `Max(v)` / `Range(min, max)` | numbers, dates and other comparable values; bounds are inclusive | `min` / `max` |
+
+```csharp
+// On the field: always applies. Exposed on KVFieldDefinition (MinLength, MaxLength, Pattern, Min, Max).
+builder.Field(x => x.Code, f => f.Required().MinLength(3).MaxLength(6).Pattern("[A-Z]+-?[0-9]*"));
+builder.Field(x => x.Years, f => f.Range(1, 10));
+builder.NestedNode(x => x.Licensor, party => party.Bind<Party>("PARTY", ...).Required());
+
+// Under a profile.
+builder.Field(x => x.Share, f => f.Validation(profiles => profiles
+    .For<FullValidationProfile>(rules => rules.Range(0m, 100m))));
+
+// In a group rule, typically under a condition.
+builder.Validation((KVGroupRuleBuilder<Contract> rules) => rules
+    .When(a => a.Get(x => x.Kind) == "guaranteed", guaranteed => guaranteed
+        .Required(x => x.Guarantor)              // nested node slot
+        .Pattern(x => x.Reference, "REF[0-9]+")
+        .Range(x => x.Discount, 0, 50)));
+```
+
+Length, pattern and bound rules never report an unset value (`null` or an empty string); combine them with `Required()`. Numbers are compared by value whatever their stored type; other values are compared only with a bound of the same type. Invalid declarations (a length rule on a non-string field, an invalid regular expression, `Min` above `Max`) throw when the definition is built.
+
 Collection rules can validate count and aggregate values:
 
 ```csharp

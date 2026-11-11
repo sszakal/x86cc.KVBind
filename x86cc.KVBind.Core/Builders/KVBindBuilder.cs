@@ -74,6 +74,7 @@ public sealed class KVBindBuilder<TEntity>
         {
             SubSegmentPath = propertyName,
             IsRequired = options.IsRequired,
+            Constraints = options.Constraints,
             ValueType = typeof(TValue),
             IsInherited = options.IsInherited,
             IsPatchReadOnly = options.IsPatchReadOnly,
@@ -238,6 +239,7 @@ public sealed class KVBindBuilder<TEntity>
         nestedNodeDefinition.IsInherited = options.IsInherited;
         nestedNodeDefinition.IsPatchReadOnly = options.IsPatchReadOnly;
         nestedNodeDefinition.DefaultTypeToken = options.DefaultTypeTokenValue;
+        nestedNodeDefinition.IsRequired = options.IsRequired;
         this.definition.NestedNodes.Add(nestedNodeDefinition);
     }
 

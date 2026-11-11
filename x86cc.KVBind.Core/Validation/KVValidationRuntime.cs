@@ -31,6 +31,8 @@ internal static class KVValidationRuntime
                 errors.Add(new KVValidationError(path, "required", $"'{path}' is required."));
             }
 
+            field.Constraints?.Evaluate(path, value, errors);
+
             if (field.AllowedValues is not null && value is not null && !field.AllowedValues.IsAllowed(value))
             {
                 errors.Add(new KVValidationError(path, "allowed_values", $"Value for field '{path}' is not part of configured allowed values."));
@@ -70,6 +72,10 @@ internal static class KVValidationRuntime
             if (activeNode is not null)
             {
                 ValidateNode(activeNode, profile, errors, nestedPath);
+            }
+            else if (nestedNodeDefinition.IsRequired)
+            {
+                errors.Add(new KVValidationError(nestedPath, "required", $"'{nestedPath}' is required."));
             }
         }
 
