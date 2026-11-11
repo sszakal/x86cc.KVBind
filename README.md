@@ -550,6 +550,7 @@ A `SET` value is converted to the declared type of its field (the model property
 
 - lossless numeric conversions are accepted (`42` into a `decimal` field, `7.0` into an `int` field); `1.5` into an `int` field is not;
 - strings are parsed for non-string fields: numbers (`"12.50"`), dates, GUIDs, enum names, and raw JSON for structured fields (`"[1,2,3]"` into an `int[]`);
+- an enum field accepts a member's name or number, and rejects a number that is not a declared member (for a `[Flags]` enum, a combination of declared members is accepted);
 - `JsonElement` values are deserialized to the field type, so a web API can pass the request value through unchanged;
 - text into a number, a number into a string field, or a number into a `bool` is rejected;
 - `null` clears the field.

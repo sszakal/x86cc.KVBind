@@ -18,6 +18,7 @@ public class PatchValueTypeTests : KVModelTestBase
             builder.Field(x => x.Signed);
             builder.Field(x => x.Reference);
             builder.Field(x => x.Kind);
+            builder.Field(x => x.Access);
             builder.Field(x => x.Codes);
             builder.Field(x => x.Status, f => f.AllowedValues("open", "closed"));
         });
@@ -122,6 +123,75 @@ public class PatchValueTypeTests : KVModelTestBase
         root.GetAllChanges().Changes.Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData("1")]
+    [InlineData("exclusive")]
+    public void Set_AcceptsADeclaredEnumMember_ByNumberOrName(object value)
+    {
+        var root = this.CreateRoot<PvtRoot>();
+
+        root.Patch(KVPatchOperation.Set("/Kind", value));
+
+        root.Kind.Should().Be(PvtKind.Exclusive);
+    }
+
+    [Theory]
+    [InlineData(99)]
+    [InlineData("99")]
+    [InlineData(-1)]
+    [InlineData((PvtKind)99)]
+    public void Set_RejectsANumberThatIsNotAnEnumMember(object value)
+    {
+        var root = this.CreateRoot<PvtRoot>();
+
+        var act = () => root.Patch(KVPatchOperation.Set("/Kind", value));
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage($"Value '*' for field 'Kind' is not a member of enum '{typeof(PvtKind).FullName}'.");
+        root.GetAllChanges().Changes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Set_OnAFlagsEnum_AcceptsCombinationsOfDeclaredMembersOnly()
+    {
+        var root = this.CreateRoot<PvtRoot>();
+
+        root.Patch(KVPatchOperation.Set("/Access", 3));
+        root.Access.Should().Be(PvtAccess.Read | PvtAccess.Write);
+
+        var undeclaredBit = () => root.Patch(KVPatchOperation.Set("/Access", 9));
+        var zero = () => root.Patch(KVPatchOperation.Set("/Access", 0));
+
+        undeclaredBit.Should().Throw<InvalidOperationException>().WithMessage("*is not a member of enum*");
+        zero.Should().Throw<InvalidOperationException>().WithMessage("*is not a member of enum*");
+        root.Access.Should().Be(PvtAccess.Read | PvtAccess.Write);
+    }
+
+    [Theory]
+    [InlineData("Read, Write")]
+    [InlineData("read,write")]
+    [InlineData("Write, Read")]
+    public void Set_OnAFlagsEnum_AcceptsCommaSeparatedMemberNames(string value)
+    {
+        var root = this.CreateRoot<PvtRoot>();
+
+        root.Patch(KVPatchOperation.Set("/Access", value));
+
+        root.Access.Should().Be(PvtAccess.Read | PvtAccess.Write);
+    }
+
+    [Fact]
+    public void Set_OnAFlagsEnum_RejectsCommaSeparatedTextWithAnUnknownName()
+    {
+        var root = this.CreateRoot<PvtRoot>();
+
+        var act = () => root.Patch(KVPatchOperation.Set("/Access", "Read, Delete"));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*for field 'Access' cannot be converted to*");
+        root.Access.Should().BeNull();
+    }
+
     [Fact]
     public void Set_Null_ClearsTheFieldWhateverItsType()
     {
@@ -152,10 +222,21 @@ public enum PvtKind
     Exclusive
 }
 
+[Flags]
+public enum PvtAccess
+{
+    Read = 1,
+    Write = 2,
+    Share = 4
+}
+
 public partial class PvtRoot : KVRootNode
 {
     [KVBind("Name")]
     public partial string? Name { get; set; }
+
+    [KVBind("Access")]
+    public partial PvtAccess? Access { get; set; }
 
     [KVBind("Amount")]
     public partial decimal Amount { get; set; }

@@ -18,6 +18,54 @@ internal static class KVPatchValueConverter
     internal static object ConvertToFieldType(object value, Type fieldType, string fieldPath)
     {
         var targetType = Nullable.GetUnderlyingType(fieldType) ?? fieldType;
+        var converted = Convert(value, targetType, fieldPath);
+
+        // JSON accepts any number for an enum; only declared members (or, for [Flags], combinations of
+        // them) are values the model can mean.
+        if (targetType.IsEnum && !IsDeclaredEnumValue(targetType, converted))
+        {
+            throw new InvalidOperationException(
+                $"Value '{System.Convert.ToString(converted, System.Globalization.CultureInfo.InvariantCulture)}' for field '{fieldPath}' is not a member of enum '{targetType.FullName}'.");
+        }
+
+        return converted;
+    }
+
+    private static bool IsDeclaredEnumValue(Type enumType, object value)
+    {
+        if (Enum.IsDefined(enumType, value))
+        {
+            return true;
+        }
+
+        if (!enumType.IsDefined(typeof(FlagsAttribute), inherit: false))
+        {
+            return false;
+        }
+
+        // A flags value is valid when every bit it sets belongs to some declared member.
+        var bits = ToBits(value);
+        var declared = 0UL;
+        foreach (var member in Enum.GetValues(enumType))
+        {
+            declared |= ToBits(member);
+        }
+
+        return bits != 0 && (bits & ~declared) == 0;
+    }
+
+    private static ulong ToBits(object enumValue)
+    {
+        var underlying = System.Convert.ChangeType(enumValue, Enum.GetUnderlyingType(enumValue.GetType()), System.Globalization.CultureInfo.InvariantCulture);
+        return underlying switch
+        {
+            sbyte or short or int or long => unchecked((ulong)System.Convert.ToInt64(underlying, System.Globalization.CultureInfo.InvariantCulture)),
+            _ => System.Convert.ToUInt64(underlying, System.Globalization.CultureInfo.InvariantCulture)
+        };
+    }
+
+    private static object Convert(object value, Type targetType, string fieldPath)
+    {
         if (targetType == typeof(object) || targetType.IsInstanceOfType(value))
         {
             return value;
@@ -29,7 +77,7 @@ internal static class KVPatchValueConverter
         }
         else
         {
-            if (TrySerialize(value, out var json) && TryDeserialize(json, targetType, out var converted)) return converted;
+            if (TrySerialize(value, out var json) && TryDeserialize(json, targetType, out var fromValue)) return fromValue;
 
             // A string may also carry raw JSON for a structured field, e.g. "[1,2]" for an int[].
             if (value is string text && TryDeserialize(text, targetType, out var fromText)) return fromText;
