@@ -98,6 +98,22 @@ public class KVNodeDefinition : KVDefinition
 
     internal List<KVChangeReactionDescriptor> ChangeReactions { get; } = new();
 
+    // Custom patch operations declared on this node with Operation(...): a patch addressed to the node
+    // (root "/", a field group, a collection item, an initialized nested node) invokes the mapped method.
+    internal Dictionary<string, KVPatchOperationDescriptor> PatchOperations { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    // Names (upper case) of the custom patch operations a client may send to this node.
+    public IReadOnlyCollection<string> OperationNames => this.PatchOperations.Keys;
+
+    internal void AddPatchOperation(KVPatchOperationDescriptor operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        if (!this.PatchOperations.TryAdd(operation.Operation, operation))
+        {
+            throw new InvalidOperationException($"Patch operation '{operation.Operation}' is already registered for '{this.SubSegmentPath}'.");
+        }
+    }
+
     // Lookups by SubSegmentPath, replacing allocating O(n) List.Find on warm paths (read, patch resolution,
     // validation, nested-node access). Indexes are lazy and cached; the lists remain authoritative for
     // iteration and declaration order.

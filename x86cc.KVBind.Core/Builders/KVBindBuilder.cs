@@ -281,6 +281,35 @@ public sealed class KVBindBuilder<TEntity>
         this.RegisterValidationRules(builder.Build());
     }
 
+    /// <summary>
+    /// Maps a custom patch operation to a method of this node, so a patch can invoke domain behavior instead
+    /// of writing values: <c>builder.Operation("SUBMIT", x =&gt; x.Submit)</c> lets a client send
+    /// <c>SUBMIT /</c>. The patch path addresses the node the operation is declared on — the root (<c>/</c>),
+    /// a field group, a collection item or an initialized nested node. The name defaults to the method name
+    /// (upper case) and cannot be a built-in operation. A custom operation is application code, so it may
+    /// be sent to — and may change — <c>PatchReadOnly()</c> members.
+    /// </summary>
+    public void Operation(Expression<Func<TEntity, Action>> methodSelector)
+    {
+        this.Operation(KVPatchOperationDescriptor.GetMethodName(methodSelector).ToUpperInvariant(), methodSelector);
+    }
+
+    public void Operation(string operation, Expression<Func<TEntity, Action>> methodSelector)
+    {
+        this.definition.AddPatchOperation(KVPatchOperationDescriptor.CustomNode(operation, methodSelector));
+    }
+
+    // As above, for a method taking one argument: the patch value is converted to TArgument.
+    public void Operation<TArgument>(Expression<Func<TEntity, Action<TArgument>>> methodSelector)
+    {
+        this.Operation(KVPatchOperationDescriptor.GetMethodName(methodSelector).ToUpperInvariant(), methodSelector);
+    }
+
+    public void Operation<TArgument>(string operation, Expression<Func<TEntity, Action<TArgument>>> methodSelector)
+    {
+        this.definition.AddPatchOperation(KVPatchOperationDescriptor.CustomNode(operation, methodSelector));
+    }
+
     public void OnChange(
         Func<KVChangePathBuilder<TEntity>, KVChangePath> path,
         Expression<Func<TEntity, Action<KVChangeContext<TEntity>>>> action)
@@ -308,6 +337,8 @@ public sealed class KVBindBuilder<TEntity>
         definition.NestedNodes.AddRange(source.NestedNodes);
         definition.ValidationRegistrations.AddRange(source.ValidationRegistrations);
         definition.ChangeReactions.AddRange(source.ChangeReactions);
+        foreach (var operation in source.PatchOperations.Values)
+            definition.AddPatchOperation(operation);
         definition.AddAnnotations(source.Annotations);
 
         return definition;

@@ -290,7 +290,7 @@ Field patches inside the items (`SET /Animals/Snake/Name`) are unaffected. A `DI
 
 ### Patch read-only members
 
-`PatchReadOnly()` marks a field, field group, collection or nested node as off-limits to patches: every patch operation that targets the member or anything beneath it is rejected. The member still changes through application code — typed setters, domain methods, migrations — so state that belongs to the aggregate's behavior (a workflow status, approvals, audit data) cannot be written directly by a client.
+`PatchReadOnly()` marks a field, field group, collection or nested node as off-limits to patches: every built-in patch operation that targets the member or anything beneath it is rejected. The member still changes through application code — typed setters, domain methods, migrations — so state that belongs to the aggregate's behavior (a workflow status, approvals, audit data) cannot be written directly by a client.
 
 ```csharp
 builder.Field(x => x.Status, f => f.PatchReadOnly());
@@ -501,6 +501,29 @@ builder.Collection(x => x.LineItems, collection =>
     collection.Item<AgreementLineItem>(item => item.Field(x => x.Amount));
 });
 ```
+
+### Operations on nodes
+
+`Operation(...)` on a node definition maps a custom patch operation to a method of that node, so a client invokes domain behavior instead of writing values. The patch path addresses the node the operation is declared on: the root (`/`), a field group, a collection item, or an initialized nested node (the operation must be declared on its active subtype).
+
+```csharp
+builder.Field(x => x.Status, f => f.PatchReadOnly());
+builder.Operation(x => x.Submit);                                   // SUBMIT /
+builder.Operation<string>("CHOOSE_GRANT", x => x.ChooseGrant);      // CHOOSE_GRANT /  "EXCLUSIVE"
+
+builder.Collection(x => x.Approvals, approvals => approvals
+    .Item<Approval>(item => item.Operation(x => x.Approve))         // APPROVE /Approvals/legal
+    .PatchReadOnly());
+
+agreement.Patch(
+    KVPatchOperation.Custom("CHOOSE_GRANT", "/", "EXCLUSIVE"),
+    KVPatchOperation.Set("/Grant/Territory", "EU"),
+    KVPatchOperation.Custom("SUBMIT", "/"));
+```
+
+The name defaults to the method name in upper case. A method without parameters rejects a patch value; a method with one parameter receives the patch value converted to that type (JSON payloads are deserialized). The same method serves command handlers and patches, so both paths run the same logic, reactions and validation.
+
+Custom operations are application code: they may be sent to — and may change — `PatchReadOnly()` members, and an operation on a collection item is not subject to the collection's `AllowOperations(...)`. That makes `PatchReadOnly()` plus an operation the way to expose a state change only through its domain method. `KVNodeDefinition.OperationNames` lists a node's operations for a UI.
 
 Built-in operation names are reserved and cannot be overridden. A collection can restrict which structural operations clients may apply with `AllowOperations(...)` (see Collections).
 

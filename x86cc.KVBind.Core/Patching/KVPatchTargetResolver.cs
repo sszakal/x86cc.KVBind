@@ -16,6 +16,12 @@ internal static class KVPatchTargetResolver
             return new KVPathPatchTarget { CanonicalPath = string.Join('/', segments) };
         }
 
+        // A custom operation addressed to "/" targets the root aggregate itself.
+        if (segments.Length == 0 && !KVPatchOperations.IsBuiltIn(operation.OperationCode))
+        {
+            return new KVNodePatchTarget { Node = root, Definition = root.Definition, CanonicalPath = string.Empty };
+        }
+
         return Resolve(root, operation, segments, depth: 0, currentCanonicalPath: string.Empty);
     }
 
@@ -53,7 +59,8 @@ internal static class KVPatchTargetResolver
                             ?? throw new InvalidOperationException($"Node segment '{segment}' resolved to null.");
             EnsurePatchable(nodeDefinition, operation, BuildPath(currentCanonicalPath, nodeDefinition.SubSegmentPath));
             if (segments.Length == depth + 1
-                && string.Equals(operation.OperationCode, KVPatchOperations.Reset, StringComparison.OrdinalIgnoreCase))
+                && (string.Equals(operation.OperationCode, KVPatchOperations.Reset, StringComparison.OrdinalIgnoreCase)
+                    || !KVPatchOperations.IsBuiltIn(operation.OperationCode)))
             {
                 return new KVNodePatchTarget
                 {
@@ -140,10 +147,11 @@ internal static class KVPatchTargetResolver
         return Resolve(activeNode, operation, segments, depth + 1, nestedPath);
     }
 
-    // A PatchReadOnly() member rejects every operation that targets it or anything beneath it.
+    // A PatchReadOnly() member rejects every built-in operation that targets it or anything beneath it.
+    // Custom operations are application code registered on the node, so they pass.
     private static void EnsurePatchable(KVDefinition definition, KVPatchOperation operation, string memberPath)
     {
-        if (definition.IsPatchReadOnly)
+        if (definition.IsPatchReadOnly && KVPatchOperations.IsBuiltIn(operation.OperationCode))
             throw KVPatchRuntime.PatchReadOnly(operation, memberPath);
     }
 

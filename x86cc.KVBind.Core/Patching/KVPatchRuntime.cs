@@ -181,7 +181,10 @@ internal sealed class KVPatchOperationRegistry
         var collectionDefinition = target switch
         {
             KVCollectionPatchTarget collectionTarget => collectionTarget.Definition,
-            KVCollectionItemPatchTarget itemTarget => itemTarget.Definition,
+
+            // AllowOperations governs structural operations; a custom operation sent to an item is the
+            // item's own behavior and is not subject to it.
+            KVCollectionItemPatchTarget itemTarget when KVPatchOperations.IsBuiltIn(operation.OperationCode) => itemTarget.Definition,
             _ => null
         };
 
@@ -377,7 +380,26 @@ internal sealed class KVPatchOperationRegistry
             return customOperation;
         }
 
+        if (TryGetTargetNode(target) is { } node
+            && node.Definition.PatchOperations.TryGetValue(operation.OperationCode, out var nodeOperation))
+        {
+            return nodeOperation;
+        }
+
         throw Unsupported(target, operation);
+    }
+
+    // The node a node-level custom operation runs on: the root or a field group, a collection item, or
+    // the active subtype of a nested node slot (null when the slot is not initialized).
+    internal static KVNode? TryGetTargetNode(KVPatchTarget target)
+    {
+        return target switch
+        {
+            KVNodePatchTarget nodeTarget => nodeTarget.Node,
+            KVCollectionItemPatchTarget itemTarget => itemTarget.Item,
+            KVNestedNodePatchTarget nestedTarget => nestedTarget.Owner.GetActiveNestedNode(nestedTarget.Definition, nestedTarget.SlotModel),
+            _ => null
+        };
     }
 
     private static KVPatchTargetKind GetTargetKind(KVPatchTarget target)
@@ -547,6 +569,8 @@ internal sealed class KVPatchOperationDescriptor
     // Payloads usually arrive from web clients: camelCase names, and numbers that may be sent as strings.
     private static readonly JsonSerializerOptions ArgumentJsonOptions = new(JsonSerializerDefaults.Web);
 
+    private const KVPatchTargetKind NodeTargetKinds = KVPatchTargetKind.Node | KVPatchTargetKind.CollectionItem | KVPatchTargetKind.NestedNode;
+
     private readonly Action<KVPatchTarget, KVPatchOperation, KVPatchExecutionContext> invoke;
 
     private KVPatchOperationDescriptor(
@@ -606,8 +630,50 @@ internal sealed class KVPatchOperationDescriptor
             });
     }
 
-    internal static string GetMethodName<TParent, TArgument>(Expression<Func<TParent, Action<TArgument>>> methodSelector)
-        where TParent : KVNode
+    // A custom operation declared on a node (KVBindBuilder.Operation): the patch targets the node itself.
+    internal static KVPatchOperationDescriptor CustomNode<TNode, TArgument>(string operation, Expression<Func<TNode, Action<TArgument>>> methodSelector)
+        where TNode : KVNode
+    {
+        KVPatchOperationRegistry.EnsureCustomOperation(operation);
+        ArgumentNullException.ThrowIfNull(methodSelector);
+        _ = GetMethod(methodSelector);
+
+        var selector = methodSelector.Compile();
+        return new KVPatchOperationDescriptor(
+            operation.ToUpperInvariant(),
+            NodeTargetKinds,
+            typeof(TArgument),
+            (target, patchOperation, context) =>
+            {
+                var argument = CoerceArgument(patchOperation.Value, typeof(TArgument), patchOperation.OperationCode, patchOperation.Path);
+                selector((TNode)KVPatchOperationRegistry.TryGetTargetNode(target)!)((TArgument)argument!);
+            });
+    }
+
+    internal static KVPatchOperationDescriptor CustomNode<TNode>(string operation, Expression<Func<TNode, Action>> methodSelector)
+        where TNode : KVNode
+    {
+        KVPatchOperationRegistry.EnsureCustomOperation(operation);
+        ArgumentNullException.ThrowIfNull(methodSelector);
+        _ = GetMethod(methodSelector);
+
+        var selector = methodSelector.Compile();
+        return new KVPatchOperationDescriptor(
+            operation.ToUpperInvariant(),
+            NodeTargetKinds,
+            typeof(void),
+            (target, patchOperation, context) =>
+            {
+                if (patchOperation.Value is not null)
+                {
+                    throw new InvalidOperationException($"Patch operation '{patchOperation.OperationCode}' for '{patchOperation.Path}' does not accept a value.");
+                }
+
+                selector((TNode)KVPatchOperationRegistry.TryGetTargetNode(target)!)();
+            });
+    }
+
+    internal static string GetMethodName(LambdaExpression methodSelector)
     {
         ArgumentNullException.ThrowIfNull(methodSelector);
         return GetMethod(methodSelector).Name;
@@ -618,8 +684,7 @@ internal sealed class KVPatchOperationDescriptor
         this.invoke(target, operation, context);
     }
 
-    private static MethodInfo GetMethod<TParent, TArgument>(Expression<Func<TParent, Action<TArgument>>> methodSelector)
-        where TParent : KVNode
+    private static MethodInfo GetMethod(LambdaExpression methodSelector)
     {
         Expression body = methodSelector.Body;
         if (body is UnaryExpression unaryExpression && unaryExpression.NodeType == ExpressionType.Convert)
