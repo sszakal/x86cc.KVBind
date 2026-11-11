@@ -492,6 +492,18 @@ Built-in operations:
 - `DISCARD` discards draft changes at a path.
 - `RESET` replaces a collection item, nested node or resettable field group with fresh data and its defaults, in place.
 
+#### Value types
+
+A `SET` value is converted to the declared type of its field (the model property's type, exposed as `KVFieldDefinition.ValueType`) before it is stored, so a patch can never leave a value the typed property cannot read. A value that does not fit is rejected and nothing is written:
+
+- lossless numeric conversions are accepted (`42` into a `decimal` field, `7.0` into an `int` field); `1.5` into an `int` field is not;
+- strings are parsed for non-string fields: numbers (`"12.50"`), dates, GUIDs, enum names, and raw JSON for structured fields (`"[1,2,3]"` into an `int[]`);
+- `JsonElement` values are deserialized to the field type, so a web API can pass the request value through unchanged;
+- text into a number, a number into a string field, or a number into a `bool` is rejected;
+- `null` clears the field.
+
+Fields with allowed values keep their own rule: an unknown token is stored so validation can report `allowed_values`.
+
 Custom collection operations can be registered on collection definitions:
 
 ```csharp

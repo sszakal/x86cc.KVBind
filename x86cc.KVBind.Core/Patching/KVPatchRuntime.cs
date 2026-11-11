@@ -443,6 +443,10 @@ internal sealed class KVPatchOperationRegistry
                 throw new InvalidOperationException($"Value for field '{fieldTarget.CanonicalPath}' is not part of configured allowed values.");
             }
         }
+        else if (value is not null)
+        {
+            value = KVPatchValueConverter.ConvertToFieldType(value, fieldTarget.Definition.ValueType, fieldTarget.CanonicalPath);
+        }
 
         fieldTarget.Node.SetFieldForPatch(fieldTarget.FieldKey, value);
     }

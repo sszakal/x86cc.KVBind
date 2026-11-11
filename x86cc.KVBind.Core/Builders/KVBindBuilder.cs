@@ -74,6 +74,7 @@ public sealed class KVBindBuilder<TEntity>
         {
             SubSegmentPath = propertyName,
             IsRequired = options.IsRequired,
+            ValueType = typeof(TValue),
             IsInherited = options.IsInherited,
             IsPatchReadOnly = options.IsPatchReadOnly,
             AllowedValues = options.AllowedValuesDefinition,
