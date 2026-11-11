@@ -113,6 +113,9 @@ public abstract partial class KVNode
         KVNestedNode.SetItemType(nestedModel, typeDefinition.TypeToken);
         value.BindRuntime(nestedModel, typeDefinition.NodeDefinition, this);
         (this.activeNestedNodes ??= new(StringComparer.Ordinal))[nestedNodeKey] = new ActiveNestedNode(value, typeDefinition.TypeToken, nestedModel);
+
+        // The slot was cleared above, so this is a newly born node: apply its declared defaults, as INIT does.
+        value.ApplyDefaultsRecursive();
         this.EmitNestedNodeChange(nestedNodeKey, oldTypeToken, value);
     }
 

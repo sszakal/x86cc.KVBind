@@ -313,7 +313,7 @@ Fields declare defaults with `f.Default(value)`, nested nodes with `DefaultType<
 
 - `KVRootNode.CreateNew(...)` applies defaults across the whole new aggregate.
 - Creating a collection item — in code or with an `ADD` patch — applies that item's defaults, including its default nested types and seeded sub-collections.
-- An `INIT` patch applies the defaults of the newly initialized nested node.
+- An `INIT` patch, or assigning a nested node in code (`Party = new Person()`), applies the defaults of the newly initialized nested node before change reactions run.
 
 Binding an existing aggregate with `KVRootNode.Create(...)`, editing it, merging or rebasing never applies defaults, so previous changes are never overwritten.
 

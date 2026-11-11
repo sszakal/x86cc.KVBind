@@ -88,6 +88,37 @@ public class StructuralChangeReactionTests : KVModelTestBase
     }
 
     [Fact]
+    public void NestedNodeSetter_InCode_AppliesDefaultsBeforeNotifying_LikeInit()
+    {
+        var root = this.CreateRoot<ScrRoot>();
+
+        root.ChoosePerson();
+
+        ((ScrPerson)root.Party!).Name.Should().Be("anonymous");
+        root.Log.Should().Equal("Party:Added:<null>->ScrPerson(anonymous)");
+    }
+
+    [Fact]
+    public void NestedNodeSetter_InCode_ReappliesDefaults_WhenTheSameTypeIsAssignedAgain()
+    {
+        var root = this.CreateRoot<ScrRoot>();
+        root.ChoosePerson();
+        ((ScrPerson)root.Party!).Name = "Ann";
+
+        root.ChoosePerson();
+
+        ((ScrPerson)root.Party!).Name.Should().Be("anonymous");
+    }
+
+    [Fact]
+    public void NestedNodeSetter_InCode_RejectsValuesSetBeforeTheNodeIsAssigned()
+    {
+        var act = () => new ScrPerson { Name = "Ann" };
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
     public void DefaultNestedType_NotifiesWhenTheAggregateIsBorn()
     {
         var root = this.CreateRoot<ScrDefaultedRoot>();
@@ -169,6 +200,8 @@ public partial class ScrRoot : ScrTrackingRoot
     public KVCollectionNode<ScrItem> Items { get; } = new();
 
     public void ChooseCompany() => this.Party = new ScrCompany();
+
+    public void ChoosePerson() => this.Party = new ScrPerson();
 
     public void ClearParty() => this.Party = null;
 
