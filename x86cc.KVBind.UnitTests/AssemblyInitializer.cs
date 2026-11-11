@@ -29,7 +29,8 @@ internal static class AssemblyInitializer
                         typeof(KVNode).IsAssignableFrom(property.DeclaringType)
                                       && property.Name is nameof(KVNode.Parent)
                                           or nameof(KVNode.Model)
-                                          or nameof(KVNode.Definition),
+                                          or nameof(KVNode.Definition)
+                                          or nameof(KVRootNode.PendingEvents),
                     new HumanReadableIgnoreAttribute());
 
                 settings.AddPropertyAttribute(

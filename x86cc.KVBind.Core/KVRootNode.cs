@@ -6,7 +6,15 @@ namespace x86cc.KVBind.Core;
 
 public abstract class KVRootNode : KVNode
 {
+    private readonly List<object> pendingEvents = [];
+
     internal KVReactionExecutionState ReactionExecutionState { get; } = new();
+
+    /// <summary>
+    /// Domain events raised (with <c>Raise(...)</c>) on this aggregate or any node beneath it since it was
+    /// bound or last dequeued, in the order raised.
+    /// </summary>
+    public IReadOnlyList<object> PendingEvents => this.pendingEvents;
 
     public static TSelf Create<TSelf>(KVModelRoot model, KVNodeDefinition definition)
         where TSelf : KVRootNode, new()
@@ -82,11 +90,28 @@ public abstract class KVRootNode : KVNode
     // (fill-blanks-only); CreateNew calls it for you.
     public void ApplyDefaults() => this.ApplyDefaultsRecursive();
 
+    /// <summary>
+    /// Returns the pending domain events and empties the list. Call it when the work that raised them is
+    /// persisted — after <see cref="CreateCommit"/>, or after saving a draft that stays open — and publish
+    /// or store the result; events live only on this bound instance.
+    /// </summary>
+    public IReadOnlyList<object> DequeueEvents()
+    {
+        var events = this.pendingEvents.ToArray();
+        this.pendingEvents.Clear();
+        return events;
+    }
+
+    internal void AddPendingEvent(object domainEvent) => this.pendingEvents.Add(domainEvent);
+
+    // Drops all draft changes, and with them the pending domain events they produced (including any a
+    // reaction raises while derived values are recomputed: nothing is left to announce).
     public void Clear()
     {
         this.Model.Overlay.Clear();
         this.Bind(this.Model, this.Definition);
         this.NotifyReplaced();
+        this.pendingEvents.Clear();
     }
 
     // Severs the parent link, copying the inherited values into the draft so they become this aggregate's

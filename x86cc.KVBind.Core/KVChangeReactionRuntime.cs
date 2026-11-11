@@ -162,7 +162,7 @@ internal static class KVChangeReactionRuntime
         }
     }
 
-    private static KVRootNode ResolveRoot(KVNode source)
+    internal static KVRootNode ResolveRoot(KVNode source)
     {
         KVNode? current = source;
         while (current is not null)
@@ -175,7 +175,7 @@ internal static class KVChangeReactionRuntime
             current = ParentNode(current);
         }
 
-        throw new InvalidOperationException("Change reactions require a bound root node.");
+        throw new InvalidOperationException($"'{source.GetType().Name}' is not bound under a root aggregate.");
     }
 }
 
