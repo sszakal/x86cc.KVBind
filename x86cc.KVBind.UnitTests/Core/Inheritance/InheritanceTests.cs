@@ -405,7 +405,7 @@ public class InheritanceTests
     // ── Rebase × inheritance ──────────────────────────────────────────────────────────────────────
 
     private static bool IsInheritedPath(string path) =>
-        path == "MasterTerms" || path.StartsWith("Header") || path.StartsWith("Parties") || path.StartsWith("Signatory");
+        path == "MasterTerms" || path.StartsWith("Header", StringComparison.Ordinal) || path.StartsWith("Parties", StringComparison.Ordinal) || path.StartsWith("Signatory", StringComparison.Ordinal);
 
     // A child overlay over a marked base (committed non-inherited data, no inherited data) with inheritance set.
     private static (KVOverlay Overlay, KVSnapshot Base) ChildOverlayForRebase(KVNodeDefinition definition, KVSnapshot parent)

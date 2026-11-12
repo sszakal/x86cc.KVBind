@@ -60,6 +60,25 @@ dotnet_diagnostic.SA1402.severity = none
 # SA0001: XML comment analysis is disabled (documentation rules are off)
 dotnet_diagnostic.SA0001.severity = none
 
+# Meziantou.Analyzer
+# MA0048: File name must match type name (several types per file are intentional)
+dotnet_diagnostic.MA0048.severity = none
+
+# MA0051: Method is too long
+dotnet_diagnostic.MA0051.severity = none
+
+# MA0006: Use string.Equals instead of the Equals operator (== on strings is already ordinal)
+dotnet_diagnostic.MA0006.severity = none
+
+# MA0004: ConfigureAwait(false) is not wanted in ASP.NET Core, test, or sample code
+dotnet_diagnostic.MA0004.severity = none
+
+# MA0016: Prefer collection abstractions (public definition APIs expose concrete lists; changing them is breaking)
+dotnet_diagnostic.MA0016.severity = none
+
+# MA0169: Use Equals instead of ==/!= (== against KVValue.Tombstone is an intentional reference check)
+dotnet_diagnostic.MA0169.severity = none
+
 [x86cc.KVBind.UnitTests/**.cs]
 # SA1118: Parameter should not span multiple lines (InlineSnapshot.Validate rewrites its raw-string argument in place)
 dotnet_diagnostic.SA1118.severity = none

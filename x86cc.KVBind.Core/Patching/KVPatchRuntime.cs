@@ -12,6 +12,7 @@ namespace x86cc.KVBind.Core;
 [Flags]
 internal enum KVPatchTargetKind
 {
+    None = 0,
     Path = 1,
     Field = 2,
     Collection = 4,
@@ -35,7 +36,7 @@ internal static class KVPatchRuntime
 
         foreach (var operation in operations)
         {
-            ArgumentNullException.ThrowIfNull(operation);
+            ArgumentNullException.ThrowIfNull(operation, nameof(operations));
             var target = KVPatchTargetResolver.Resolve(root, operation);
             registry.Apply(target, operation, context);
         }
@@ -167,7 +168,7 @@ internal sealed class KVPatchOperationRegistry
     {
         var descriptor = Resolve(target, operation);
         var targetKind = GetTargetKind(target);
-        if ((descriptor.TargetKind & targetKind) == 0)
+        if ((descriptor.TargetKind & targetKind) == KVPatchTargetKind.None)
         {
             throw Unsupported(target, operation);
         }

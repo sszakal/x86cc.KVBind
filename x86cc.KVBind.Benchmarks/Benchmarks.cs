@@ -64,16 +64,16 @@ public class SetBenchmark
     [Benchmark(Baseline = true)]
     public void Native()
     {
-        var seed = ++this.seed;
+        var nextSeed = ++this.seed;
         foreach (var component in this.native.GetAllComponents())
-            GraphFactory.Fill(component, seed);
+            GraphFactory.Fill(component, nextSeed);
     }
 
     [Benchmark]
     public void KvBind()
     {
-        var seed = ++this.seed;
+        var nextSeed = ++this.seed;
         foreach (var component in this.kvBind.GetAllComponents())
-            GraphFactory.Fill(component, seed);
+            GraphFactory.Fill(component, nextSeed);
     }
 }

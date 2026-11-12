@@ -131,7 +131,7 @@ public sealed class KVCollectionOptionsBuilder<TParent, TModel>
         this.allowedOperations ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var operation in operations)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(operation);
+            ArgumentException.ThrowIfNullOrWhiteSpace(operation, nameof(operations));
             this.allowedOperations.Add(operation.ToUpperInvariant());
         }
 

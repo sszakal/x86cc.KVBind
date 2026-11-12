@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using x86cc.KVBind.Core;
 using x86cc.KVBind.Core.Model;
@@ -126,7 +127,7 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         }
 
         var commitRoot = Bind(reloadedOverlay.ToOverlay());
-        var commit = commitRoot.CreateCommit(DateTimeOffset.Parse("2026-06-03T08:15:00+00:00"));
+        var commit = commitRoot.CreateCommit(DateTimeOffset.Parse("2026-06-03T08:15:00+00:00", CultureInfo.InvariantCulture));
         commit.User = "adjuster-a";
         snapshot.Apply(commit);
 
@@ -331,7 +332,7 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         person.CompensationHistory = [IntegrationCompensationType.Assistant, IntegrationCompensationType.Manager];
         person.CompensationList = [IntegrationCompensationType.Manager, IntegrationCompensationType.Assistant];
 
-        var commit = root.CreateCommit(DateTimeOffset.Parse("2026-06-03T07:00:00+00:00"));
+        var commit = root.CreateCommit(DateTimeOffset.Parse("2026-06-03T07:00:00+00:00", CultureInfo.InvariantCulture));
         commit.User = "creator";
         snapshot.Apply(commit);
         return snapshot;

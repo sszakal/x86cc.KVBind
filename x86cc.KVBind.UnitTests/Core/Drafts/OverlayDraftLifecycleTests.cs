@@ -137,8 +137,8 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
 
         InlineSnapshot.Validate(
             model.Snapshot.Data
-            .Where(pair => !pair.Key.Contains("/$") && !pair.Key.StartsWith("$", StringComparison.Ordinal))
-            .ToDictionary(pair => pair.Key, pair => pair.Value.Value),
+            .Where(pair => !pair.Key.Contains("/$", StringComparison.Ordinal) && !pair.Key.StartsWith("$", StringComparison.Ordinal))
+            .ToDictionary(pair => pair.Key, pair => pair.Value.Value, StringComparer.Ordinal),
             """
             Title: applied
             Status: 13

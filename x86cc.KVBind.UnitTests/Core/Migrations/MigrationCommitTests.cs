@@ -26,7 +26,7 @@ public class MigrationCommitTests
                 .Prepare((subset, _) =>
                 {
                     prepareV2Subsets.Add(subset.Select(s => (string)s.Key).ToArray());
-                    var data = subset.ToDictionary(s => (string)s.Key, s => (object?)((string)s.Key + "-amount"));
+                    var data = subset.ToDictionary(s => (string)s.Key, s => (object?)((string)s.Key + "-amount"), StringComparer.Ordinal);
                     return Task.FromResult<object?>(data);
                 })
                 .Backfill(

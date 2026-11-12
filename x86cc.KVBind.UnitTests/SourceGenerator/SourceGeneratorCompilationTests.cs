@@ -2,7 +2,7 @@ using System.Collections.Immutable;
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using KVBindSourceGenerator = x86cc.KVBind.SourceGenerator.SourceGenerator;
+using KVBindSourceGenerator = x86cc.KVBind.SourceGenerator.KVBindSourceGenerator;
 
 namespace x86cc.KVBind.UnitTests.SourceGenerator;
 

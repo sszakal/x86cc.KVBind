@@ -14,7 +14,8 @@ public sealed class KVValueJsonConverter : JsonConverter<KVValue>
     // "System.String, System.Private.CoreLib" is sufficient for Type.GetType() to resolve correctly.
     private static readonly Regex VersionSuffix = new(
         @", Version=[^,\[\]]+, Culture=[^,\[\]]+, PublicKeyToken=[^,\[\]]+",
-        RegexOptions.Compiled);
+        RegexOptions.Compiled,
+        TimeSpan.FromSeconds(1));
 
     public override KVValue Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {

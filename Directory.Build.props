@@ -1,5 +1,6 @@
 <Project>
   <ItemGroup>
+    <PackageReference Include="Meziantou.Analyzer" Version="3.0.326" PrivateAssets="all" />
     <PackageReference Include="Roslynator.Analyzers" Version="5.0.0" PrivateAssets="all" />
     <PackageReference Include="Roslynator.Refactorings" Version="5.0.0" PrivateAssets="all" />
     <PackageReference Include="SonarAnalyzer.CSharp" Version="10.34.0.3385" PrivateAssets="all" />

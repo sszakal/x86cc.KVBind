@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using AwesomeAssertions;
 using Meziantou.Framework.InlineSnapshotTesting;
@@ -13,6 +14,7 @@ public enum FieldEnum
     Third
 }
 
+[StructLayout(LayoutKind.Auto)]
 public struct StructTestModel
 {
     public uint UnsignedIntField { get; set; }

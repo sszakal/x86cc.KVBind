@@ -6,7 +6,7 @@ namespace x86cc.KVBind.Core;
 public class KVDefinition
 {
     private static readonly IReadOnlyDictionary<string, object?> EmptyAnnotations =
-        new Dictionary<string, object?>();
+        new Dictionary<string, object?>(StringComparer.Ordinal);
 
     private Dictionary<string, object?>? annotations;
 

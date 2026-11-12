@@ -76,7 +76,7 @@ public class KVNodeDefinition : KVDefinition
         }
     }
 
-    public Func<KVNode, KVNode> GetChildNode { get; init; } = _ => throw new NotImplementedException();
+    public Func<KVNode, KVNode> GetChildNode { get; init; } = _ => throw new NotSupportedException("GetChildNode is not configured.");
 
     // Migrations sorted ascending by ToVersion, materialized once and cached (definitions are built then
     // reused, like the field indexes above). Lets the migrator binary-search to the pending tail instead of

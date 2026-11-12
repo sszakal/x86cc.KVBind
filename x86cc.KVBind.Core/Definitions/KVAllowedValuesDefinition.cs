@@ -51,8 +51,8 @@ internal sealed class KVAllowedValuesDefinition
     {
         ArgumentNullException.ThrowIfNull(values);
 
-        var entriesById = new Dictionary<string, KVExplicitAllowedValue>(StringComparer.Ordinal);
-        var entriesByValue = new Dictionary<object, KVExplicitAllowedValue>();
+        var byId = new Dictionary<string, KVExplicitAllowedValue>(StringComparer.Ordinal);
+        var byValue = new Dictionary<object, KVExplicitAllowedValue>();
         foreach (var entry in values)
         {
             if (string.IsNullOrWhiteSpace(entry.Id))
@@ -65,17 +65,17 @@ internal sealed class KVAllowedValuesDefinition
                 .Select(static g => g.First())
                 .ToArray();
             var normalizedEntry = entry with { Placeholders = placeholders };
-            entriesById[entry.Id] = normalizedEntry;
+            byId[entry.Id] = normalizedEntry;
             if (entry.Value is not null)
             {
-                entriesByValue[entry.Value] = normalizedEntry;
+                byValue[entry.Value] = normalizedEntry;
             }
         }
 
         return new KVAllowedValuesDefinition(
             isAllowed: value => value is string id
-                ? entriesById.ContainsKey(id)
-                : value is not null && entriesByValue.ContainsKey(value),
+                ? byId.ContainsKey(id)
+                : value is not null && byValue.ContainsKey(value),
             normalizeForStorage: value =>
             {
                 if (value is null)
@@ -85,7 +85,7 @@ internal sealed class KVAllowedValuesDefinition
 
                 if (value is string id)
                 {
-                    if (entriesById.TryGetValue(id, out _))
+                    if (byId.TryGetValue(id, out _))
                     {
                         return id;
                     }
@@ -93,7 +93,7 @@ internal sealed class KVAllowedValuesDefinition
                     throw new InvalidOperationException("Stored value token is not part of allowed values.");
                 }
 
-                if (entriesByValue.TryGetValue(value, out var entry))
+                if (byValue.TryGetValue(value, out var entry))
                 {
                     return entry.Id;
                 }
@@ -107,15 +107,15 @@ internal sealed class KVAllowedValuesDefinition
                     return null;
                 }
 
-                if (value is string id && entriesById.TryGetValue(id, out var entry))
+                if (value is string id && byId.TryGetValue(id, out var entry))
                 {
                     return entry.Value;
                 }
 
                 throw new InvalidOperationException("Stored value token is not part of allowed values.");
             },
-            entriesById,
-            entriesByValue);
+            byId,
+            byValue);
     }
 
     public static KVAllowedValuesDefinition Create<TValue, TToken>(
@@ -190,8 +190,8 @@ internal sealed class KVAllowedValuesDefinition
     {
         ArgumentNullException.ThrowIfNull(values);
 
-        var entriesById = new Dictionary<string, KVExplicitAllowedValue>(StringComparer.Ordinal);
-        var entriesByValue = new Dictionary<object, KVExplicitAllowedValue>();
+        var byId = new Dictionary<string, KVExplicitAllowedValue>(StringComparer.Ordinal);
+        var byValue = new Dictionary<object, KVExplicitAllowedValue>();
         foreach (var entry in values)
         {
             if (string.IsNullOrWhiteSpace(entry.Id))
@@ -204,30 +204,30 @@ internal sealed class KVAllowedValuesDefinition
                 .Select(static g => g.First())
                 .ToArray();
             var normalizedEntry = entry with { Placeholders = placeholders };
-            entriesById[entry.Id] = normalizedEntry;
+            byId[entry.Id] = normalizedEntry;
             if (entry.Value is not null)
             {
-                entriesByValue[entry.Value] = normalizedEntry;
+                byValue[entry.Value] = normalizedEntry;
             }
         }
 
         return new KVAllowedValuesDefinition(
             isAllowed: value => TryReadSequence(value, out var items) && items.All(IsAllowedItem),
             normalizeForStorage: value => NormalizeSequence<string>(value, IsAllowedItem, NormalizeItem),
-            denormalizeFromStorage: value => DenormalizeSequence(value, entriesById.ToDictionary(pair => pair.Key, pair => (TElement)pair.Value.Value, StringComparer.Ordinal)));
+            denormalizeFromStorage: value => DenormalizeSequence(value, byId.ToDictionary(pair => pair.Key, pair => (TElement)pair.Value.Value, StringComparer.Ordinal)));
 
         bool IsAllowedItem(object? value)
         {
             return value is string id
-                ? entriesById.ContainsKey(id)
-                : value is not null && entriesByValue.ContainsKey(value);
+                ? byId.ContainsKey(id)
+                : value is not null && byValue.ContainsKey(value);
         }
 
         string NormalizeItem(object? value)
         {
             if (value is string id)
             {
-                if (entriesById.TryGetValue(id, out _))
+                if (byId.TryGetValue(id, out _))
                 {
                     return id;
                 }
@@ -235,7 +235,7 @@ internal sealed class KVAllowedValuesDefinition
                 throw new InvalidOperationException("Stored value token is not part of allowed values.");
             }
 
-            if (value is not null && entriesByValue.TryGetValue(value, out var entry))
+            if (value is not null && byValue.TryGetValue(value, out var entry))
             {
                 return entry.Id;
             }

@@ -3,6 +3,8 @@ using Meziantou.Framework.InlineSnapshotTesting;
 using Meziantou.Framework.InlineSnapshotTesting.Serialization;
 using x86cc.KVBind.Core;
 
+namespace x86cc.KVBind.UnitTests;
+
 internal static class AssemblyInitializer
 {
     [System.Runtime.CompilerServices.ModuleInitializer]

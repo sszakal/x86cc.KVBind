@@ -28,8 +28,8 @@ public sealed class InsuranceClaimAggregateService(
 
     public async Task<ClaimSnapshotResponse> CreateClaimAsync(CreateClaimRequest request, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.ClaimNumber);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.User);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.ClaimNumber, nameof(request));
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.User, nameof(request));
 
         // Identity is the consumer's responsibility now — KVBind constructs no longer carry an aggregate id.
         var claimId = Guid.NewGuid();
@@ -103,7 +103,7 @@ public sealed class InsuranceClaimAggregateService(
 
     public async Task<ClaimDraftResponse?> OpenDraftAsync(Guid claimId, OpenClaimDraftRequest request, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.User);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.User, nameof(request));
 
         var snapshotDocument = await session.LoadAsync<ClaimSnapshotDocument>(claimId, cancellationToken);
         if (snapshotDocument is null)
@@ -797,8 +797,8 @@ public sealed class InsuranceClaimAggregateService(
 
     private static KVPatchOperation ToPatchOperation(ClaimPatchOperationRequest request)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.OperationCode);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.Path);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.OperationCode, nameof(request));
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.Path, nameof(request));
 
         var operation = request.OperationCode.ToUpperInvariant();
         return operation switch

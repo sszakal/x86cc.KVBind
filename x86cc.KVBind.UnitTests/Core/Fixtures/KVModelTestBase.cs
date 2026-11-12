@@ -23,8 +23,8 @@ public abstract class KVModelTestBase
     protected TKVRootNode CreateRoot<TKVRootNode>(KVModelRoot? model = null)
         where TKVRootNode : KVRootNode, new()
     {
-        var registry = this.CreateRegistry();
-        var definition = registry.Get<TKVRootNode>();
+        var modelRegistry = this.CreateRegistry();
+        var definition = modelRegistry.Get<TKVRootNode>();
         return KVRootNode.Create<TKVRootNode>(model ?? new KVModelRoot(KVOverlay.Create(new KVSnapshot(), TestUser)), definition);
     }
 
@@ -38,8 +38,8 @@ public abstract class KVModelTestBase
     protected TKVRootNode BindRoot<TKVRootNode>(TKVRootNode root, KVModelRoot model)
         where TKVRootNode : KVRootNode
     {
-        var registry = this.CreateRegistry();
-        var definition = registry.Get<TKVRootNode>();
+        var modelRegistry = this.CreateRegistry();
+        var definition = modelRegistry.Get<TKVRootNode>();
         root.BindRuntime(model, definition);
         return root;
     }

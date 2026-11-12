@@ -6,7 +6,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace x86cc.KVBind.SourceGenerator;
 
 [Generator]
-public sealed class SourceGenerator : IIncrementalGenerator
+public sealed class KVBindSourceGenerator : IIncrementalGenerator
 {
     private const string KvBindAttributeFqn = "x86cc.KVBind.Core.KVBindAttribute";
     private const string KvCoreNamespace = "x86cc.KVBind.Core";
@@ -545,7 +545,7 @@ public sealed class SourceGenerator : IIncrementalGenerator
             unchecked
             {
                 var hash = 17;
-                hash = (hash * 31) + (span.Path?.GetHashCode() ?? 0);
+                hash = (hash * 31) + (span.Path is null ? 0 : StringComparer.Ordinal.GetHashCode(span.Path));
                 hash = (hash * 31) + span.Span.Start.Line;
                 hash = (hash * 31) + span.Span.Start.Character;
                 return hash;

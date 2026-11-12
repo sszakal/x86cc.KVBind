@@ -42,7 +42,7 @@ public class KVCollectionDefinition : KVDefinition
     // Structural patch operations (ADD/REMOVE/MOVE/custom) clients may apply. Null = unrestricted.
     public IReadOnlySet<string>? AllowedOperations { get; internal set; }
 
-    public Func<KVNode, IKVCollectionNode> GetCollection { get; init; } = _ => throw new NotImplementedException();
+    public Func<KVNode, IKVCollectionNode> GetCollection { get; init; } = _ => throw new NotSupportedException("GetCollection is not configured.");
 
     // Seeds initial items into a fresh, empty collection (ApplyDefaults). Null = default to empty.
     internal Action<IKVCollectionNode>? DefaultSeed { get; set; }

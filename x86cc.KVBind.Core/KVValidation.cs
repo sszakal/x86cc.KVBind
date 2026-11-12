@@ -55,15 +55,15 @@ public sealed class KVFieldValidationProfileBuilder<TValue> : IKVFieldValidation
     {
         ArgumentNullException.ThrowIfNull(configure);
 
-        var rules = new KVFieldValueRuleBuilder<TValue>();
-        configure(rules);
+        var ruleBuilder = new KVFieldValueRuleBuilder<TValue>();
+        configure(ruleBuilder);
         this.rules.Add(new KVCompiledValidationRule(
             current => current is TProfile,
             (node, path, currentCanonicalPath, errors) =>
             {
                 var storagePath = node.ResolveStoragePathForCanonicalPath(path, currentCanonicalPath);
                 var value = node.Model.Get<object?>(storagePath);
-                rules.Evaluate(path, value, errors);
+                ruleBuilder.Evaluate(path, value, errors);
             }));
         return this;
     }
@@ -147,11 +147,11 @@ public sealed class IkvCollectionValidationProfileBuilder<TModel> : IKVCollectio
     {
         ArgumentNullException.ThrowIfNull(configure);
 
-        var rules = new KVCollectionRuleBuilder<TModel>();
-        configure(rules);
+        var ruleBuilder = new KVCollectionRuleBuilder<TModel>();
+        configure(ruleBuilder);
         this.rules.Add(new KVCompiledValidationRule(
             current => current is TProfile,
-            (node, path, currentCanonicalPath, errors) => rules.Evaluate(path, node, currentCanonicalPath, errors)));
+            (node, path, currentCanonicalPath, errors) => ruleBuilder.Evaluate(path, node, currentCanonicalPath, errors)));
         return this;
     }
 
@@ -337,11 +337,11 @@ public sealed class KVGroupValidationProfileBuilder<TNode>
     {
         ArgumentNullException.ThrowIfNull(configure);
 
-        var rules = new KVGroupRuleBuilder<TNode>(this.resolveFieldKey);
-        configure(rules);
+        var ruleBuilder = new KVGroupRuleBuilder<TNode>(this.resolveFieldKey);
+        configure(ruleBuilder);
         this.rules.Add(new KVCompiledValidationRule(
             current => current is TProfile,
-            (node, _, currentCanonicalPath, errors) => rules.Evaluate(node, currentCanonicalPath, errors)));
+            (node, _, currentCanonicalPath, errors) => ruleBuilder.Evaluate(node, currentCanonicalPath, errors)));
         return this;
     }
 

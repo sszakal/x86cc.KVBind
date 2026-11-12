@@ -327,24 +327,24 @@ public sealed class KVBindBuilder<TEntity>
 
     private static KVNodeDefinition RehomeFieldGroup(KVNodeDefinition source, string subSegmentPath, Func<KVNode, KVNode> getChildNode)
     {
-        var definition = new KVNodeDefinition
+        var rehomed = new KVNodeDefinition
         {
             SubSegmentPath = subSegmentPath,
             GetChildNode = getChildNode
         };
 
         // Child definitions are immutable at bind time, so they can be shared by reference.
-        definition.Fields.AddRange(source.Fields);
-        definition.Nodes.AddRange(source.Nodes);
-        definition.Collections.AddRange(source.Collections);
-        definition.NestedNodes.AddRange(source.NestedNodes);
-        definition.ValidationRegistrations.AddRange(source.ValidationRegistrations);
-        definition.ChangeReactions.AddRange(source.ChangeReactions);
+        rehomed.Fields.AddRange(source.Fields);
+        rehomed.Nodes.AddRange(source.Nodes);
+        rehomed.Collections.AddRange(source.Collections);
+        rehomed.NestedNodes.AddRange(source.NestedNodes);
+        rehomed.ValidationRegistrations.AddRange(source.ValidationRegistrations);
+        rehomed.ChangeReactions.AddRange(source.ChangeReactions);
         foreach (var operation in source.PatchOperations.Values)
-            definition.AddPatchOperation(operation);
-        definition.AddAnnotations(source.Annotations);
+            rehomed.AddPatchOperation(operation);
+        rehomed.AddAnnotations(source.Annotations);
 
-        return definition;
+        return rehomed;
     }
 
     private static string ResolveSelectorKey(LambdaExpression selector)

@@ -62,33 +62,33 @@ public sealed class KVChangePathBuilder<TNode>
         where TItem : KVCollectionItemNode, new()
     {
         ArgumentNullException.ThrowIfNull(selector);
-        var segments = new List<string>(this.segments)
+        var pathSegments = new List<string>(this.segments)
         {
             this.resolveSelectorKey(selector),
             "*"
         };
-        return new KVChangePathBuilder<TItem>(segments, this.resolveSelectorKey);
+        return new KVChangePathBuilder<TItem>(pathSegments, this.resolveSelectorKey);
     }
 
     public KVChangePathBuilder<TNested> NestedNode<TNested>(Expression<Func<TNode, TNested?>> selector)
         where TNested : KVNestedNode
     {
         ArgumentNullException.ThrowIfNull(selector);
-        var segments = new List<string>(this.segments)
+        var pathSegments = new List<string>(this.segments)
         {
             this.resolveSelectorKey(selector)
         };
-        return new KVChangePathBuilder<TNested>(segments, this.resolveSelectorKey);
+        return new KVChangePathBuilder<TNested>(pathSegments, this.resolveSelectorKey);
     }
 
     public KVChangePath Field<TValue>(Expression<Func<TNode, TValue>> selector)
     {
         ArgumentNullException.ThrowIfNull(selector);
-        var segments = new List<string>(this.segments)
+        var pathSegments = new List<string>(this.segments)
         {
             this.resolveSelectorKey(selector)
         };
-        return new KVChangePath(new KVPathPattern(segments));
+        return new KVChangePath(new KVPathPattern(pathSegments));
     }
 
     public KVChangePath Any()
@@ -175,15 +175,15 @@ internal sealed class KVPathPattern
     // True when the pattern watches `path` itself or something beneath it ("" covers everything).
     internal bool MatchesAtOrUnder(string path)
     {
-        var segments = KVPath.Normalize(path).Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (segments.Length > this.segments.Count)
+        var pathSegments = KVPath.Normalize(path).Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (pathSegments.Length > this.segments.Count)
         {
             return false;
         }
 
-        for (var i = 0; i < segments.Length; i++)
+        for (var i = 0; i < pathSegments.Length; i++)
         {
-            if (this.segments[i] != "*" && !string.Equals(this.segments[i], segments[i], StringComparison.Ordinal))
+            if (this.segments[i] != "*" && !string.Equals(this.segments[i], pathSegments[i], StringComparison.Ordinal))
             {
                 return false;
             }
@@ -194,8 +194,8 @@ internal sealed class KVPathPattern
 
     internal bool Matches(string path)
     {
-        var segments = KVPath.Normalize(path).Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (segments.Length != this.segments.Count)
+        var pathSegments = KVPath.Normalize(path).Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (pathSegments.Length != this.segments.Count)
         {
             return false;
         }
@@ -207,7 +207,7 @@ internal sealed class KVPathPattern
                 continue;
             }
 
-            if (!string.Equals(this.segments[i], segments[i], StringComparison.Ordinal))
+            if (!string.Equals(this.segments[i], pathSegments[i], StringComparison.Ordinal))
             {
                 return false;
             }
