@@ -275,14 +275,18 @@ public sealed class KVCollectionOptionsBuilder<TParent, TModel>
 
         foreach (var operation in this.allowedOperations)
         {
-            var isStructural = operation is KVPatchOperations.Add or KVPatchOperations.Remove or KVPatchOperations.Move or KVPatchOperations.Reset;
-            var isRegisteredCustom = this.patchOperations.Exists(existing => string.Equals(existing.Operation, operation, StringComparison.OrdinalIgnoreCase));
-            if (!isStructural && !isRegisteredCustom)
+            if (!IsStructuralOperation(operation) && !this.IsRegisteredCustomOperation(operation))
             {
                 throw new InvalidOperationException($"Collection '{collectionPath}' allows operation '{operation}', which is neither ADD, REMOVE, MOVE, RESET nor a custom operation registered on this collection.");
             }
         }
     }
+
+    private static bool IsStructuralOperation(string operation) =>
+        operation is KVPatchOperations.Add or KVPatchOperations.Remove or KVPatchOperations.Move or KVPatchOperations.Reset;
+
+    private bool IsRegisteredCustomOperation(string operation) =>
+        this.patchOperations.Exists(existing => string.Equals(existing.Operation, operation, StringComparison.OrdinalIgnoreCase));
 
     private KVCollectionOptionsBuilder<TParent, TModel> AddSeed<TItem>(string? itemId, Action<TItem>? configure)
         where TItem : TModel, new()

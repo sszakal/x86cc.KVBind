@@ -17,12 +17,7 @@ public abstract partial class KVNode
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(definition);
 
-        if (!this.isDetached && this.IsBound && (!ReferenceEquals(this.Parent, parent) || !ReferenceEquals(this.Definition, definition)))
-        {
-            throw new InvalidOperationException(
-                $"'{this.GetType().Name}' is already bound to a different context. " +
-                "Each KVNode instance is tied to exactly one parent context.");
-        }
+        this.EnsureNotBoundElsewhere(definition, parent);
 
         this.DetachActiveNestedNodes();
         this.nestedSlotModels?.Clear();
@@ -32,13 +27,33 @@ public abstract partial class KVNode
         this.Model = model;
         this.Definition = definition;
 
+        this.BindFieldGroups(model, definition);
+        this.BindCollections(model, definition);
+        this.CreateNestedSlotModels(model, definition);
+    }
+
+    private void EnsureNotBoundElsewhere(KVNodeDefinition definition, KVNodeBase? parent)
+    {
+        if (!this.isDetached && this.IsBound && (!ReferenceEquals(this.Parent, parent) || !ReferenceEquals(this.Definition, definition)))
+        {
+            throw new InvalidOperationException(
+                $"'{this.GetType().Name}' is already bound to a different context. " +
+                "Each KVNode instance is tied to exactly one parent context.");
+        }
+    }
+
+    private void BindFieldGroups(KVModel model, KVNodeDefinition definition)
+    {
         foreach (var nodeDefinition in definition.Nodes)
         {
             var childNode = nodeDefinition.GetChildNode(this)
                             ?? throw new InvalidOperationException($"Node '{nodeDefinition.SubSegmentPath}' resolved to null.");
             childNode.Bind(model.CreateChildModel(nodeDefinition.SubSegmentPath), nodeDefinition, this);
         }
+    }
 
+    private void BindCollections(KVModel model, KVNodeDefinition definition)
+    {
         foreach (var collectionDefinition in definition.Collections)
         {
             if (string.IsNullOrWhiteSpace(collectionDefinition.SubSegmentPath))
@@ -50,7 +65,10 @@ public abstract partial class KVNode
             collectionModel.Overlay.RestorePath(collectionModel.DataPath);
             collectionNode.Bind(collectionModel, collectionDefinition, this);
         }
+    }
 
+    private void CreateNestedSlotModels(KVModel model, KVNodeDefinition definition)
+    {
         foreach (var nestedNodeDefinition in definition.NestedNodes)
         {
             if (string.IsNullOrWhiteSpace(nestedNodeDefinition.SubSegmentPath))

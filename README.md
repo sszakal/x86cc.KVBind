@@ -631,7 +631,7 @@ m.RenameNode(KVTarget.Root.Seg("Party"), "Counterparty");   // rename a nested-n
 
 ### Replacing a nested node type
 
-Swapping a nested node from one type to another (here `PERSON` → `COMPANY`) flips the `$type` discriminator and reshapes the fields — drop the old type's unique fields, add the new type's, leave common fields untouched. Fields are read from the pre-migration data, so a new field can be seeded from an old one:
+Swapping a nested node from one type to another (here `PERSON` → `COMPANY`) flips the `$type` discriminator and reshapes the fields — drop the old type's unique fields, add the new type's, leave common fields untouched. The reshape operations run in the order written, each seeing the result of the ones before it (a `Set(..., overwrite: false)` after a `Rename` keeps the renamed value). `Rename` moves a single field or a whole subtree, and throws if the destination already holds data — `Drop` the destination first to replace it. Value factories still read the pre-migration data, so a new field can be seeded from an old one even after it was dropped:
 
 ```csharp
 builder.Migration(4, m => m.ReplaceNestedType(

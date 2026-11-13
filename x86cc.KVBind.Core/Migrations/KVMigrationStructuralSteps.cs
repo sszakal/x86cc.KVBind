@@ -6,21 +6,6 @@ namespace x86cc.KVBind.Core.Migrations;
 
 internal static class KVMigrationPaths
 {
-    public static bool HasPathOrDescendant(KVDictionary source, string path)
-    {
-        if (source.ContainsKey(path))
-            return true;
-
-        var prefix = path + "/";
-        foreach (var key in source.Keys)
-        {
-            if (key.StartsWith(prefix, StringComparison.Ordinal))
-                return true;
-        }
-
-        return false;
-    }
-
     public static string Parent(string path)
     {
         var slash = path.LastIndexOf('/');
@@ -64,7 +49,10 @@ public sealed class KVNodeReshapeBuilder
         return this;
     }
 
-    /// <summary>Renames a field within the node (carrying its value).</summary>
+    /// <summary>
+    /// Renames a field, or a whole subtree such as a field group, within the node (carrying its values).
+    /// Throws when the destination already holds data; drop it first if it should be replaced.
+    /// </summary>
     public KVNodeReshapeBuilder Rename(string fromRelative, string toRelative)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fromRelative);
@@ -76,6 +64,10 @@ public sealed class KVNodeReshapeBuilder
 
 // Swaps a nested node's $type discriminator to a new token and reshapes its fields. Honours the target's
 // $type filter, so only instances currently of the old type are converted (others are left alone).
+//
+// The reshape ops run in declaration order against a working copy of the node's leaves, so each op sees the
+// result of the ones before it (a Set after a Rename sees the renamed value). The delta is the difference
+// between the node before and after: one tombstone per removed leaf, one upsert per new or changed leaf.
 internal sealed class ReplaceNestedTypeStep(KVTarget target, string toType, IReadOnlyList<KVReshapeOp> ops) : IKVMigrationStep
 {
     public void BuildInto(KVDictionary source, KVDictionary delta, KVMigrationContext context)
@@ -83,40 +75,137 @@ internal sealed class ReplaceNestedTypeStep(KVTarget target, string toType, IRea
         foreach (var nodePath in target.Resolve(source))
         {
             delta[nodePath + "/$type"] = toType;
+            if (ops.Count == 0)
+                continue;
 
+            var before = ReadLeaves(source, nodePath);
+            var after = new Dictionary<string, KVValue>(before, StringComparer.Ordinal);
             foreach (var op in ops)
             {
                 switch (op)
                 {
                     case KVReshapeDrop drop:
-                        var dropPath = nodePath + "/" + drop.Relative;
-                        if (KVMigrationPaths.HasPathOrDescendant(source, dropPath))
-                            delta[dropPath] = KVValue.Tombstone;
+                        RemoveSubtree(after, nodePath + "/" + drop.Relative);
                         break;
 
                     case KVReshapeSet set:
-                        var setPath = nodePath + "/" + set.Relative;
-                        var hasValue = source.TryGetValue(setPath, out var current) && current != KVValue.Tombstone;
-                        if (hasValue && !set.Overwrite)
-                            break;
-                        var computed = set.Factory(new KVMigrationFieldView(source, setPath, context));
-                        var value = computed is null ? KVValue.Tombstone : KVValue.FromObject(computed);
-                        if (hasValue && current!.Equals(value))
-                            break;
-                        delta[setPath] = value;
+                        ApplySet(source, after, context, nodePath, set);
                         break;
 
                     case KVReshapeRename rename:
-                        var from = nodePath + "/" + rename.FromRelative;
-                        if (source.TryGetValue(from, out var moved) && moved != KVValue.Tombstone)
-                        {
-                            delta[nodePath + "/" + rename.ToRelative] = moved!;
-                            delta[from] = KVValue.Tombstone;
-                        }
-
+                        ApplyRename(after, nodePath, rename);
                         break;
                 }
             }
+
+            WriteDifference(before, after, delta);
+        }
+    }
+
+    // The node's stored leaves, keyed by absolute path.
+    private static Dictionary<string, KVValue> ReadLeaves(KVDictionary source, string nodePath)
+    {
+        var leaves = new Dictionary<string, KVValue>(StringComparer.Ordinal);
+        var prefix = nodePath + "/";
+        foreach (var (key, value) in source)
+        {
+            if (key.StartsWith(prefix, StringComparison.Ordinal) && value != KVValue.Tombstone)
+                leaves[key] = value;
+        }
+
+        return leaves;
+    }
+
+    private static void RemoveSubtree(Dictionary<string, KVValue> leaves, string path)
+    {
+        var doomed = new List<string>();
+        foreach (var key in leaves.Keys)
+        {
+            if (IsSameOrUnder(key, path))
+                doomed.Add(key);
+        }
+
+        foreach (var key in doomed)
+            leaves.Remove(key);
+    }
+
+    // The factory's view still reads the pre-migration source (siblings, absolute paths); only the
+    // presence / overwrite decision uses the working copy.
+    private static void ApplySet(KVDictionary source, Dictionary<string, KVValue> leaves, KVMigrationContext context, string nodePath, KVReshapeSet set)
+    {
+        var setPath = nodePath + "/" + set.Relative;
+        if (leaves.ContainsKey(setPath) && !set.Overwrite)
+            return;
+
+        var computed = set.Factory(new KVMigrationFieldView(source, setPath, context));
+        if (computed is null)
+            RemoveSubtree(leaves, setPath);
+        else
+            leaves[setPath] = KVValue.FromObject(computed);
+    }
+
+    // Moves a field or a whole subtree (a field group, a nested collection). Nothing to move is a no-op;
+    // a destination that already holds data is an error, since merging two subtrees has no obvious meaning.
+    private static void ApplyRename(Dictionary<string, KVValue> leaves, string nodePath, KVReshapeRename rename)
+    {
+        var from = nodePath + "/" + rename.FromRelative;
+        var to = nodePath + "/" + rename.ToRelative;
+        if (string.Equals(from, to, StringComparison.Ordinal))
+            return;
+
+        var moved = TakeSubtree(leaves, from);
+        if (moved.Count == 0)
+            return;
+
+        EnsureDestinationFree(leaves, nodePath, rename, to);
+
+        foreach (var leaf in moved)
+            leaves[to + leaf.Key[from.Length..]] = leaf.Value;
+    }
+
+    // Removes and returns every leaf at or under the path.
+    private static List<KeyValuePair<string, KVValue>> TakeSubtree(Dictionary<string, KVValue> leaves, string path)
+    {
+        var taken = new List<KeyValuePair<string, KVValue>>();
+        foreach (var leaf in leaves)
+        {
+            if (IsSameOrUnder(leaf.Key, path))
+                taken.Add(leaf);
+        }
+
+        foreach (var leaf in taken)
+            leaves.Remove(leaf.Key);
+
+        return taken;
+    }
+
+    private static void EnsureDestinationFree(Dictionary<string, KVValue> leaves, string nodePath, KVReshapeRename rename, string to)
+    {
+        foreach (var key in leaves.Keys)
+        {
+            if (IsSameOrUnder(key, to))
+            {
+                throw new InvalidOperationException(
+                    $"Cannot rename '{rename.FromRelative}' to '{rename.ToRelative}' under '{nodePath}': the destination already holds data at '{key}'. Drop it first.");
+            }
+        }
+    }
+
+    private static bool IsSameOrUnder(string key, string path) =>
+        key.StartsWith(path, StringComparison.Ordinal) && (key.Length == path.Length || key[path.Length] == '/');
+
+    private static void WriteDifference(Dictionary<string, KVValue> before, Dictionary<string, KVValue> after, KVDictionary delta)
+    {
+        foreach (var key in before.Keys)
+        {
+            if (!after.ContainsKey(key))
+                delta[key] = KVValue.Tombstone;
+        }
+
+        foreach (var (key, value) in after)
+        {
+            if (!before.TryGetValue(key, out var previous) || !previous.Equals(value))
+                delta[key] = value;
         }
     }
 }

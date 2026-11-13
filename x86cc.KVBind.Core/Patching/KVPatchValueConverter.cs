@@ -71,20 +71,33 @@ internal static class KVPatchValueConverter
             return value;
         }
 
-        if (value is JsonElement element)
+        var isConverted = value is JsonElement element
+            ? TryDeserialize(element.GetRawText(), targetType, out var converted)
+            : TryConvertClrValue(value, targetType, out converted);
+        if (isConverted)
         {
-            if (TryDeserialize(element.GetRawText(), targetType, out var fromElement)) return fromElement;
-        }
-        else
-        {
-            if (TrySerialize(value, out var json) && TryDeserialize(json, targetType, out var fromValue)) return fromValue;
-
-            // A string may also carry raw JSON for a structured field, e.g. "[1,2]" for an int[].
-            if (value is string text && TryDeserialize(text, targetType, out var fromText)) return fromText;
+            return converted;
         }
 
         throw new InvalidOperationException(
             $"Value of type '{DescribeType(value)}' for field '{fieldPath}' cannot be converted to '{targetType.FullName}'.");
+    }
+
+    private static bool TryConvertClrValue(object value, Type targetType, out object converted)
+    {
+        if (TrySerialize(value, out var json) && TryDeserialize(json, targetType, out converted))
+        {
+            return true;
+        }
+
+        // A string may also carry raw JSON for a structured field, e.g. "[1,2]" for an int[].
+        if (value is string text && TryDeserialize(text, targetType, out converted))
+        {
+            return true;
+        }
+
+        converted = null!;
+        return false;
     }
 
     private static string DescribeType(object value)

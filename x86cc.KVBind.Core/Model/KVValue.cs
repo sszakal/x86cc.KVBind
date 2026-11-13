@@ -69,30 +69,34 @@ public abstract class KVValue : IEquatable<KVValue>
                 return string.Equals(sa, (string)b, StringComparison.Ordinal);
 
             case IEnumerable ea:
-                var eb = (IEnumerable)b;
-                var ia = ea.GetEnumerator();
-                var ib = eb.GetEnumerator();
-                try
-                {
-                    while (true)
-                    {
-                        var hasA = ia.MoveNext();
-                        var hasB = ib.MoveNext();
-                        if (hasA != hasB) return false;          // different lengths
-                        if (!hasA) return true;                  // both exhausted
-                        if (!ElementEquals(ia.Current, ib.Current)) return false;
-                    }
-                }
-                finally
-                {
-                    (ia as IDisposable)?.Dispose();
-                    (ib as IDisposable)?.Dispose();
-                }
+                return SequenceEquals(ea, (IEnumerable)b);
 
             default:
                 return a.GetType().IsValueType
                     ? a.Equals(b)
                     : JsonEquals(a, b);
+        }
+    }
+
+    private static bool SequenceEquals(IEnumerable ea, IEnumerable eb)
+    {
+        var ia = ea.GetEnumerator();
+        var ib = eb.GetEnumerator();
+        try
+        {
+            while (true)
+            {
+                var hasA = ia.MoveNext();
+                var hasB = ib.MoveNext();
+                if (hasA != hasB) return false;          // different lengths
+                if (!hasA) return true;                  // both exhausted
+                if (!ElementEquals(ia.Current, ib.Current)) return false;
+            }
+        }
+        finally
+        {
+            (ia as IDisposable)?.Dispose();
+            (ib as IDisposable)?.Dispose();
         }
     }
 

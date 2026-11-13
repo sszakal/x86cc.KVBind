@@ -188,10 +188,7 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
         var deltas = new List<KVChangeDelta>();
         var children = new List<KVChangeDeltaGroup>();
 
-        // Build snapshot item set for comparison.
-        string[] snapIds = [];
-        if (this.Model.Overlay.TryGetSnapshotValue(this.ItemsPath, out var snapVal) && snapVal?.Value is string[] s)
-            snapIds = s;
+        var snapIds = this.ReadSnapshotItemIds();
         var snapSet = new HashSet<string>(snapIds, StringComparer.Ordinal);
         var draftSet = new HashSet<string>(this.orderedItemIds, StringComparer.Ordinal);
 
@@ -218,6 +215,9 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
     protected override KVNode? GetByIdCore(string itemId) => this.GetById(itemId);
 
     protected override void Rebind() => this.Bind(this.Model, this.Definition, this.Parent);
+
+    private string[] ReadSnapshotItemIds() =>
+        this.Model.Overlay.TryGetSnapshotValue(this.ItemsPath, out var snapVal) && snapVal?.Value is string[] ids ? ids : [];
 
     private static IEnumerable<string> ResolveItemIds(KVModel model)
     {

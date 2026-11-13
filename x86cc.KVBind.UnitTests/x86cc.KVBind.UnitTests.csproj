@@ -19,6 +19,10 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="coverlet.collector" Version="10.0.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="Verify" Version="31.19.1" />
     <PackageReference Include="Verify.Xunit" Version="31.12.5" />
     <PackageReference Include="Meziantou.Framework.InlineSnapshotTesting" Version="5.0.8" />

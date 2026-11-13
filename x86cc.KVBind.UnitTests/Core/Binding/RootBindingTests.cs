@@ -55,6 +55,31 @@ public class RootBindingTests : KVModelTestBase
     }
 
     [Fact]
+    public void RootBinding_WhenBoundFieldGroupIsBoundToAnotherParent_Throws()
+    {
+        var model = new KVModelRoot();
+        var root = this.CreateRoot<NewRootNode>(model);
+        var child = root.Child;
+
+        // The group is bound under the root; binding it again without that parent is a different context.
+        var act = () => child.BindRuntime(child.Model, child.Definition, parent: null);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*already bound to a different context*");
+    }
+
+    [Fact]
+    public void RootBinding_WhenBoundRootIsReboundToTheSameContext_KeepsWorking()
+    {
+        var model = new KVModelRoot();
+        var root = this.CreateRoot<NewRootNode>(model);
+        root.Title = "kept";
+
+        root.BindRuntime(model, this.CreateRegistry().Get<NewRootNode>());
+
+        root.Title.Should().Be("kept");
+    }
+
+    [Fact]
     public void RootBinding_WhenCollectionIsDeclared_BindsCollectionToChildModel()
     {
         var model = new KVModelRoot();

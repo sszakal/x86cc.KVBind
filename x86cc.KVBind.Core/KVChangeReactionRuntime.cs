@@ -85,6 +85,22 @@ internal static class KVChangeReactionRuntime
         // Neither inside the replaced subtree nor on the way to it.
         if (relativePath is null && !KVPath.IsSameOrDescendant(nodePath, replacedPath)) return;
 
+        NotifyReplacedDescendants(state, node, replacedPath);
+
+        // A node inside the replaced subtree was replaced as a whole: every one of its reactions applies.
+        var changedPath = relativePath ?? string.Empty;
+        foreach (var reaction in node.Definition.ChangeReactions)
+        {
+            if (reaction.Pattern.MatchesAtOrUnder(changedPath))
+            {
+                InvokeReaction(state, node, nodePath, reaction, changedPath, oldValue: null, newValue: null, KVChangeKind.Replaced);
+            }
+        }
+    }
+
+    // Field groups, then collection items, then active nested nodes.
+    private static void NotifyReplacedDescendants(KVReactionExecutionState state, KVNode node, string replacedPath)
+    {
         foreach (var nodeDefinition in node.Definition.Nodes)
         {
             NotifyReplaced(state, nodeDefinition.GetChildNode(node), replacedPath);
@@ -92,14 +108,7 @@ internal static class KVChangeReactionRuntime
 
         foreach (var collectionDefinition in node.Definition.Collections)
         {
-            var collection = collectionDefinition.GetCollection(node);
-            foreach (var itemId in collection.GetActiveItemIds())
-            {
-                if (collection.GetById(itemId) is { } item)
-                {
-                    NotifyReplaced(state, item, replacedPath);
-                }
-            }
+            NotifyReplacedItems(state, collectionDefinition.GetCollection(node), replacedPath);
         }
 
         foreach (var nestedDefinition in node.Definition.NestedNodes)
@@ -110,14 +119,15 @@ internal static class KVChangeReactionRuntime
                 NotifyReplaced(state, nestedNode, replacedPath);
             }
         }
+    }
 
-        // A node inside the replaced subtree was replaced as a whole: every one of its reactions applies.
-        var changedPath = relativePath ?? string.Empty;
-        foreach (var reaction in node.Definition.ChangeReactions)
+    private static void NotifyReplacedItems(KVReactionExecutionState state, IKVCollectionNode collection, string replacedPath)
+    {
+        foreach (var itemId in collection.GetActiveItemIds())
         {
-            if (reaction.Pattern.MatchesAtOrUnder(changedPath))
+            if (collection.GetById(itemId) is { } item)
             {
-                InvokeReaction(state, node, nodePath, reaction, changedPath, oldValue: null, newValue: null, KVChangeKind.Replaced);
+                NotifyReplaced(state, item, replacedPath);
             }
         }
     }

@@ -446,46 +446,41 @@ public sealed class KVOverlay
 
     private void ApplyResolution(KVConflict conflict)
     {
-        // ── Incoming (non-conflicting) changes ───────────────────────────────────
         if (conflict.IsIncoming)
+            this.ApplyIncomingResolution(conflict);
+        else
+            this.ApplyConflictResolution(conflict);
+    }
+
+    // ── Incoming (non-conflicting) changes ───────────────────────────────────
+    private void ApplyIncomingResolution(KVConflict conflict)
+    {
+        switch (conflict.Resolution)
         {
-            switch (conflict.Resolution)
-            {
-                case KVConflictResolution.Theirs: // accept — let the target show through after the swap.
-                    foreach (var key in this.Changes.Keys.Where(k => KVPath.IsSameOrDescendant(k, conflict.Path)).ToList())
-                        this.Changes.Remove(key);
-                    break;
+            case KVConflictResolution.Theirs: // accept — let the target show through after the swap.
+                this.RemoveChangesUnder(conflict.Path);
+                break;
 
-                case KVConflictResolution.Ours: // reject — pin the pre-rebase (base) state as a counter-edit.
-                    this.ForceBaseSubtree(conflict.Path);
-                    if (conflict.Kind == KVConflictKind.IncomingItem)
-                        this.SyncItemsArrayForIncomingReject(conflict);
-                    break;
+            case KVConflictResolution.Ours: // reject — pin the pre-rebase (base) state as a counter-edit.
+                this.ForceBaseSubtree(conflict.Path);
+                if (conflict.Kind == KVConflictKind.IncomingItem)
+                    this.SyncItemsArrayForIncomingReject(conflict);
+                break;
 
-                default:
-                    throw new InvalidOperationException($"Incoming change at '{conflict.Path}' is unresolved.");
-            }
-
-            return;
+            default:
+                throw new InvalidOperationException($"Incoming change at '{conflict.Path}' is unresolved.");
         }
+    }
 
-        // ── Real conflicts ───────────────────────────────────────────────────────
+    // ── Real conflicts ───────────────────────────────────────────────────────
+    private void ApplyConflictResolution(KVConflict conflict)
+    {
         switch (conflict.Resolution)
         {
             case KVConflictResolution.Ours:
                 // Keep the draft as-is. For a delete/edit conflict that means the tombstone stays.
                 if (conflict.Kind == KVConflictKind.Structural)
-                {
-                    // Replace the whole subtree with ours: the draft's own values stay, but any target leaf
-                    // under this path that the draft does NOT set is tombstoned, so the other type's fields
-                    // (or dropped collection items) don't bleed through once the base swaps to the target.
-                    foreach (var key in this.RebaseTarget!.Data.Keys)
-                    {
-                        if (!KVPath.IsSameOrDescendant(key, conflict.Path) || this.Changes.ContainsKey(key))
-                            continue;
-                        this.Changes[key] = KVValue.Tombstone;
-                    }
-                }
+                    this.TombstoneTargetLeavesNotInDraft(conflict.Path);
 
                 // For item-level DeleteEdit Ours — no changes needed:
                 //   Case A (we deleted, target modified): tombstone stays, $items already excludes the item.
@@ -494,8 +489,7 @@ public sealed class KVOverlay
 
             case KVConflictResolution.Theirs:
                 // Drop the draft's change(s) under this path so the target value shows through after the swap.
-                foreach (var key in this.Changes.Keys.Where(k => KVPath.IsSameOrDescendant(k, conflict.Path)).ToList())
-                    this.Changes.Remove(key);
+                this.RemoveChangesUnder(conflict.Path);
 
                 // For item-level DeleteEdit, also sync the $items membership array.
                 if (conflict.Kind == KVConflictKind.DeleteEdit)
@@ -512,13 +506,31 @@ public sealed class KVOverlay
         }
     }
 
+    private void RemoveChangesUnder(string path)
+    {
+        foreach (var key in this.Changes.Keys.Where(k => KVPath.IsSameOrDescendant(k, path)).ToList())
+            this.Changes.Remove(key);
+    }
+
+    // Replace the whole subtree with ours: the draft's own values stay, but any target leaf under this path
+    // that the draft does NOT set is tombstoned, so the other type's fields (or dropped collection items)
+    // don't bleed through once the base swaps to the target.
+    private void TombstoneTargetLeavesNotInDraft(string path)
+    {
+        foreach (var key in this.RebaseTarget!.Data.Keys)
+        {
+            if (!KVPath.IsSameOrDescendant(key, path) || this.Changes.ContainsKey(key))
+                continue;
+            this.Changes[key] = KVValue.Tombstone;
+        }
+    }
+
     // Pins the pre-rebase (base = current Snapshot) state over a subtree as a counter-edit, so that after
     // the base swaps to the target the effective value under <paramref name="path"/> stays at base — i.e.
     // the incoming change is rejected. Only actual base↔target differences are written, keeping the draft clean.
     private void ForceBaseSubtree(string path)
     {
-        foreach (var key in this.Changes.Keys.Where(k => KVPath.IsSameOrDescendant(k, path)).ToList())
-            this.Changes.Remove(key);
+        this.RemoveChangesUnder(path);
 
         foreach (var key in this.Snapshot.Data.Keys.Where(k => KVPath.IsSameOrDescendant(k, path)))
         {

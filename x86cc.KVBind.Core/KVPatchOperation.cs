@@ -67,6 +67,19 @@ public static class KVPatchOperations
 
 public sealed class KVPatchOperation
 {
+    // Value checks per built-in operation; SET and custom operations accept any value.
+    private static readonly Dictionary<string, Action<string, object?>> ValueValidators = new(StringComparer.Ordinal)
+    {
+        [KVPatchOperations.Unset] = EnsureNoValue,
+        [KVPatchOperations.Discard] = EnsureNoValue,
+        [KVPatchOperations.Remove] = EnsureNoValue,
+        [KVPatchOperations.Drop] = EnsureNoValue,
+        [KVPatchOperations.Reset] = EnsureNoValue,
+        [KVPatchOperations.Add] = static (_, value) => EnsureAddValue(value),
+        [KVPatchOperations.Move] = static (_, value) => EnsureMoveValue(value),
+        [KVPatchOperations.Init] = static (_, value) => EnsureInitValue(value),
+    };
+
     public KVPatchOperation(KVPatchOperationType operation, string path, object? value = null)
         : this(KVPatchOperations.ToCode(operation), path, value, operation)
     {
@@ -121,50 +134,51 @@ public sealed class KVPatchOperation
 
     private static void ValidateValue(string operation, object? value)
     {
-        switch (operation.ToUpperInvariant())
+        if (ValueValidators.TryGetValue(operation.ToUpperInvariant(), out var validate))
         {
-            case KVPatchOperations.Unset:
-            case KVPatchOperations.Discard:
-            case KVPatchOperations.Remove:
-            case KVPatchOperations.Drop:
-            case KVPatchOperations.Reset:
-                if (value is not null)
-                {
-                    throw new InvalidOperationException($"Patch operation '{operation}' does not accept values.");
-                }
+            validate(operation, value);
+        }
+    }
 
-                break;
-            case KVPatchOperations.Add:
-                if (value is not KVAddPatchPayload payload)
-                {
-                    throw new InvalidOperationException("ADD patch operations require a KVAddPatchPayload value.");
-                }
+    private static void EnsureNoValue(string operation, object? value)
+    {
+        if (value is not null)
+        {
+            throw new InvalidOperationException($"Patch operation '{operation}' does not accept values.");
+        }
+    }
 
-                if (string.IsNullOrEmpty(payload.ItemId))
-                {
-                    throw new InvalidOperationException("ADD patch operations require a non-empty item id.");
-                }
+    private static void EnsureAddValue(object? value)
+    {
+        if (value is not KVAddPatchPayload payload)
+        {
+            throw new InvalidOperationException("ADD patch operations require a KVAddPatchPayload value.");
+        }
 
-                if (!KVCollectionItemIds.IsValid(payload.ItemId))
-                {
-                    throw new InvalidOperationException($"ADD patch operations require a valid item id; '{payload.ItemId}' may only contain A-Z, a-z, 0-9, '_' and '-'.");
-                }
+        if (string.IsNullOrEmpty(payload.ItemId))
+        {
+            throw new InvalidOperationException("ADD patch operations require a non-empty item id.");
+        }
 
-                break;
-            case KVPatchOperations.Move:
-                if (value is not int and not KVMovePatchPayload)
-                {
-                    throw new InvalidOperationException("MOVE patch operations require an integer target index or KVMovePatchPayload value.");
-                }
+        if (!KVCollectionItemIds.IsValid(payload.ItemId))
+        {
+            throw new InvalidOperationException($"ADD patch operations require a valid item id; '{payload.ItemId}' may only contain A-Z, a-z, 0-9, '_' and '-'.");
+        }
+    }
 
-                break;
-            case KVPatchOperations.Init:
-                if (value is not string token || string.IsNullOrWhiteSpace(token))
-                {
-                    throw new InvalidOperationException("INIT patch operations require a non-empty nested-node type token value.");
-                }
+    private static void EnsureMoveValue(object? value)
+    {
+        if (value is not int and not KVMovePatchPayload)
+        {
+            throw new InvalidOperationException("MOVE patch operations require an integer target index or KVMovePatchPayload value.");
+        }
+    }
 
-                break;
+    private static void EnsureInitValue(object? value)
+    {
+        if (value is not string token || string.IsNullOrWhiteSpace(token))
+        {
+            throw new InvalidOperationException("INIT patch operations require a non-empty nested-node type token value.");
         }
     }
 }

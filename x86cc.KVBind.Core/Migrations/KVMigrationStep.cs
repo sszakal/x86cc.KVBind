@@ -5,8 +5,9 @@ namespace x86cc.KVBind.Core.Migrations;
 
 /// <summary>
 /// One declarative operation in a migration. A step reads the (working) source data and writes upserts /
-/// tombstones into the migration commit's delta. Steps never mutate the source — the migrator applies the
-/// finished commit so later steps and later migrations see the result.
+/// tombstones into the migration commit's delta. Steps never mutate the source: every step of one migration
+/// reads the same pre-migration data, and the migrator applies the finished commit so later migrations see
+/// the result. (The reshape ops inside a single ReplaceNestedType are the exception — they run in order.)
 /// </summary>
 public interface IKVMigrationStep
 {

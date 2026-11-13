@@ -50,27 +50,12 @@ internal static class KVPatchRuntime
     // True when the definition declares a PatchReadOnly() member anywhere beneath it.
     internal static bool ContainsPatchReadOnly(KVNodeDefinition definition)
     {
-        foreach (var field in definition.Fields)
-            if (field.IsPatchReadOnly) return true;
-
-        foreach (var node in definition.Nodes)
-            if (node.IsPatchReadOnly || ContainsPatchReadOnly(node)) return true;
-
-        foreach (var collection in definition.Collections)
-        {
-            if (collection.IsPatchReadOnly) return true;
-            foreach (var item in collection.ItemDefinitionsByToken.Values)
-                if (ContainsPatchReadOnly(item.NodeDefinition)) return true;
-        }
-
-        foreach (var nested in definition.NestedNodes)
-        {
-            if (nested.IsPatchReadOnly) return true;
-            foreach (var type in nested.TypeDefinitionsByToken.Values)
-                if (ContainsPatchReadOnly(type.NodeDefinition)) return true;
-        }
-
-        return false;
+        return definition.Fields.Any(static field => field.IsPatchReadOnly)
+            || definition.Nodes.Any(static node => node.IsPatchReadOnly || ContainsPatchReadOnly(node))
+            || definition.Collections.Any(static collection => collection.IsPatchReadOnly
+                || collection.ItemDefinitionsByToken.Values.Any(static item => ContainsPatchReadOnly(item.NodeDefinition)))
+            || definition.NestedNodes.Any(static nested => nested.IsPatchReadOnly
+                || nested.TypeDefinitionsByToken.Values.Any(static type => ContainsPatchReadOnly(type.NodeDefinition)));
     }
 }
 
@@ -227,12 +212,23 @@ internal sealed class KVPatchOperationRegistry
     // wholly under the discard path vanish with it, so their members are skipped.
     private static IEnumerable<string> EnumeratePatchReadOnlyPaths(KVNode node, string discardPath)
     {
+        return PatchReadOnlyFieldPaths(node)
+            .Concat(PatchReadOnlyFieldGroupPaths(node, discardPath))
+            .Concat(PatchReadOnlyCollectionPaths(node, discardPath))
+            .Concat(PatchReadOnlyNestedNodePaths(node, discardPath));
+    }
+
+    private static IEnumerable<string> PatchReadOnlyFieldPaths(KVNode node)
+    {
         foreach (var fieldDefinition in node.Definition.Fields)
         {
             if (fieldDefinition.IsPatchReadOnly)
                 yield return KVPath.Combine(node.Model.DataPath, fieldDefinition.SubSegmentPath);
         }
+    }
 
+    private static IEnumerable<string> PatchReadOnlyFieldGroupPaths(KVNode node, string discardPath)
+    {
         foreach (var nodeDefinition in node.Definition.Nodes)
         {
             var child = nodeDefinition.GetChildNode(node);
@@ -245,7 +241,10 @@ internal sealed class KVPatchOperationRegistry
             foreach (var path in EnumeratePatchReadOnlyPaths(child, discardPath))
                 yield return path;
         }
+    }
 
+    private static IEnumerable<string> PatchReadOnlyCollectionPaths(KVNode node, string discardPath)
+    {
         foreach (var collectionDefinition in node.Definition.Collections)
         {
             if (collectionDefinition.GetCollection(node) is not KVCollectionNodeBase collection) continue;
@@ -265,7 +264,10 @@ internal sealed class KVPatchOperationRegistry
                     yield return path;
             }
         }
+    }
 
+    private static IEnumerable<string> PatchReadOnlyNestedNodePaths(KVNode node, string discardPath)
+    {
         foreach (var nestedDefinition in node.Definition.NestedNodes)
         {
             var nestedModel = node.GetNestedNodeModel(nestedDefinition.SubSegmentPath);
@@ -302,57 +304,84 @@ internal sealed class KVPatchOperationRegistry
             var itemsPath = KVPath.Combine(collection.Model.DataPath, "$items");
             if (discardPath.Length > 0 && !KVPath.IsSameOrDescendant(itemsPath, discardPath)) continue;
 
-            var current = collection.GetActiveItemIds();
-            var snapshot = collection.Model.Overlay.TryGetSnapshotValue(itemsPath, out var snapshotValue)
-                ? KVMerge.ExtractItemIds(snapshotValue)
-                : [];
-
-            var currentSet = new HashSet<string>(current, StringComparer.Ordinal);
-            var snapshotSet = new HashSet<string>(snapshot, StringComparer.Ordinal);
-
-            if (!snapshotSet.IsSubsetOf(currentSet) && !definition.IsOperationAllowed(KVPatchOperations.Add))
-                throw Disallowed(KVPatchOperations.Add, definition, operation);
-            if (!currentSet.IsSubsetOf(snapshotSet) && !definition.IsOperationAllowed(KVPatchOperations.Remove))
-                throw Disallowed(KVPatchOperations.Remove, definition, operation);
-
-            var currentOrder = current.Where(snapshotSet.Contains);
-            var snapshotOrder = snapshot.Where(currentSet.Contains);
-            if (!currentOrder.SequenceEqual(snapshotOrder, StringComparer.Ordinal) && !definition.IsOperationAllowed(KVPatchOperations.Move))
-                throw Disallowed(KVPatchOperations.Move, definition, operation);
+            EnsureMembershipRevertAllowed(collection, itemsPath, operation);
         }
+    }
+
+    // Compares the draft membership with the snapshot's and requires ADD / REMOVE / MOVE as the revert needs.
+    private static void EnsureMembershipRevertAllowed(KVCollectionNodeBase collection, string itemsPath, KVPatchOperation operation)
+    {
+        var definition = collection.Definition;
+        var current = collection.GetActiveItemIds();
+        var snapshot = collection.Model.Overlay.TryGetSnapshotValue(itemsPath, out var snapshotValue)
+            ? KVMerge.ExtractItemIds(snapshotValue)
+            : [];
+
+        var currentSet = new HashSet<string>(current, StringComparer.Ordinal);
+        var snapshotSet = new HashSet<string>(snapshot, StringComparer.Ordinal);
+
+        if (!snapshotSet.IsSubsetOf(currentSet) && !definition.IsOperationAllowed(KVPatchOperations.Add))
+            throw Disallowed(KVPatchOperations.Add, definition, operation);
+        if (!currentSet.IsSubsetOf(snapshotSet) && !definition.IsOperationAllowed(KVPatchOperations.Remove))
+            throw Disallowed(KVPatchOperations.Remove, definition, operation);
+
+        var currentOrder = current.Where(snapshotSet.Contains);
+        var snapshotOrder = snapshot.Where(currentSet.Contains);
+        if (!currentOrder.SequenceEqual(snapshotOrder, StringComparer.Ordinal) && !definition.IsOperationAllowed(KVPatchOperations.Move))
+            throw Disallowed(KVPatchOperations.Move, definition, operation);
     }
 
     // Bound collections whose subtree a discard of `discardPath` may touch. Items that exist only in the
     // draft and lie wholly under the discard path vanish with it, so their nested collections are skipped.
     private static IEnumerable<KVCollectionNodeBase> EnumerateCollections(KVNode node, string discardPath)
     {
+        return FieldGroupCollections(node, discardPath)
+            .Concat(OwnCollections(node, discardPath))
+            .Concat(NestedNodeCollections(node, discardPath));
+    }
+
+    private static IEnumerable<KVCollectionNodeBase> FieldGroupCollections(KVNode node, string discardPath)
+    {
         foreach (var nodeDefinition in node.Definition.Nodes)
         {
             foreach (var collection in EnumerateCollections(nodeDefinition.GetChildNode(node), discardPath))
                 yield return collection;
         }
+    }
 
+    private static IEnumerable<KVCollectionNodeBase> OwnCollections(KVNode node, string discardPath)
+    {
         foreach (var collectionDefinition in node.Definition.Collections)
         {
             if (collectionDefinition.GetCollection(node) is not KVCollectionNodeBase collection) continue;
             yield return collection;
 
-            var itemsPath = KVPath.Combine(collection.Model.DataPath, "$items");
-            var snapshotIds = collection.Model.Overlay.TryGetSnapshotValue(itemsPath, out var snapshotValue)
-                ? new HashSet<string>(KVMerge.ExtractItemIds(snapshotValue), StringComparer.Ordinal)
-                : [];
-
-            foreach (var itemId in collection.GetActiveItemIds())
-            {
-                var itemPath = KVPath.Combine(collection.Model.DataPath, itemId);
-                if (!snapshotIds.Contains(itemId) && (discardPath.Length == 0 || KVPath.IsSameOrDescendant(itemPath, discardPath))) continue;
-                if (((IKVCollectionNode)collection).GetById(itemId) is not { } item) continue;
-
-                foreach (var nested in EnumerateCollections(item, discardPath))
-                    yield return nested;
-            }
+            foreach (var nested in SurvivingItemCollections(collection, discardPath))
+                yield return nested;
         }
+    }
 
+    // Collections nested in the items that would survive the discard.
+    private static IEnumerable<KVCollectionNodeBase> SurvivingItemCollections(KVCollectionNodeBase collection, string discardPath)
+    {
+        var itemsPath = KVPath.Combine(collection.Model.DataPath, "$items");
+        var snapshotIds = collection.Model.Overlay.TryGetSnapshotValue(itemsPath, out var snapshotValue)
+            ? new HashSet<string>(KVMerge.ExtractItemIds(snapshotValue), StringComparer.Ordinal)
+            : [];
+
+        foreach (var itemId in collection.GetActiveItemIds())
+        {
+            var itemPath = KVPath.Combine(collection.Model.DataPath, itemId);
+            if (!snapshotIds.Contains(itemId) && (discardPath.Length == 0 || KVPath.IsSameOrDescendant(itemPath, discardPath))) continue;
+            if (((IKVCollectionNode)collection).GetById(itemId) is not { } item) continue;
+
+            foreach (var nested in EnumerateCollections(item, discardPath))
+                yield return nested;
+        }
+    }
+
+    private static IEnumerable<KVCollectionNodeBase> NestedNodeCollections(KVNode node, string discardPath)
+    {
         foreach (var nestedDefinition in node.Definition.NestedNodes)
         {
             var nestedModel = node.GetNestedNodeModel(nestedDefinition.SubSegmentPath);

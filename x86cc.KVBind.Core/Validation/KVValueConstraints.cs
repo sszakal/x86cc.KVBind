@@ -12,6 +12,12 @@ internal sealed class KVValueConstraints
 {
     private static readonly TimeSpan PatternTimeout = TimeSpan.FromSeconds(1);
 
+    private static readonly HashSet<Type> NumericTypes =
+    [
+        typeof(sbyte), typeof(byte), typeof(short), typeof(ushort), typeof(int), typeof(uint),
+        typeof(long), typeof(ulong), typeof(float), typeof(double), typeof(decimal),
+    ];
+
     private Regex? patternRegex;
 
     public int? MinLength { get; private set; }
@@ -81,31 +87,10 @@ internal sealed class KVValueConstraints
                 return;
             }
 
-            if (this.MinLength.HasValue && text.Length < this.MinLength.Value)
-            {
-                errors.Add(new KVValidationError(path, "min_length", $"'{path}' must be at least {this.MinLength.Value} characters."));
-            }
-
-            if (this.MaxLength.HasValue && text.Length > this.MaxLength.Value)
-            {
-                errors.Add(new KVValidationError(path, "max_length", $"'{path}' must be at most {this.MaxLength.Value} characters."));
-            }
-
-            if (this.patternRegex is not null && !IsFullMatch(this.patternRegex, text))
-            {
-                errors.Add(new KVValidationError(path, "pattern", $"'{path}' does not match the required format."));
-            }
+            this.EvaluateText(path, text, errors);
         }
 
-        if (this.Min is not null && Compare(value, this.Min) < 0)
-        {
-            errors.Add(new KVValidationError(path, "min", $"'{path}' must be at least {Format(this.Min)}."));
-        }
-
-        if (this.Max is not null && Compare(value, this.Max) > 0)
-        {
-            errors.Add(new KVValidationError(path, "max", $"'{path}' must be at most {Format(this.Max)}."));
-        }
+        this.EvaluateBounds(path, value, errors);
     }
 
     // Length and pattern rules only mean something for text.
@@ -126,6 +111,14 @@ internal sealed class KVValueConstraints
             return number.CompareTo(boundNumber);
         }
 
+        // A float/double outside decimal's range (1e30, infinity) still has an order against a bound of
+        // another numeric type; compare as doubles rather than treating it as "not comparable".
+        if (value.GetType() != bound.GetType() && IsNumber(value) && IsNumber(bound))
+        {
+            return Convert.ToDouble(value, CultureInfo.InvariantCulture)
+                .CompareTo(Convert.ToDouble(bound, CultureInfo.InvariantCulture));
+        }
+
         return value.GetType() == bound.GetType() && value is IComparable comparable
             ? comparable.CompareTo(bound)
             : null;
@@ -134,7 +127,7 @@ internal sealed class KVValueConstraints
     private static bool TryGetNumber(object value, out decimal number)
     {
         number = 0m;
-        if (value is not (sbyte or byte or short or ushort or int or uint or long or ulong or float or double or decimal))
+        if (!IsNumber(value))
         {
             return false;
         }
@@ -149,6 +142,8 @@ internal sealed class KVValueConstraints
             return false;
         }
     }
+
+    private static bool IsNumber(object value) => NumericTypes.Contains(value.GetType());
 
     private static bool IsFullMatch(Regex regex, string text)
     {
@@ -181,6 +176,37 @@ internal sealed class KVValueConstraints
         DateTimeOffset dateTimeOffset => dateTimeOffset.ToString("O", CultureInfo.InvariantCulture),
         _ => Convert.ToString(bound, CultureInfo.InvariantCulture) ?? string.Empty
     };
+
+    private void EvaluateText(string path, string text, List<KVValidationError> errors)
+    {
+        if (this.MinLength.HasValue && text.Length < this.MinLength.Value)
+        {
+            errors.Add(new KVValidationError(path, "min_length", $"'{path}' must be at least {this.MinLength.Value} characters."));
+        }
+
+        if (this.MaxLength.HasValue && text.Length > this.MaxLength.Value)
+        {
+            errors.Add(new KVValidationError(path, "max_length", $"'{path}' must be at most {this.MaxLength.Value} characters."));
+        }
+
+        if (this.patternRegex is not null && !IsFullMatch(this.patternRegex, text))
+        {
+            errors.Add(new KVValidationError(path, "pattern", $"'{path}' does not match the required format."));
+        }
+    }
+
+    private void EvaluateBounds(string path, object value, List<KVValidationError> errors)
+    {
+        if (this.Min is not null && Compare(value, this.Min) < 0)
+        {
+            errors.Add(new KVValidationError(path, "min", $"'{path}' must be at least {Format(this.Min)}."));
+        }
+
+        if (this.Max is not null && Compare(value, this.Max) > 0)
+        {
+            errors.Add(new KVValidationError(path, "max", $"'{path}' must be at most {Format(this.Max)}."));
+        }
+    }
 
     private void EnsureLengthOrder()
     {

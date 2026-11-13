@@ -51,71 +51,13 @@ internal sealed class KVAllowedValuesDefinition
     {
         ArgumentNullException.ThrowIfNull(values);
 
-        var byId = new Dictionary<string, KVExplicitAllowedValue>(StringComparer.Ordinal);
-        var byValue = new Dictionary<object, KVExplicitAllowedValue>();
-        foreach (var entry in values)
-        {
-            if (string.IsNullOrWhiteSpace(entry.Id))
-            {
-                continue;
-            }
-
-            var placeholders = entry.Placeholders?
-                .GroupBy(static p => p.Name, StringComparer.Ordinal)
-                .Select(static g => g.First())
-                .ToArray();
-            var normalizedEntry = entry with { Placeholders = placeholders };
-            byId[entry.Id] = normalizedEntry;
-            if (entry.Value is not null)
-            {
-                byValue[entry.Value] = normalizedEntry;
-            }
-        }
-
+        var index = ExplicitValueIndex.Build(values);
         return new KVAllowedValuesDefinition(
-            isAllowed: value => value is string id
-                ? byId.ContainsKey(id)
-                : value is not null && byValue.ContainsKey(value),
-            normalizeForStorage: value =>
-            {
-                if (value is null)
-                {
-                    return null;
-                }
-
-                if (value is string id)
-                {
-                    if (byId.TryGetValue(id, out _))
-                    {
-                        return id;
-                    }
-
-                    throw new InvalidOperationException("Stored value token is not part of allowed values.");
-                }
-
-                if (byValue.TryGetValue(value, out var entry))
-                {
-                    return entry.Id;
-                }
-
-                throw new InvalidOperationException("Value type mismatch for allowed values.");
-            },
-            denormalizeFromStorage: value =>
-            {
-                if (value is null)
-                {
-                    return null;
-                }
-
-                if (value is string id && byId.TryGetValue(id, out var entry))
-                {
-                    return entry.Value;
-                }
-
-                throw new InvalidOperationException("Stored value token is not part of allowed values.");
-            },
-            byId,
-            byValue);
+            isAllowed: index.IsAllowed,
+            normalizeForStorage: value => value is null ? null : index.NormalizeItem(value),
+            denormalizeFromStorage: index.Denormalize,
+            index.ById,
+            index.ByValue);
     }
 
     public static KVAllowedValuesDefinition Create<TValue, TToken>(
@@ -190,58 +132,23 @@ internal sealed class KVAllowedValuesDefinition
     {
         ArgumentNullException.ThrowIfNull(values);
 
-        var byId = new Dictionary<string, KVExplicitAllowedValue>(StringComparer.Ordinal);
-        var byValue = new Dictionary<object, KVExplicitAllowedValue>();
-        foreach (var entry in values)
-        {
-            if (string.IsNullOrWhiteSpace(entry.Id))
-            {
-                continue;
-            }
+        var index = ExplicitValueIndex.Build(values);
 
-            var placeholders = entry.Placeholders?
-                .GroupBy(static p => p.Name, StringComparer.Ordinal)
-                .Select(static g => g.First())
-                .ToArray();
-            var normalizedEntry = entry with { Placeholders = placeholders };
-            byId[entry.Id] = normalizedEntry;
-            if (entry.Value is not null)
+        // Built once. An entry whose value is not a TElement (e.g. registered with a null value) has no
+        // element to read back, so it is left out and only fails when a stored sequence references its id.
+        var elementsById = new Dictionary<string, TElement>(StringComparer.Ordinal);
+        foreach (var (id, entry) in index.ById)
+        {
+            if (entry.Value is TElement element)
             {
-                byValue[entry.Value] = normalizedEntry;
+                elementsById[id] = element;
             }
         }
 
         return new KVAllowedValuesDefinition(
-            isAllowed: value => TryReadSequence(value, out var items) && items.All(IsAllowedItem),
-            normalizeForStorage: value => NormalizeSequence<string>(value, IsAllowedItem, NormalizeItem),
-            denormalizeFromStorage: value => DenormalizeSequence(value, byId.ToDictionary(pair => pair.Key, pair => (TElement)pair.Value.Value, StringComparer.Ordinal)));
-
-        bool IsAllowedItem(object? value)
-        {
-            return value is string id
-                ? byId.ContainsKey(id)
-                : value is not null && byValue.ContainsKey(value);
-        }
-
-        string NormalizeItem(object? value)
-        {
-            if (value is string id)
-            {
-                if (byId.TryGetValue(id, out _))
-                {
-                    return id;
-                }
-
-                throw new InvalidOperationException("Stored value token is not part of allowed values.");
-            }
-
-            if (value is not null && byValue.TryGetValue(value, out var entry))
-            {
-                return entry.Id;
-            }
-
-            throw new InvalidOperationException("Value type mismatch for allowed values.");
-        }
+            isAllowed: value => TryReadSequence(value, out var items) && items.All(index.IsAllowed),
+            normalizeForStorage: value => NormalizeSequence<string>(value, index.IsAllowed, index.NormalizeItem),
+            denormalizeFromStorage: value => DenormalizeSequence(value, elementsById));
     }
 
     public bool IsAllowed(object? value)
@@ -346,15 +253,9 @@ internal sealed class KVAllowedValuesDefinition
 
     private static bool TryReadSequence(object? value, out IReadOnlyList<object?> items)
     {
-        if (value is null or string)
+        if (value is string text)
         {
-            if (value is string text && TryParseJsonArray(text, out items))
-            {
-                return true;
-            }
-
-            items = [];
-            return false;
+            return TryParseJsonArray(text, out items);
         }
 
         if (value is JsonElement json)
@@ -364,13 +265,7 @@ internal sealed class KVAllowedValuesDefinition
 
         if (value is IEnumerable enumerable)
         {
-            var list = new List<object?>();
-            foreach (var item in enumerable)
-            {
-                list.Add(item);
-            }
-
-            items = list;
+            items = enumerable.Cast<object?>().ToList();
             return true;
         }
 
@@ -392,6 +287,17 @@ internal sealed class KVAllowedValuesDefinition
         }
     }
 
+    // long when integral, decimal when it fits, otherwise double (1e30 is a valid JSON number).
+    private static object ReadJsonNumber(JsonElement element)
+    {
+        if (element.TryGetInt64(out var longValue))
+        {
+            return longValue;
+        }
+
+        return element.TryGetDecimal(out var decimalValue) ? decimalValue : element.GetDouble();
+    }
+
     private static bool TryReadJsonArray(JsonElement json, out IReadOnlyList<object?> items)
     {
         if (json.ValueKind != JsonValueKind.Array)
@@ -406,7 +312,7 @@ internal sealed class KVAllowedValuesDefinition
             list.Add(element.ValueKind switch
             {
                 JsonValueKind.String => element.GetString(),
-                JsonValueKind.Number => element.TryGetInt64(out var longValue) ? longValue : element.GetDecimal(),
+                JsonValueKind.Number => ReadJsonNumber(element),
                 JsonValueKind.True => true,
                 JsonValueKind.False => false,
                 JsonValueKind.Null => null,
@@ -462,5 +368,140 @@ internal sealed class KVAllowedValuesDefinition
         }
 
         return null;
+    }
+
+    // Explicit allowed values indexed by id and by value; an entry without an id is ignored, and a later
+    // entry with the same id or value replaces the earlier one.
+    private sealed class ExplicitValueIndex
+    {
+        private static readonly HashSet<Type> NumericTypes =
+        [
+            typeof(sbyte), typeof(byte), typeof(short), typeof(ushort), typeof(int), typeof(uint),
+            typeof(long), typeof(ulong), typeof(float), typeof(double), typeof(decimal),
+        ];
+
+        public Dictionary<string, KVExplicitAllowedValue> ById { get; } = new(StringComparer.Ordinal);
+
+        public Dictionary<object, KVExplicitAllowedValue> ByValue { get; } = [];
+
+        // The runtime types of the registered values, for matching a number that arrives as another
+        // numeric type (JSON yields long / decimal for an int or enum value).
+        private HashSet<Type> ValueTypes { get; } = [];
+
+        public static ExplicitValueIndex Build(IReadOnlyCollection<KVExplicitAllowedValue> values)
+        {
+            var index = new ExplicitValueIndex();
+            foreach (var entry in values)
+            {
+                if (string.IsNullOrWhiteSpace(entry.Id))
+                {
+                    continue;
+                }
+
+                var placeholders = entry.Placeholders?
+                    .GroupBy(static p => p.Name, StringComparer.Ordinal)
+                    .Select(static g => g.First())
+                    .ToArray();
+                var normalizedEntry = entry with { Placeholders = placeholders };
+                index.ById[entry.Id] = normalizedEntry;
+                if (entry.Value is not null)
+                {
+                    index.ByValue[entry.Value] = normalizedEntry;
+                    index.ValueTypes.Add(entry.Value.GetType());
+                }
+            }
+
+            return index;
+        }
+
+        public bool IsAllowed(object? value)
+        {
+            return value is string id
+                ? this.ById.ContainsKey(id)
+                : value is not null && this.TryFindByValue(value, out _);
+        }
+
+        // The storage id of a value that is either an id already or a registered value.
+        public string NormalizeItem(object? value)
+        {
+            if (value is string id)
+            {
+                if (this.ById.ContainsKey(id))
+                {
+                    return id;
+                }
+
+                throw new InvalidOperationException("Stored value token is not part of allowed values.");
+            }
+
+            if (value is not null && this.TryFindByValue(value, out var entry))
+            {
+                return entry.Id;
+            }
+
+            throw new InvalidOperationException("Value type mismatch for allowed values.");
+        }
+
+        private static bool IsNumber(object value) => NumericTypes.Contains(value.GetType());
+
+        // Converts a number to a registered value type only when nothing is lost (2.5 never becomes 2).
+        private static bool TryConvertExactly(object number, Type targetType, out object converted)
+        {
+            var numericType = targetType.IsEnum ? Enum.GetUnderlyingType(targetType) : targetType;
+            try
+            {
+                var candidate = Convert.ChangeType(number, numericType, CultureInfo.InvariantCulture);
+                if (IsNumber(candidate)
+                    && Convert.ToDecimal(candidate, CultureInfo.InvariantCulture) == Convert.ToDecimal(number, CultureInfo.InvariantCulture))
+                {
+                    converted = targetType.IsEnum ? Enum.ToObject(targetType, candidate) : candidate;
+                    return true;
+                }
+            }
+            catch (Exception exception) when (exception is InvalidCastException or FormatException or OverflowException)
+            {
+                // Not representable in the target type.
+            }
+
+            converted = null!;
+            return false;
+        }
+
+        private bool TryFindByValue(object value, out KVExplicitAllowedValue entry)
+        {
+            if (this.ByValue.TryGetValue(value, out entry))
+            {
+                return true;
+            }
+
+            if (IsNumber(value))
+            {
+                foreach (var valueType in this.ValueTypes)
+                {
+                    if (TryConvertExactly(value, valueType, out var converted) && this.ByValue.TryGetValue(converted, out entry))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            entry = default;
+            return false;
+        }
+
+        public object? Denormalize(object? value)
+        {
+            if (value is null)
+            {
+                return null;
+            }
+
+            if (value is string id && this.ById.TryGetValue(id, out var entry))
+            {
+                return entry.Value;
+            }
+
+            throw new InvalidOperationException("Stored value token is not part of allowed values.");
+        }
     }
 }

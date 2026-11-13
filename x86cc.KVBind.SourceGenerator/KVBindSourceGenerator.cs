@@ -153,71 +153,15 @@ public sealed class KVBindSourceGenerator : IIncrementalGenerator
         if (!IsKvNodeType(typeSymbol))
             return null;
 
-        // A type split across partial declarations is modelled once, from its first declaration, so it gets a
-        // single generated file and duplicate keys are detected across all parts.
-        var firstDeclaration = typeSymbol.DeclaringSyntaxReferences.FirstOrDefault();
-        if (firstDeclaration is null
-            || firstDeclaration.SyntaxTree != typeDeclaration.SyntaxTree
-            || firstDeclaration.Span != typeDeclaration.Span)
+        if (!IsFirstDeclaration(typeSymbol, typeDeclaration))
             return null;
 
-        var properties = new List<PropertyModel>();
-        foreach (var propertySymbol in typeSymbol.GetMembers().OfType<IPropertySymbol>())
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var member = propertySymbol.DeclaringSyntaxReferences
-                .Select(reference => reference.GetSyntax(ct))
-                .OfType<PropertyDeclarationSyntax>()
-                .FirstOrDefault();
-            if (member is null)
-                continue;
-
-            var attributeData = propertySymbol.GetAttributes()
-                .FirstOrDefault(static a => a.AttributeClass?.ToDisplayString() == KvBindAttributeFqn);
-
-            if (attributeData is null)
-                continue;
-
-            var canonicalKey = attributeData.ConstructorArguments.Length > 0
-                ? attributeData.ConstructorArguments[0].Value as string
-                : null;
-
-            var hasPartialModifier = member.Modifiers.Any(static m => m.Text == "partial");
-            var isNestedNode = IsKvNestedNodeType(propertySymbol.Type);
-            var setter = propertySymbol.SetMethod;
-            var isInitOnly = setter?.IsInitOnly == true;
-
-            properties.Add(new PropertyModel(
-                PropertyName: propertySymbol.Name,
-                PropertyTypeName: propertySymbol.Type.ToDisplayString(FullyQualifiedNullableFormat),
-                NonNullablePropertyTypeName: propertySymbol.Type
-                    .WithNullableAnnotation(NullableAnnotation.NotAnnotated)
-                    .ToDisplayString(FullyQualifiedNullableFormat),
-                CanonicalKey: canonicalKey,
-                IsNodeProperty: !isNestedNode && IsKvBindNode(propertySymbol.Type),
-                IsNestedNodeProperty: isNestedNode,
-                IsCollectionProperty: IsKvCollection(propertySymbol.Type),
-                HasPartialModifier: hasPartialModifier,
-                HasSetter: setter is not null && !isInitOnly,
-                IsInitOnlySetter: isInitOnly,
-                PropertyAccessibility: GetAccessibilityModifier(propertySymbol.DeclaredAccessibility),
-                SetterAccessibility: GetSetterAccessibility(propertySymbol, setter),
-                Location: new EquatableLocation(member.GetLocation())));
-        }
+        var properties = BuildPropertyModels(typeSymbol, ct);
 
         if (properties.Count == 0)
             return null;
 
-        // Outermost first, so emission can open the containing types in order.
-        var containingTypes = new List<string>();
-        string? nonPartialContainingTypeName = null;
-        for (var containing = typeSymbol.ContainingType; containing is not null; containing = containing.ContainingType)
-        {
-            containingTypes.Insert(0, BuildTypeDeclaration(containing));
-            if (!IsPartialType(containing, ct))
-                nonPartialContainingTypeName = containing.Name;
-        }
+        var containingTypes = BuildContainingTypeDeclarations(typeSymbol, ct, out var nonPartialContainingTypeName);
 
         return new TypeModel(
             TypeName: typeSymbol.Name,
@@ -228,6 +172,91 @@ public sealed class KVBindSourceGenerator : IIncrementalGenerator
             NonPartialContainingTypeName: nonPartialContainingTypeName,
             TypeLocation: new EquatableLocation(typeDeclaration.Identifier.GetLocation()),
             Properties: new EquatableArray<PropertyModel>(properties.ToImmutableArray()));
+    }
+
+    private static List<PropertyModel> BuildPropertyModels(INamedTypeSymbol typeSymbol, CancellationToken ct)
+    {
+        var properties = new List<PropertyModel>();
+        foreach (var propertySymbol in typeSymbol.GetMembers().OfType<IPropertySymbol>())
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (BuildPropertyModel(propertySymbol, ct) is { } property)
+                properties.Add(property);
+        }
+
+        return properties;
+    }
+
+    // A type split across partial declarations is modelled once, from its first declaration, so it gets a
+    // single generated file and duplicate keys are detected across all parts.
+    private static bool IsFirstDeclaration(INamedTypeSymbol typeSymbol, TypeDeclarationSyntax typeDeclaration)
+    {
+        var firstDeclaration = typeSymbol.DeclaringSyntaxReferences.FirstOrDefault();
+        return firstDeclaration is not null
+            && firstDeclaration.SyntaxTree == typeDeclaration.SyntaxTree
+            && firstDeclaration.Span == typeDeclaration.Span;
+    }
+
+    // Outermost first, so emission can open the containing types in order.
+    private static List<string> BuildContainingTypeDeclarations(
+        INamedTypeSymbol typeSymbol,
+        CancellationToken ct,
+        out string? nonPartialContainingTypeName)
+    {
+        var containingTypes = new List<string>();
+        nonPartialContainingTypeName = null;
+        for (var containing = typeSymbol.ContainingType; containing is not null; containing = containing.ContainingType)
+        {
+            containingTypes.Insert(0, BuildTypeDeclaration(containing));
+            if (!IsPartialType(containing, ct))
+                nonPartialContainingTypeName = containing.Name;
+        }
+
+        return containingTypes;
+    }
+
+    // Null when the property is not a [KVBind] property declared in source.
+    private static PropertyModel? BuildPropertyModel(IPropertySymbol propertySymbol, CancellationToken ct)
+    {
+        var member = propertySymbol.DeclaringSyntaxReferences
+            .Select(reference => reference.GetSyntax(ct))
+            .OfType<PropertyDeclarationSyntax>()
+            .FirstOrDefault();
+        if (member is null)
+            return null;
+
+        var attributeData = propertySymbol.GetAttributes()
+            .FirstOrDefault(static a => a.AttributeClass?.ToDisplayString() == KvBindAttributeFqn);
+
+        if (attributeData is null)
+            return null;
+
+        var canonicalKey = attributeData.ConstructorArguments.Length > 0
+            ? attributeData.ConstructorArguments[0].Value as string
+            : null;
+
+        var hasPartialModifier = member.Modifiers.Any(static m => m.Text == "partial");
+        var isNestedNode = IsKvNestedNodeType(propertySymbol.Type);
+        var setter = propertySymbol.SetMethod;
+        var isInitOnly = setter?.IsInitOnly == true;
+
+        return new PropertyModel(
+            PropertyName: propertySymbol.Name,
+            PropertyTypeName: propertySymbol.Type.ToDisplayString(FullyQualifiedNullableFormat),
+            NonNullablePropertyTypeName: propertySymbol.Type
+                .WithNullableAnnotation(NullableAnnotation.NotAnnotated)
+                .ToDisplayString(FullyQualifiedNullableFormat),
+            CanonicalKey: canonicalKey,
+            IsNodeProperty: !isNestedNode && IsKvBindNode(propertySymbol.Type),
+            IsNestedNodeProperty: isNestedNode,
+            IsCollectionProperty: IsKvCollection(propertySymbol.Type),
+            HasPartialModifier: hasPartialModifier,
+            HasSetter: setter is not null && !isInitOnly,
+            IsInitOnlySetter: isInitOnly,
+            PropertyAccessibility: GetAccessibilityModifier(propertySymbol.DeclaredAccessibility),
+            SetterAccessibility: GetSetterAccessibility(propertySymbol, setter),
+            Location: new EquatableLocation(member.GetLocation()));
     }
 
     private static NonKvNodeWarning? BuildNonKvNodeWarning(GeneratorSyntaxContext context, CancellationToken ct)
@@ -267,77 +296,20 @@ public sealed class KVBindSourceGenerator : IIncrementalGenerator
 
     private static void EmitType(SourceProductionContext context, TypeModel model)
     {
+        var properties = model.Properties.AsImmutableArray();
+
         // Validate and report diagnostics
-        foreach (var property in model.Properties.AsImmutableArray())
+        foreach (var property in properties)
         {
-            if ((!property.IsNodeProperty && !property.IsCollectionProperty && !property.HasPartialModifier)
-                || (property.IsNestedNodeProperty && !property.HasPartialModifier))
-            {
-                context.ReportDiagnostic(Diagnostic.Create(
-                    PropertyMustBePartial, property.Location.Value, property.PropertyName));
-            }
-
-            if (string.IsNullOrWhiteSpace(property.CanonicalKey))
-            {
-                context.ReportDiagnostic(Diagnostic.Create(
-                    CanonicalKeyRequired, property.Location.Value, property.PropertyName));
-            }
-            else if (!IsValidCanonicalKey(property.CanonicalKey))
-            {
-                context.ReportDiagnostic(Diagnostic.Create(
-                    InvalidCanonicalKey, property.Location.Value, property.PropertyName, property.CanonicalKey));
-            }
-
-            // KVB006: field group or collection with a setter — unbound replacement is a silent runtime failure
-            if ((property.IsNodeProperty || property.IsCollectionProperty) && property.HasSetter)
-            {
-                context.ReportDiagnostic(Diagnostic.Create(
-                    MutableNavigationProperty, property.Location.Value, property.PropertyName, property.PropertyTypeName));
-            }
-
-            // KVB007: field group or collection declared as partial — no generated implementation exists
-            if ((property.IsNodeProperty || property.IsCollectionProperty) && property.HasPartialModifier)
-            {
-                context.ReportDiagnostic(Diagnostic.Create(
-                    PartialNavigationProperty, property.Location.Value, property.PropertyName, property.PropertyTypeName));
-            }
-
-            // KVB008: nested node with a public setter — should use private set to route through INIT/DROP
-            if (property.IsNestedNodeProperty && property.HasSetter
-                && property.PropertyAccessibility == "public "
-                && string.IsNullOrEmpty(property.SetterAccessibility))
-            {
-                context.ReportDiagnostic(Diagnostic.Create(
-                    PublicNestedNodeSetter, property.Location.Value, property.PropertyName, property.NonNullablePropertyTypeName));
-            }
+            ReportDeclarationDiagnostics(context, property);
+            ReportNavigationDiagnostics(context, property);
         }
 
-        // KVB003: report on every member of each duplicate group, not just the first
-        var duplicateGroups = model.Properties.AsImmutableArray()
-            .Where(static p => !string.IsNullOrWhiteSpace(p.CanonicalKey) && IsValidCanonicalKey(p.CanonicalKey))
-            .GroupBy(static p => p.CanonicalKey!, StringComparer.Ordinal)
-            .Where(static g => g.Count() > 1);
-
-        foreach (var group in duplicateGroups)
-        {
-            foreach (var duplicate in group)
-            {
-                context.ReportDiagnostic(Diagnostic.Create(
-                    DuplicateCanonicalKey, duplicate.Location.Value, model.TypeName, group.Key));
-            }
-        }
+        ReportDuplicateKeys(context, model);
 
         // Emit valid field and nested-node properties
-        var validFields = model.Properties.AsImmutableArray()
-            .Where(static p => !p.IsNodeProperty && !p.IsNestedNodeProperty && !p.IsCollectionProperty
-                && p.HasPartialModifier
-                && !string.IsNullOrWhiteSpace(p.CanonicalKey) && IsValidCanonicalKey(p.CanonicalKey))
-            .ToArray();
-
-        var validNestedNodes = model.Properties.AsImmutableArray()
-            .Where(static p => p.IsNestedNodeProperty && p.HasPartialModifier
-                && !string.IsNullOrWhiteSpace(p.CanonicalKey) && IsValidCanonicalKey(p.CanonicalKey))
-            .ToArray();
+        var validFields = properties.Where(static p => IsEmittableField(p)).ToArray();
+        var validNestedNodes = properties.Where(static p => IsEmittableNestedNode(p)).ToArray();
 
         if (validFields.Length == 0 && validNestedNodes.Length == 0)
             return;
@@ -350,6 +322,93 @@ public sealed class KVBindSourceGenerator : IIncrementalGenerator
             return;
         }
 
+        context.AddSource(BuildHintName(model), BuildSource(model, validFields, validNestedNodes));
+    }
+
+    // KVB001 (not partial) and KVB002 / KVB004 (missing or invalid key).
+    private static void ReportDeclarationDiagnostics(SourceProductionContext context, PropertyModel property)
+    {
+        if (!IsNavigationProperty(property) && !property.HasPartialModifier)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                PropertyMustBePartial, property.Location.Value, property.PropertyName));
+        }
+
+        if (string.IsNullOrWhiteSpace(property.CanonicalKey))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                CanonicalKeyRequired, property.Location.Value, property.PropertyName));
+        }
+        else if (!IsValidCanonicalKey(property.CanonicalKey))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                InvalidCanonicalKey, property.Location.Value, property.PropertyName, property.CanonicalKey));
+        }
+    }
+
+    private static void ReportNavigationDiagnostics(SourceProductionContext context, PropertyModel property)
+    {
+        // KVB006: field group or collection with a setter — unbound replacement is a silent runtime failure
+        if (IsNavigationProperty(property) && property.HasSetter)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                MutableNavigationProperty, property.Location.Value, property.PropertyName, property.PropertyTypeName));
+        }
+
+        // KVB007: field group or collection declared as partial — no generated implementation exists
+        if (IsNavigationProperty(property) && property.HasPartialModifier)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                PartialNavigationProperty, property.Location.Value, property.PropertyName, property.PropertyTypeName));
+        }
+
+        // KVB008: nested node with a public setter — should use private set to route through INIT/DROP
+        if (HasPublicNestedNodeSetter(property))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                PublicNestedNodeSetter, property.Location.Value, property.PropertyName, property.NonNullablePropertyTypeName));
+        }
+    }
+
+    private static bool HasPublicNestedNodeSetter(PropertyModel property) =>
+        property.IsNestedNodeProperty && property.HasSetter
+        && property.PropertyAccessibility == "public "
+        && string.IsNullOrEmpty(property.SetterAccessibility);
+
+    // KVB003: report on every member of each duplicate group, not just the first
+    private static void ReportDuplicateKeys(SourceProductionContext context, TypeModel model)
+    {
+        var duplicateGroups = model.Properties.AsImmutableArray()
+            .Where(static p => HasUsableKey(p))
+            .GroupBy(static p => p.CanonicalKey!, StringComparer.Ordinal)
+            .Where(static g => g.Count() > 1);
+
+        foreach (var group in duplicateGroups)
+        {
+            foreach (var duplicate in group)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    DuplicateCanonicalKey, duplicate.Location.Value, model.TypeName, group.Key));
+            }
+        }
+    }
+
+    // A field group or a collection: reached through a plain (non-generated) property.
+    private static bool IsNavigationProperty(PropertyModel property) =>
+        property.IsNodeProperty || property.IsCollectionProperty;
+
+    private static bool HasUsableKey(PropertyModel property) =>
+        !string.IsNullOrWhiteSpace(property.CanonicalKey) && IsValidCanonicalKey(property.CanonicalKey);
+
+    private static bool IsEmittableField(PropertyModel property) =>
+        !IsNavigationProperty(property) && !property.IsNestedNodeProperty
+        && property.HasPartialModifier && HasUsableKey(property);
+
+    private static bool IsEmittableNestedNode(PropertyModel property) =>
+        property.IsNestedNodeProperty && property.HasPartialModifier && HasUsableKey(property);
+
+    private static string BuildSource(TypeModel model, PropertyModel[] validFields, PropertyModel[] validNestedNodes)
+    {
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated />");
         sb.AppendLine("#nullable enable");
@@ -373,28 +432,10 @@ public sealed class KVBindSourceGenerator : IIncrementalGenerator
 
         var member = indent + "    ";
         foreach (var prop in validFields)
-        {
-            var key = Escape(prop.CanonicalKey!);
-            sb.AppendLine($"{member}{prop.PropertyAccessibility}partial {prop.PropertyTypeName} {prop.PropertyName}");
-            sb.AppendLine($"{member}{{");
-            sb.AppendLine($"{member}    get => GetField<{prop.PropertyTypeName}>(\"{key}\");");
-            if (prop.HasSetter || prop.IsInitOnlySetter)
-                sb.AppendLine($"{member}    {prop.SetterAccessibility}{SetterKeyword(prop)} => SetField(\"{key}\", value);");
-            sb.AppendLine($"{member}}}");
-            sb.AppendLine();
-        }
+            AppendAccessor(sb, member, prop, $"GetField<{prop.PropertyTypeName}>", "SetField");
 
         foreach (var prop in validNestedNodes)
-        {
-            var key = Escape(prop.CanonicalKey!);
-            sb.AppendLine($"{member}{prop.PropertyAccessibility}partial {prop.PropertyTypeName} {prop.PropertyName}");
-            sb.AppendLine($"{member}{{");
-            sb.AppendLine($"{member}    get => GetNestedNode<{prop.NonNullablePropertyTypeName}>(\"{key}\");");
-            if (prop.HasSetter || prop.IsInitOnlySetter)
-                sb.AppendLine($"{member}    {prop.SetterAccessibility}{SetterKeyword(prop)} => SetNestedNode(\"{key}\", value);");
-            sb.AppendLine($"{member}}}");
-            sb.AppendLine();
-        }
+            AppendAccessor(sb, member, prop, $"GetNestedNode<{prop.NonNullablePropertyTypeName}>", "SetNestedNode");
 
         sb.AppendLine($"{indent}}}");
         while (indent.Length > 0)
@@ -403,17 +444,30 @@ public sealed class KVBindSourceGenerator : IIncrementalGenerator
             sb.AppendLine($"{indent}}}");
         }
 
-        // Unique hint name using fully qualified type name to avoid collisions
-        // e.g. global::Demo.Claims.InsuranceClaim → Demo_Claims_InsuranceClaim.KVBind.g.cs
-        var hintName = model.FullyQualifiedTypeName
+        return sb.ToString();
+    }
+
+    private static void AppendAccessor(StringBuilder sb, string member, PropertyModel prop, string getter, string setter)
+    {
+        var key = Escape(prop.CanonicalKey!);
+        sb.AppendLine($"{member}{prop.PropertyAccessibility}partial {prop.PropertyTypeName} {prop.PropertyName}");
+        sb.AppendLine($"{member}{{");
+        sb.AppendLine($"{member}    get => {getter}(\"{key}\");");
+        if (prop.HasSetter || prop.IsInitOnlySetter)
+            sb.AppendLine($"{member}    {prop.SetterAccessibility}{SetterKeyword(prop)} => {setter}(\"{key}\", value);");
+        sb.AppendLine($"{member}}}");
+        sb.AppendLine();
+    }
+
+    // Unique hint name using fully qualified type name to avoid collisions
+    // e.g. global::Demo.Claims.InsuranceClaim → Demo_Claims_InsuranceClaim.KVBind.g.cs
+    private static string BuildHintName(TypeModel model) =>
+        model.FullyQualifiedTypeName
             .Replace("global::", string.Empty)
             .Replace('.', '_')
             .Replace('<', '[')
             .Replace('>', ']')
-            + ".KVBind.g.cs";
-
-        context.AddSource(hintName, sb.ToString());
-    }
+        + ".KVBind.g.cs";
 
     // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -427,13 +481,15 @@ public sealed class KVBindSourceGenerator : IIncrementalGenerator
 
         foreach (var c in value!)
         {
-            if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_')
-                continue;
-            return false;
+            if (!IsCanonicalKeyChar(c))
+                return false;
         }
 
         return true;
     }
+
+    private static bool IsCanonicalKeyChar(char c) =>
+        (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_';
 
     private static bool IsKvBindNode(ITypeSymbol typeSymbol) =>
         typeSymbol is INamedTypeSymbol named && IsKvNodeType(named);

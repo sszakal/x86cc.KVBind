@@ -263,20 +263,7 @@ public sealed class KVCollectionRuleBuilder<TModel>
         var children = collectionNode?.GetActiveItemIds() ?? [];
         var count = children.Count;
 
-        if (this.notEmpty && count == 0)
-        {
-            errors.Add(new KVValidationError(path, "not_empty", $"'{path}' collection cannot be empty."));
-        }
-
-        if (this.minCount.HasValue && count < this.minCount.Value)
-        {
-            errors.Add(new KVValidationError(path, "min_count", $"'{path}' collection must contain at least {this.minCount.Value} item(s)."));
-        }
-
-        if (this.maxCount.HasValue && count > this.maxCount.Value)
-        {
-            errors.Add(new KVValidationError(path, "max_count", $"'{path}' collection must contain at most {this.maxCount.Value} item(s)."));
-        }
+        KVValidationRuntime.AddCountErrors(path, count, this.notEmpty, this.minCount, this.maxCount, errors);
 
         foreach (var aggregateRule in this.aggregateRules)
         {

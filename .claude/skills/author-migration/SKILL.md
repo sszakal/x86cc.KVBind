@@ -36,7 +36,7 @@ m.RenameNode(KVTarget.Root.Seg("Party"), "Counterparty");              // carrie
 
 ## Replacing a nested-node type
 
-Flip the `$type`, reshape fields, seed new from old (fields are read from pre-migration data):
+Flip the `$type`, reshape fields, seed new from old. Reshape ops run in the order written and see earlier ops; value factories (`view.Sibling(...)`) still read pre-migration data:
 
 ```csharp
 builder.Migration(4, m => m.ReplaceNestedType(

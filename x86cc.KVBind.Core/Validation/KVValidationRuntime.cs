@@ -22,41 +22,13 @@ internal static class KVValidationRuntime
     {
         foreach (var field in node.Definition.Fields)
         {
-            var path = BuildPath(currentCanonicalPath, field.SubSegmentPath);
-            var storagePath = node.ResolveStoragePath(field.SubSegmentPath);
-            var value = node.Model.Get<object?>(storagePath);
-
-            if (field.IsRequired && (value is null || (value is string text && string.IsNullOrWhiteSpace(text))))
-            {
-                errors.Add(new KVValidationError(path, "required", $"'{path}' is required."));
-            }
-
-            field.Constraints?.Evaluate(path, value, errors);
-
-            if (field.AllowedValues is not null && value is not null && !field.AllowedValues.IsAllowed(value))
-            {
-                errors.Add(new KVValidationError(path, "allowed_values", $"Value for field '{path}' is not part of configured allowed values."));
-            }
-
-            foreach (var rule in field.ValidationRules)
-            {
-                if (rule.ProfileMatches(profile))
-                {
-                    rule.Evaluate(node, path, currentCanonicalPath, errors);
-                }
-            }
+            ValidateField(node, profile, errors, currentCanonicalPath, field);
         }
 
         foreach (var registration in node.Definition.ValidationRegistrations)
         {
             var scopePath = ResolveScopePath(node, registration.ScopePath, currentCanonicalPath);
-            foreach (var rule in registration.Rules)
-            {
-                if (rule.ProfileMatches(profile))
-                {
-                    rule.Evaluate(node, scopePath, currentCanonicalPath, errors);
-                }
-            }
+            RunRules(registration.Rules, node, profile, errors, scopePath, currentCanonicalPath);
         }
 
         foreach (var collection in node.Definition.Collections)
@@ -66,17 +38,7 @@ internal static class KVValidationRuntime
 
         foreach (var nestedNodeDefinition in node.Definition.NestedNodes)
         {
-            var nestedPath = BuildPath(currentCanonicalPath, nestedNodeDefinition.SubSegmentPath);
-            var nestedModel = node.GetNestedNodeModel(nestedNodeDefinition.SubSegmentPath);
-            var activeNode = node.GetActiveNestedNode(nestedNodeDefinition, nestedModel);
-            if (activeNode is not null)
-            {
-                ValidateNode(activeNode, profile, errors, nestedPath);
-            }
-            else if (nestedNodeDefinition.IsRequired)
-            {
-                errors.Add(new KVValidationError(nestedPath, "required", $"'{nestedPath}' is required."));
-            }
+            ValidateNestedNode(node, profile, errors, currentCanonicalPath, nestedNodeDefinition);
         }
 
         foreach (var childDefinition in node.Definition.Nodes)
@@ -89,6 +51,58 @@ internal static class KVValidationRuntime
         }
     }
 
+    private static void ValidateField(KVNode node, KVValidationProfile profile, List<KVValidationError> errors, string currentCanonicalPath, KVFieldDefinition field)
+    {
+        var path = BuildPath(currentCanonicalPath, field.SubSegmentPath);
+        var storagePath = node.ResolveStoragePath(field.SubSegmentPath);
+        var value = node.Model.Get<object?>(storagePath);
+
+        if (field.IsRequired && IsUnset(value))
+        {
+            errors.Add(new KVValidationError(path, "required", $"'{path}' is required."));
+        }
+
+        field.Constraints?.Evaluate(path, value, errors);
+
+        if (field.AllowedValues is not null && value is not null && !field.AllowedValues.IsAllowed(value))
+        {
+            errors.Add(new KVValidationError(path, "allowed_values", $"Value for field '{path}' is not part of configured allowed values."));
+        }
+
+        RunRules(field.ValidationRules, node, profile, errors, path, currentCanonicalPath);
+    }
+
+    private static bool IsUnset(object? value) => value is null || (value is string text && string.IsNullOrWhiteSpace(text));
+
+    private static void ValidateNestedNode(KVNode node, KVValidationProfile profile, List<KVValidationError> errors, string currentCanonicalPath, KVNestedNodeDefinition nestedNodeDefinition)
+    {
+        var nestedPath = BuildPath(currentCanonicalPath, nestedNodeDefinition.SubSegmentPath);
+        var nestedModel = node.GetNestedNodeModel(nestedNodeDefinition.SubSegmentPath);
+        var activeNode = node.GetActiveNestedNode(nestedNodeDefinition, nestedModel);
+        if (activeNode is not null)
+        {
+            ValidateNode(activeNode, profile, errors, nestedPath);
+        }
+        else if (nestedNodeDefinition.IsRequired)
+        {
+            errors.Add(new KVValidationError(nestedPath, "required", $"'{nestedPath}' is required."));
+        }
+    }
+
+    // Indexed rather than enumerated: callers pass both List<T> and IReadOnlyList<T>, and an interface
+    // enumerator would allocate on every field of every validated node.
+    private static void RunRules(IReadOnlyList<KVCompiledValidationRule> rules, KVNode node, KVValidationProfile profile, List<KVValidationError> errors, string path, string currentCanonicalPath)
+    {
+        for (var i = 0; i < rules.Count; i++)
+        {
+            var rule = rules[i];
+            if (rule.ProfileMatches(profile))
+            {
+                rule.Evaluate(node, path, currentCanonicalPath, errors);
+            }
+        }
+    }
+
     private static void ValidateCollection(KVNode node, KVValidationProfile profile, List<KVValidationError> errors, string currentCanonicalPath, KVCollectionDefinition collection)
     {
         var collectionPath = BuildPath(currentCanonicalPath, collection.SubSegmentPath);
@@ -96,33 +110,14 @@ internal static class KVValidationRuntime
         var children = collectionNode.GetActiveItemIds();
         var count = children.Count;
 
-        if (collection.NotEmpty && count == 0)
-        {
-            errors.Add(new KVValidationError(collectionPath, "not_empty", $"'{collectionPath}' collection cannot be empty."));
-        }
-
-        if (collection.MinCount.HasValue && count < collection.MinCount.Value)
-        {
-            errors.Add(new KVValidationError(collectionPath, "min_count", $"'{collectionPath}' collection must contain at least {collection.MinCount.Value} item(s)."));
-        }
-
-        if (collection.MaxCount.HasValue && count > collection.MaxCount.Value)
-        {
-            errors.Add(new KVValidationError(collectionPath, "max_count", $"'{collectionPath}' collection must contain at most {collection.MaxCount.Value} item(s)."));
-        }
+        AddCountErrors(collectionPath, count, collection.NotEmpty, collection.MinCount, collection.MaxCount, errors);
 
         foreach (var aggregateRule in collection.AggregateRules)
         {
             ValidateAggregateRule(errors, collectionPath, collectionNode, children, aggregateRule);
         }
 
-        foreach (var rule in collection.ValidationRules)
-        {
-            if (rule.ProfileMatches(profile))
-            {
-                rule.Evaluate(node, collectionPath, currentCanonicalPath, errors);
-            }
-        }
+        RunRules(collection.ValidationRules, node, profile, errors, collectionPath, currentCanonicalPath);
 
         foreach (var child in children)
         {
@@ -131,6 +126,25 @@ internal static class KVValidationRuntime
             {
                 ValidateNode(itemNode, profile, errors, BuildPath(collectionPath, child));
             }
+        }
+    }
+
+    // Shared by collection definitions and profile collection rules.
+    internal static void AddCountErrors(string collectionPath, int count, bool notEmpty, int? minCount, int? maxCount, List<KVValidationError> errors)
+    {
+        if (notEmpty && count == 0)
+        {
+            errors.Add(new KVValidationError(collectionPath, "not_empty", $"'{collectionPath}' collection cannot be empty."));
+        }
+
+        if (minCount.HasValue && count < minCount.Value)
+        {
+            errors.Add(new KVValidationError(collectionPath, "min_count", $"'{collectionPath}' collection must contain at least {minCount.Value} item(s)."));
+        }
+
+        if (maxCount.HasValue && count > maxCount.Value)
+        {
+            errors.Add(new KVValidationError(collectionPath, "max_count", $"'{collectionPath}' collection must contain at most {maxCount.Value} item(s)."));
         }
     }
 

@@ -57,20 +57,23 @@ public sealed class KVValueJsonConverter : JsonConverter<KVValue>
             return KVValue.Tombstone;
 
         if (TryGetProperty(root, "$type", out var typeElement))
-        {
-            var typeName = typeElement.ValueKind == JsonValueKind.String ? typeElement.GetString() : null;
-            var valueType = !string.IsNullOrWhiteSpace(typeName) ? Type.GetType(typeName, throwOnError: false) : typeof(object);
-            if (valueType is null)
-                throw new JsonException($"Unable to resolve KV value type '{typeName}'.");
-
-            object? value = null;
-            if (TryGetProperty(root, "value", out var valueElement) && valueElement.ValueKind != JsonValueKind.Null)
-                value = valueElement.Deserialize(valueType, JsonOptions);
-
-            return Create(valueType, value);
-        }
+            return ReadTypedValue(root, typeElement);
 
         throw new JsonException("KVValue object must have '$tombstone' or '$type' property.");
+    }
+
+    private static KVValue ReadTypedValue(JsonElement root, JsonElement typeElement)
+    {
+        var typeName = typeElement.ValueKind == JsonValueKind.String ? typeElement.GetString() : null;
+        var valueType = !string.IsNullOrWhiteSpace(typeName) ? Type.GetType(typeName, throwOnError: false) : typeof(object);
+        if (valueType is null)
+            throw new JsonException($"Unable to resolve KV value type '{typeName}'.");
+
+        object? value = null;
+        if (TryGetProperty(root, "value", out var valueElement) && valueElement.ValueKind != JsonValueKind.Null)
+            value = valueElement.Deserialize(valueType, JsonOptions);
+
+        return Create(valueType, value);
     }
 
     private static bool TryGetProperty(JsonElement element, string propertyName, out JsonElement value)

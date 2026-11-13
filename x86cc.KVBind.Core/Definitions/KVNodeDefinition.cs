@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using x86cc.KVBind.Core.Migrations;
 
 namespace x86cc.KVBind.Core;
@@ -58,23 +59,16 @@ public class KVNodeDefinition : KVDefinition
     {
         get
         {
-            if (this.inheritedPrefixes is null)
-            {
-                var prefixes = new List<string>();
-                foreach (var fieldDefinition in this.Fields)
-                    if (fieldDefinition.IsInherited) prefixes.Add(fieldDefinition.SubSegmentPath);
-                foreach (var groupDefinition in this.Nodes)
-                    if (groupDefinition.IsInherited) prefixes.Add(groupDefinition.SubSegmentPath);
-                foreach (var collectionDefinition in this.Collections)
-                    if (collectionDefinition.IsInherited) prefixes.Add(collectionDefinition.SubSegmentPath);
-                foreach (var nestedNodeDefinition in this.NestedNodes)
-                    if (nestedNodeDefinition.IsInherited) prefixes.Add(nestedNodeDefinition.SubSegmentPath);
-                this.inheritedPrefixes = prefixes.ToArray();
-            }
-
-            return this.inheritedPrefixes;
+            return this.inheritedPrefixes ??= this.BuildInheritedPrefixes();
         }
     }
+
+    private string[] BuildInheritedPrefixes() =>
+        this.Fields.Where(static definition => definition.IsInherited).Select(static definition => definition.SubSegmentPath)
+            .Concat(this.Nodes.Where(static definition => definition.IsInherited).Select(static definition => definition.SubSegmentPath))
+            .Concat(this.Collections.Where(static definition => definition.IsInherited).Select(static definition => definition.SubSegmentPath))
+            .Concat(this.NestedNodes.Where(static definition => definition.IsInherited).Select(static definition => definition.SubSegmentPath))
+            .ToArray();
 
     public Func<KVNode, KVNode> GetChildNode { get; init; } = _ => throw new NotSupportedException("GetChildNode is not configured.");
 

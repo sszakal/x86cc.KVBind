@@ -18,58 +18,77 @@ public abstract partial class KVNode
         // parentless master (no inheritance) the same members are editable and default normally.
         var hasInheritance = this.Model.Overlay.HasInheritance;
 
+        this.ApplyFieldDefaults(hasInheritance);
+        this.ApplyFieldGroupDefaults(hasInheritance);
+
+        foreach (var collDef in this.Definition.Collections)
+        {
+            if (hasInheritance && collDef.IsInherited) continue;
+            this.ApplyCollectionDefaults(collDef);
+        }
+
+        foreach (var nestedDef in this.Definition.NestedNodes)
+        {
+            if (hasInheritance && nestedDef.IsInherited) continue;
+            this.ApplyNestedNodeDefault(nestedDef);
+        }
+    }
+
+    private void ApplyFieldDefaults(bool hasInheritance)
+    {
         foreach (var field in this.Definition.Fields)
         {
             if (hasInheritance && field.IsInherited) continue;
             if (field.HasDefault && !this.IsFieldSet(field.SubSegmentPath))
                 this.SetFieldForPatch(field.SubSegmentPath, field.DefaultValue);
         }
+    }
 
+    private void ApplyFieldGroupDefaults(bool hasInheritance)
+    {
         foreach (var nodeDef in this.Definition.Nodes)
         {
             if (hasInheritance && nodeDef.IsInherited) continue;
             nodeDef.GetChildNode(this).ApplyDefaultsRecursive();
         }
+    }
 
-        foreach (var collDef in this.Definition.Collections)
+    private void ApplyCollectionDefaults(KVCollectionDefinition collDef)
+    {
+        var collection = collDef.GetCollection(this);
+
+        // Seeding belongs to the collection's birth, i.e. while it is still empty: a collection that
+        // already holds items (an existing aggregate, or one whose seeded items were later removed and
+        // committed) is never re-seeded. Each seeded item gets its own defaults when it is created.
+        if (collection.GetActiveItemIds().Count == 0)
         {
-            if (hasInheritance && collDef.IsInherited) continue;
-            var collection = collDef.GetCollection(this);
-
-            // Seeding belongs to the collection's birth, i.e. while it is still empty: a collection that
-            // already holds items (an existing aggregate, or one whose seeded items were later removed and
-            // committed) is never re-seeded. Each seeded item gets its own defaults when it is created.
-            if (collection.GetActiveItemIds().Count == 0)
+            collDef.DefaultSeed?.Invoke(collection);
+            foreach (var seed in collDef.Seeds)
             {
-                collDef.DefaultSeed?.Invoke(collection);
-                foreach (var seed in collDef.Seeds)
-                {
-                    var item = (KVCollectionItemNode)collection.Create(seed.ItemId, seed.ItemDefinition.TypeToken);
-                    seed.Configure?.Invoke(item);
-                }
-            }
-
-            foreach (var itemId in collection.GetActiveItemIds().ToArray())
-            {
-                if (collection.GetById(itemId) is { } item)
-                    item.ApplyDefaultsRecursive();
+                var item = (KVCollectionItemNode)collection.Create(seed.ItemId, seed.ItemDefinition.TypeToken);
+                seed.Configure?.Invoke(item);
             }
         }
 
-        foreach (var nestedDef in this.Definition.NestedNodes)
+        foreach (var itemId in collection.GetActiveItemIds().ToArray())
         {
-            if (hasInheritance && nestedDef.IsInherited) continue;
-            if (string.IsNullOrEmpty(nestedDef.DefaultTypeToken))
-                continue;
-
-            var slotModel = this.GetNestedNodeModel(nestedDef.SubSegmentPath);
-            if (!string.IsNullOrWhiteSpace(KVNestedNode.GetItemType(slotModel)))
-                continue; // already initialized — leave it be
-
-            var nested = this.InitNestedNodeToToken(nestedDef.SubSegmentPath, nestedDef.DefaultTypeToken);
-            nested.ApplyDefaultsRecursive();
-            this.EmitNestedNodeChange(nestedDef.SubSegmentPath, oldTypeToken: null, nested);
+            if (collection.GetById(itemId) is { } item)
+                item.ApplyDefaultsRecursive();
         }
+    }
+
+    private void ApplyNestedNodeDefault(KVNestedNodeDefinition nestedDef)
+    {
+        if (string.IsNullOrEmpty(nestedDef.DefaultTypeToken))
+            return;
+
+        var slotModel = this.GetNestedNodeModel(nestedDef.SubSegmentPath);
+        if (!string.IsNullOrWhiteSpace(KVNestedNode.GetItemType(slotModel)))
+            return; // already initialized — leave it be
+
+        var nested = this.InitNestedNodeToToken(nestedDef.SubSegmentPath, nestedDef.DefaultTypeToken);
+        nested.ApplyDefaultsRecursive();
+        this.EmitNestedNodeChange(nestedDef.SubSegmentPath, oldTypeToken: null, nested);
     }
 
     private bool IsFieldSet(string fieldKey)

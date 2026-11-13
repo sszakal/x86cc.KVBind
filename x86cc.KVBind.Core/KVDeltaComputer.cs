@@ -20,52 +20,68 @@ internal static class KVDeltaComputer
         if (isCollectionItem && !node.Model.Overlay.IsSnapshotBacked(node.Model.DataPath) && HasDraftState(node))
             return new KVChangeDeltaGroup([new KVChangeDelta(nodePath, KVChangeDeltaType.Added)], []);
 
-        // Field-level changes.
+        AddFieldDeltas(node, nodePath, deltas);
+
+        var children = new List<KVChangeDeltaGroup>();
+        AddFieldGroupChildren(node, nodePath, children);
+        AddCollectionChildren(node, nodePath, children);
+        AddNestedNodeChanges(node, nodePath, deltas, children);
+
+        return new KVChangeDeltaGroup(deltas, children);
+    }
+
+    // Field-level changes.
+    private static void AddFieldDeltas(KVNode node, string nodePath, List<KVChangeDelta> deltas)
+    {
+        var overlay = node.Model.Overlay;
         foreach (var field in node.Definition.Fields)
         {
             var absPath = KVPath.Combine(node.Model.DataPath, field.SubSegmentPath);
             var canonPath = KVPath.Combine(nodePath, field.SubSegmentPath);
 
-            if (node.Model.Overlay.HasRemovedPath(absPath))
+            if (overlay.HasRemovedPath(absPath))
             {
-                if (node.Model.Overlay.TryGetSnapshotValue(absPath, out _))
+                if (overlay.TryGetSnapshotValue(absPath, out _))
                     deltas.Add(new KVChangeDelta(canonPath, KVChangeDeltaType.Removed));
             }
-            else if (node.Model.Overlay.TryGetDraftValue(absPath, out var draftVal))
+            else if (overlay.TryGetDraftValue(absPath, out var draftVal))
             {
-                var hasSnap = node.Model.Overlay.TryGetSnapshotValue(absPath, out var snapVal);
+                var hasSnap = overlay.TryGetSnapshotValue(absPath, out var snapVal);
                 if (!hasSnap)
                     deltas.Add(new KVChangeDelta(canonPath, KVChangeDeltaType.Added));
                 else if (!Equals(snapVal, draftVal))
                     deltas.Add(new KVChangeDelta(canonPath, KVChangeDeltaType.Updated));
             }
         }
+    }
 
-        var children = new List<KVChangeDeltaGroup>();
-
-        // Field group children.
+    // Field group children.
+    private static void AddFieldGroupChildren(KVNode node, string nodePath, List<KVChangeDeltaGroup> children)
+    {
         foreach (var childDef in node.Definition.Nodes)
         {
             var childNode = childDef.GetChildNode(node);
             if (childNode is null) continue;
             var childPath = KVPath.Combine(nodePath, childDef.SubSegmentPath);
-            var childDeltas = childNode.ComputeDeltas(childPath, false);
-            if (childDeltas.Deltas.Count > 0 || childDeltas.Children.Count > 0)
-                children.Add(childDeltas);
+            AddIfChanged(children, childNode.ComputeDeltas(childPath, false));
         }
+    }
 
-        // Collections.
+    // Collections.
+    private static void AddCollectionChildren(KVNode node, string nodePath, List<KVChangeDeltaGroup> children)
+    {
         foreach (var collDef in node.Definition.Collections)
         {
             var collNode = collDef.GetCollection(node);
             if (collNode is not KVCollectionNodeBase collBase) continue;
             var collPath = KVPath.Combine(nodePath, collDef.SubSegmentPath);
-            var collDeltas = collBase.ComputeDeltas(collPath);
-            if (collDeltas.Deltas.Count > 0 || collDeltas.Children.Count > 0)
-                children.Add(collDeltas);
+            AddIfChanged(children, collBase.ComputeDeltas(collPath));
         }
+    }
 
-        // Nested nodes.
+    // Nested nodes: an active node contributes its own changes; a dropped one is a slot-level removal.
+    private static void AddNestedNodeChanges(KVNode node, string nodePath, List<KVChangeDelta> deltas, List<KVChangeDeltaGroup> children)
+    {
         foreach (var nestedDef in node.Definition.NestedNodes)
         {
             var nestedPath = KVPath.Combine(nodePath, nestedDef.SubSegmentPath);
@@ -74,9 +90,7 @@ internal static class KVDeltaComputer
 
             if (activeNode is not null)
             {
-                var nestedDeltas = activeNode.ComputeDeltas(nestedPath, false);
-                if (nestedDeltas.Deltas.Count > 0 || nestedDeltas.Children.Count > 0)
-                    children.Add(nestedDeltas);
+                AddIfChanged(children, activeNode.ComputeDeltas(nestedPath, false));
             }
             else
             {
@@ -85,8 +99,12 @@ internal static class KVDeltaComputer
                     deltas.Add(new KVChangeDelta(nestedPath, KVChangeDeltaType.Removed));
             }
         }
+    }
 
-        return new KVChangeDeltaGroup(deltas, children);
+    private static void AddIfChanged(List<KVChangeDeltaGroup> children, KVChangeDeltaGroup group)
+    {
+        if (group.Deltas.Count > 0 || group.Children.Count > 0)
+            children.Add(group);
     }
 
     private static bool HasDraftState(KVNode node)

@@ -128,7 +128,7 @@ public abstract partial class KVNode
         var toRemove = new List<string>();
         foreach (var key in overlay.Changes.Keys)
         {
-            if (KVPath.IsSameOrDescendant(key, prefix) && !string.Equals(key, typeKey, StringComparison.Ordinal))
+            if (IsNestedNodeData(key, prefix, typeKey))
                 toRemove.Add(key);
         }
 
@@ -137,14 +137,14 @@ public abstract partial class KVNode
 
         foreach (var key in overlay.Snapshot.Data.Keys)
         {
-            if (KVPath.IsSameOrDescendant(key, prefix)
-                && !string.Equals(key, typeKey, StringComparison.Ordinal)
-                && !overlay.HasRemovedPath(key))
-            {
+            if (IsNestedNodeData(key, prefix, typeKey) && !overlay.HasRemovedPath(key))
                 overlay.Remove(key);
-            }
         }
     }
+
+    // Everything stored under the slot except its $type discriminator.
+    private static bool IsNestedNodeData(string key, string prefix, string typeKey) =>
+        KVPath.IsSameOrDescendant(key, prefix) && !string.Equals(key, typeKey, StringComparison.Ordinal);
 
     private KVNestedNodeDefinition GetNestedNodeDefinition(string nestedNodeKey)
     {
