@@ -146,7 +146,7 @@
       @if (isInherited(path) && path) { <span class="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-700 dark:bg-sky-950/40 dark:text-sky-300">inherited</span> }
     </div>
     <div class="flex items-center gap-3">
-      @if (role === 'group' && node.isResettable && !ro) {
+      @if (role === 'group' && node.isResettable && !ro && !hasReadOnly(node)) {
         <button class="text-xs font-medium text-gray-600 hover:text-gray-900 dark:text-gray-300" [disabled]="saving" (click)="resetNode(path)" title="RESET: wipe the group and re-apply its defaults">Reset group</button>
       }
       @if (path && isChanged(path) && !ro) {
@@ -193,7 +193,7 @@
       <div class="mt-6 border-t border-gray-100 pt-5 dark:border-gray-800">
         <div class="mb-3 flex items-center justify-between">
           <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ labelOf(group) }}</h3>
-          @if (group.isResettable && !ro && !group.isReadOnly) { <button class="text-xs text-gray-500 hover:text-gray-800" (click)="resetNode(gp)">Reset</button> }
+          @if (group.isResettable && !ro && !group.isReadOnly && !hasReadOnly(group)) { <button class="text-xs text-gray-500 hover:text-gray-800" (click)="resetNode(gp)">Reset</button> }
         </div>
         <ng-container *ngTemplateOutlet="nodeBody; context: { node: group, path: gp, ro: ro || group.isReadOnly }"></ng-container>
       </div>

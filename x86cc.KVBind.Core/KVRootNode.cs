@@ -123,8 +123,17 @@ public abstract class KVRootNode : KVNode
     public void Discard(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        this.Model.Overlay.Discard(KVPath.Normalize(path));
+        var normalized = KVPath.Normalize(path);
+        var membership = this.Model.Overlay.DiscardPath(normalized);
         this.Bind(this.Model, this.Definition);
+
+        // An item that disappeared or came back is a membership change for the patch's change set; the
+        // reactions are told through Replaced below, like for any discard.
+        if (membership is { } kind)
+        {
+            this.ReactionExecutionState.Recorder?.Record(normalized, oldValue: null, newValue: null, kind);
+        }
+
         this.NotifyReplaced(path);
     }
 

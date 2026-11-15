@@ -180,12 +180,16 @@ export function allows(collection: KVCollectionSchema, operation: string): boole
     && (collection.allowedOperations == null || collection.allowedOperations.includes(operation));
 }
 
-// RESET of a node that holds PatchReadOnly members is rejected (it would wipe them), so the UI hides it.
-export function hasReadOnlyMembers(node: KVNodeSchema): boolean {
+// RESET of a node that holds a PatchReadOnly member anywhere beneath it is rejected (it would wipe it), so the
+// UI hides the button. Mirrors the check KVBind makes: fields, groups, collections and their item types,
+// nested nodes and their types. Types can be recursive, so each node is visited once.
+export function hasReadOnlyMembers(node: KVNodeSchema, visited = new Set<KVNodeSchema>()): boolean {
+  if (visited.has(node)) return false;
+  visited.add(node);
   return node.fields.some(f => f.isReadOnly)
-    || node.groups.some(g => g.isReadOnly || hasReadOnlyMembers(g))
-    || node.collections.some(c => c.isReadOnly)
-    || node.nestedNodes.some(n => n.isReadOnly);
+    || node.groups.some(g => g.isReadOnly || hasReadOnlyMembers(g, visited))
+    || node.collections.some(c => c.isReadOnly || c.itemTypes.some(t => hasReadOnlyMembers(t.node, visited)))
+    || node.nestedNodes.some(n => n.isReadOnly || n.types.some(t => hasReadOnlyMembers(t.node, visited)));
 }
 
 // "FullName" -> "Full Name", "PERSON" -> "Person", "policy_number" -> "Policy Number".

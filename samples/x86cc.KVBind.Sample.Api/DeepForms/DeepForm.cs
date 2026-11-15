@@ -6,7 +6,9 @@ namespace x86cc.KVBind.Sample.Api.DeepForms;
 // A bill of materials that can grow without limit: components are collection items, each with its own
 // Measurements collection and an empty Detail slot. An ASSEMBLY in that slot holds components again; a
 // PURCHASED part ends the branch. Costs roll up level by level through change reactions, so a change to a
-// leaf four levels down recomputes every assembly above it and the root total.
+// leaf four levels down updates every assembly above it and the root total. A value change adjusts its
+// level's total by the difference (the reaction's old and new value); only a structural change (an item or
+// detail added, removed or replaced) recounts the level.
 //
 //   Components/c1/Detail(ASSEMBLY)/Components/c1-1/Detail(ASSEMBLY)/Components/c1-1-1/…/UnitCost
 
@@ -47,6 +49,12 @@ public partial class DeepForm : KVRootNode
 
     public void Recalculate(KVChangeContext<DeepForm> context)
     {
+        if (DeepComponent.CostDelta(this.Components, context.ChangedPath, context.OldValue, context.NewValue, context.Kind) is { } delta)
+        {
+            this.TotalCost += delta;
+            return;
+        }
+
         this.TotalCost = DeepComponent.Total(this.Components);
         this.ComponentCount = this.Components.Count();
     }
@@ -94,6 +102,38 @@ public partial class DeepComponent : KVCollectionItemNode
     public decimal Cost => (this.Quantity * (this.UnitCost ?? 0m)) + (this.Detail?.Subtotal ?? 0m);
 
     public static decimal Total(KVCollectionNode<DeepComponent> components) => components.Sum(component => component.Cost);
+
+    /// <summary>
+    /// What a change does to the total of <paramref name="components"/>, from the change itself: a quantity,
+    /// unit cost or detail subtotal that went from one value to another. Null for anything else (an item or
+    /// detail added, removed or replaced), where only a recount can tell.
+    /// </summary>
+    /// <param name="changedPath">Relative to the owner of the collection, e.g. <c>Components/c1/UnitCost</c>.</param>
+    public static decimal? CostDelta(KVCollectionNode<DeepComponent> components, string changedPath, object? oldValue, object? newValue, KVChangeKind kind)
+    {
+        if (kind != KVChangeKind.Value)
+        {
+            return null;
+        }
+
+        var segments = changedPath.Split('/');
+        if (segments.Length < 3 || components.GetById(segments[1]) is not { } component)
+        {
+            return null;
+        }
+
+        var change = Number(newValue) - Number(oldValue);
+        return segments[^1] switch
+        {
+            "Quantity" => change * (component.UnitCost ?? 0m),
+            "UnitCost" => component.Quantity * change,
+            "Subtotal" => change,
+            _ => null,
+        };
+    }
+
+    private static decimal Number(object? value) =>
+        value is null ? 0m : Convert.ToDecimal(value, System.Globalization.CultureInfo.InvariantCulture);
 }
 
 public partial class DeepMeasurement : KVCollectionItemNode
@@ -129,7 +169,10 @@ public partial class DeepAssembly : DeepDetail
     [KVBind("Components")]
     public KVCollectionNode<DeepComponent> Components { get; } = new();
 
-    public void Recalculate(KVChangeContext<DeepAssembly> context) => this.Subtotal = DeepComponent.Total(this.Components);
+    public void Recalculate(KVChangeContext<DeepAssembly> context) =>
+        this.Subtotal = DeepComponent.CostDelta(this.Components, context.ChangedPath, context.OldValue, context.NewValue, context.Kind) is { } delta
+            ? this.Subtotal + delta
+            : DeepComponent.Total(this.Components);
 }
 
 public partial class DeepPurchased : DeepDetail

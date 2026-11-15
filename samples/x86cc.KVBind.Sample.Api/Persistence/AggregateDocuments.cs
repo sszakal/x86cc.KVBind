@@ -18,7 +18,28 @@ public sealed class AggregateSnapshotDocument
     public KVSnapshot Snapshot { get; set; } = new();
 }
 
-/// <summary>A user's open draft (overlay) of one aggregate, including any rebase in progress.</summary>
+/// <summary>
+/// The committed state of an aggregate as it was at one commit, kept only while a draft is still based on
+/// it (the aggregate's own document has moved on). Its id is that commit's id.
+/// </summary>
+public sealed class AggregateBaseSnapshotDocument
+{
+    public Guid Id { get; set; }
+
+    public string Model { get; set; } = string.Empty;
+
+    public Guid AggregateId { get; set; }
+
+    public KVSnapshot Snapshot { get; set; } = new();
+}
+
+/// <summary>
+/// A user's open draft of one aggregate: the changes, the id of the commit they are based on, and any rebase
+/// in progress. The base snapshot itself is not stored here, so saving a draft writes only what the user
+/// changed: it is the aggregate's current snapshot while the draft is up to date, and an
+/// <see cref="AggregateBaseSnapshotDocument"/> once the aggregate has moved on. The service attaches it
+/// (<see cref="Base"/>) when it loads the draft.
+/// </summary>
 public sealed class AggregateDraftDocument
 {
     public Guid Id { get; set; }
@@ -29,7 +50,15 @@ public sealed class AggregateDraftDocument
 
     public string User { get; set; } = string.Empty;
 
-    public KVSnapshot Snapshot { get; set; } = new();
+    /// <summary>The commit the draft's changes are based on.</summary>
+    public Guid? BaseCommitId { get; set; }
+
+    /// <summary>Only in drafts stored by earlier versions, which embedded their base snapshot; cleared on the next save.</summary>
+    public KVSnapshot? Snapshot { get; set; }
+
+    /// <summary>The base snapshot, attached after loading; not stored.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public KVSnapshot? Base { get; set; }
 
     public KVDictionary Changes { get; set; } = new();
 
@@ -44,8 +73,6 @@ public sealed class AggregateDraftDocument
 
     /// <summary>Domain events raised by patches to this draft; published with the commit, dropped on reset.</summary>
     public List<AggregateEventRecord> PendingEvents { get; set; } = [];
-
-    public Guid? BaseCommitId => this.Snapshot.LastCommitId;
 
     public static AggregateDraftDocument Create(string model, Guid aggregateId, string user, KVOverlay overlay)
     {
@@ -73,7 +100,8 @@ public sealed class AggregateDraftDocument
 
     public KVOverlay ToOverlay()
     {
-        var overlay = KVOverlay.Create(this.Snapshot.Clone(), this.User);
+        var baseSnapshot = this.Base ?? throw new InvalidOperationException($"The base snapshot of draft '{this.Id}' was not attached.");
+        var overlay = KVOverlay.Create(baseSnapshot.Clone(), this.User);
 
         // Defensive copy so overlay edits don't mutate this (Marten-tracked) document before UpdateFrom.
         overlay.Changes = new KVDictionary(this.Changes);
@@ -87,7 +115,9 @@ public sealed class AggregateDraftDocument
 
     public void UpdateFrom(KVOverlay overlay)
     {
-        this.Snapshot = overlay.Snapshot.Clone();
+        this.Base = overlay.Snapshot;
+        this.BaseCommitId = overlay.Snapshot.LastCommitId;
+        this.Snapshot = null;
         this.Changes = new KVDictionary(overlay.Changes);
         this.IsRebasing = overlay.IsRebasing;
         this.RebaseTarget = overlay.RebaseTarget?.Clone();

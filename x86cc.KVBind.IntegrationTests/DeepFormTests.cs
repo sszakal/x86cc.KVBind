@@ -48,6 +48,39 @@ public sealed class DeepFormTests
         root.TotalCost.Should().Be(DeepFormFiller.ExpectedTotal(shape) + 1000m);
     }
 
+    // Value changes adjust each level by the difference; after many of them (and some structural ones) every
+    // stored total must still equal a recount from the leaves.
+    [Fact]
+    public void AfterManyMixedChanges_EveryTotalStillMatchesARecount()
+    {
+        var shape = DeepFormShape.AtDepth(4);
+        var (root, _) = Build(shape);
+        var slots = DeepFormFiller.Slots(shape).ToList();
+
+        for (var i = 0; i < slots.Count; i++)
+        {
+            var slot = slots[i];
+            root.Patch(
+                KVPatchOperation.Set($"{slot.Path}/Quantity", 1 + (i % 4)),
+                KVPatchOperation.Set($"{slot.Path}/UnitCost", i % 5 == 0 ? null : 1.5m * i));
+            if (slot.IsLeaf)
+            {
+                root.Patch(KVPatchOperation.Set($"{slot.Path}/Detail/Price", i % 3 == 0 ? null : 2m + i));
+            }
+        }
+
+        root.Patch(
+            KVPatchOperation.Drop("/Components/c2/Detail/Components/c2-1/Detail"),
+            KVPatchOperation.Remove("/Components/c3/Detail/Components/c3-2"),
+            KVPatchOperation.Add("/Components/c1/Detail/Components", new KVAddPatchPayload("extra")),
+            KVPatchOperation.Set("/Components/c1/Detail/Components/extra/Name", "Extra"),
+            KVPatchOperation.Set("/Components/c1/Detail/Components/extra/UnitCost", 7m),
+            KVPatchOperation.Set("/Components/c1/Detail/Components/extra/Quantity", 3));
+
+        root.TotalCost.Should().Be(Recount(root.Components));
+        AssertSubtotals(root.Components);
+    }
+
     [Fact]
     public void DroppingAnAssembly_RemovesItsSubtreeFromTheTotal()
     {
@@ -113,6 +146,26 @@ public sealed class DeepFormTests
 
         assembly.Id.Should().Be("ASSEMBLY");
         innerAssembly.Ref.Should().Be("ASSEMBLY");
+    }
+
+    private static decimal Recount(KVCollectionNode<DeepComponent> components) => components.Sum(component =>
+        (component.Quantity * (component.UnitCost ?? 0m)) + component.Detail switch
+        {
+            DeepAssembly assembly => Recount(assembly.Components),
+            DeepPurchased purchased => purchased.Price ?? 0m,
+            _ => 0m,
+        });
+
+    private static void AssertSubtotals(KVCollectionNode<DeepComponent> components)
+    {
+        foreach (var component in components)
+        {
+            if (component.Detail is DeepAssembly assembly)
+            {
+                assembly.Subtotal.Should().Be(Recount(assembly.Components), $"assembly of {component.ItemId()}");
+                AssertSubtotals(assembly.Components);
+            }
+        }
     }
 
     private static (DeepForm Root, KVOverlay Overlay) Build(DeepFormShape shape)

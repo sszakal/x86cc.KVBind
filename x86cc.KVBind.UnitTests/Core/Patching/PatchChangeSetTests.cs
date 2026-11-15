@@ -164,18 +164,18 @@ public class PatchChangeSetTests : KVModelTestBase
         root.Parts.GetById("p")!.Name.Should().Be("p");
     }
 
-    // DISCARD drops the draft's values under a path; an item the draft added stays a member, emptied.
+    // Discarding an item the draft added makes it disappear: the patch reports its removal.
     [Fact]
-    public void DiscardingADraftAddedItem_IsAnUpdateOfTheItem()
+    public void DiscardingADraftAddedItem_IsARemoval()
     {
         var root = RecursiveCollectionTreeTests.CreateRoot();
         root.Patch(RecursiveCollectionTreeTests.Branch(levels: 1, prefix: "p"));
 
         var result = root.Patch(KVPatchOperation.Discard("/Parts/p"));
 
-        root.Parts.GetById("p")!.Name.Should().BeNull();
+        root.Parts.GetById("p").Should().BeNull();
         result.Changes.Should().ContainSingle(c => c.Path.StartsWith("Parts/p", StringComparison.Ordinal))
-            .Which.ChangeType.Should().Be(KVChangeDeltaType.Updated);
+            .Which.ChangeType.Should().Be(KVChangeDeltaType.Removed);
     }
 
     // Sequences are compared by content, not by reference.

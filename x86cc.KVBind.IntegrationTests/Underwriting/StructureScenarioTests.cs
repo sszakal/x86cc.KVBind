@@ -275,8 +275,9 @@ public sealed class StructureScenarioTests : UnderwritingTestBase
         var discard = () => application.Patch(KVPatchOperation.Discard("/Questions"));
         discard.Should().Throw<InvalidOperationException>().WithMessage("*ADD*");
 
-        // Discarding just the item's data leaves membership ($items) alone, so it is allowed.
-        application.Patch(KVPatchOperation.Discard("/Questions/HAZMAT"));
+        // Discarding the item itself would bring it back too: the same ADD, also rejected.
+        var discardItem = () => application.Patch(KVPatchOperation.Discard("/Questions/HAZMAT"));
+        discardItem.Should().Throw<InvalidOperationException>().WithMessage("*ADD*");
         application.Questions.GetActiveItemIds().Should().Equal("PRIOR_LOSSES", "BANKRUPTCY");
 
         // Discarding a field change inside an item does not touch membership and is fine.

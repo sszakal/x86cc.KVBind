@@ -261,10 +261,32 @@ internal static class KVPatchOperationRegistry
             if (definition.AllowedOperations is null) continue;
 
             var itemsPath = KVPath.Combine(collection.Model.DataPath, "$items");
+            if (string.Equals(KVPath.ParentPath(discardPath), collection.Model.DataPath, StringComparison.Ordinal)
+                && !KVMerge.LastSegment(discardPath).StartsWith('$'))
+            {
+                // Discarding one item reverts that item's membership only.
+                EnsureItemRevertAllowed(collection, itemsPath, KVMerge.LastSegment(discardPath), operation);
+                continue;
+            }
+
             if (discardPath.Length > 0 && !KVPath.IsSameOrDescendant(itemsPath, discardPath)) continue;
 
             EnsureMembershipRevertAllowed(collection, itemsPath, operation);
         }
+    }
+
+    // An item the draft added disappears (needs REMOVE); one it removed comes back (needs ADD).
+    private static void EnsureItemRevertAllowed(KVCollectionNodeBase collection, string itemsPath, string itemId, KVPatchOperation operation)
+    {
+        var definition = collection.Definition;
+        var isCurrent = collection.GetActiveItemIds().Contains(itemId, StringComparer.Ordinal);
+        var isCommitted = collection.Model.Overlay.TryGetSnapshotValue(itemsPath, out var snapshotValue)
+                          && KVMerge.ExtractItemIds(snapshotValue).Contains(itemId, StringComparer.Ordinal);
+
+        if (isCurrent && !isCommitted && !definition.IsOperationAllowed(KVPatchOperations.Remove))
+            throw Disallowed(KVPatchOperations.Remove, definition, operation);
+        if (!isCurrent && isCommitted && !definition.IsOperationAllowed(KVPatchOperations.Add))
+            throw Disallowed(KVPatchOperations.Add, definition, operation);
     }
 
     // Compares the draft membership with the snapshot's and requires ADD / REMOVE / MOVE as the revert needs.
@@ -400,48 +422,48 @@ internal static class KVPatchOperationRegistry
     private static void ApplySet(KVPatchTarget target, KVPatchOperation operation, KVPatchExecutionContext context)
     {
         var fieldTarget = (KVFieldPatchTarget)target;
+        fieldTarget.Node.SetFieldForPatch(fieldTarget.FieldKey, ReadSetValue(fieldTarget, operation.Value));
+    }
 
-        // A JSON null clears, like a CLR null.
-        var value = operation.Value is JsonElement { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined } ? null : operation.Value;
-        var allowedValues = fieldTarget.Definition.AllowedValues;
-        if (value is null)
+    // The value a SET stores: null (also a JSON null) clears; a field with allowed values has its definition
+    // decide what the value stands for; any other field converts it to its declared type.
+    private static object? ReadSetValue(KVFieldPatchTarget field, object? value)
+    {
+        if (value is null or JsonElement { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined })
         {
-            // Cleared.
-        }
-        else if (allowedValues is { IsElementWise: false })
-        {
-            value = ResolveAllowedValue(allowedValues, value, fieldTarget.CanonicalPath);
-        }
-        else if (allowedValues is not null)
-        {
-            // Element-wise: a JSON array arrives as its text and is matched element by element.
-            if (value is JsonElement json)
-            {
-                value = ToAllowedValueToken(json);
-            }
-
-            if (value is string token)
-            {
-                try
-                {
-                    value = allowedValues.DenormalizeFromStorage(token);
-                }
-                catch (InvalidOperationException)
-                {
-                    // Keep unknown token as-is so validation can report allowed_values.
-                }
-            }
-            else if (!allowedValues.IsAllowed(value))
-            {
-                throw NotAllowed(fieldTarget.CanonicalPath);
-            }
-        }
-        else
-        {
-            value = KVPatchValueConverter.ConvertToFieldType(value, fieldTarget.Definition.ValueType, fieldTarget.CanonicalPath);
+            return null;
         }
 
-        fieldTarget.Node.SetFieldForPatch(fieldTarget.FieldKey, value);
+        return field.Definition.AllowedValues switch
+        {
+            null => KVPatchValueConverter.ConvertToFieldType(value, field.Definition.ValueType, field.CanonicalPath),
+            { IsElementWise: true } allowedValues => ResolveAllowedElements(allowedValues, value, field.CanonicalPath),
+            var allowedValues => ResolveAllowedValue(allowedValues, value, field.CanonicalPath),
+        };
+    }
+
+    // A sequence field whose elements must be allowed values: a JSON array arrives as its text and is matched
+    // element by element; text that is no known sequence is kept so validation can report allowed_values.
+    private static object? ResolveAllowedElements(KVAllowedValuesDefinition allowedValues, object value, string path)
+    {
+        if (value is JsonElement json)
+        {
+            value = ToAllowedValueToken(json)!;
+        }
+
+        if (value is not string token)
+        {
+            return allowedValues.IsAllowed(value) ? value : throw NotAllowed(path);
+        }
+
+        try
+        {
+            return allowedValues.DenormalizeFromStorage(token);
+        }
+        catch (InvalidOperationException)
+        {
+            return token;
+        }
     }
 
     // A single-value field with allowed values: a client sends a typed value or a token, in JSON both as text

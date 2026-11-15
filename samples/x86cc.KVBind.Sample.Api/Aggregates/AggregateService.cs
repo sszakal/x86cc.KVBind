@@ -191,6 +191,17 @@ public sealed class AggregateService(IDocumentSession session, RequestTimings ti
             .ToListAsync(cancellationToken));
 
         var behind = documents.Where(document => document.Snapshot.SchemaVersion < model.Definition.CurrentSchemaVersion).ToList();
+
+        // Drafts opened before the migration stay based on the old snapshot; keep it for those aggregates.
+        var withDrafts = await timings.MeasureAsync("load", () => session.Query<AggregateDraftDocument>()
+            .Where(draft => draft.Model == model.Name)
+            .Select(draft => draft.AggregateId)
+            .ToListAsync(cancellationToken));
+        foreach (var document in behind.Where(document => withDrafts.Contains(document.Id)))
+        {
+            await this.KeepBaseForOtherDraftsAsync(model, document.Id, committingDraftId: null, document.Snapshot.Clone(), cancellationToken, onlyIfReferenced: true);
+        }
+
         var subjects = behind.Select(document => new KVMigrationSubject { Key = document.Id, Snapshot = document.Snapshot }).ToList();
 
         // One batch: each migration's prepare phase (if any) runs once over the aggregates that still need it.
@@ -233,6 +244,7 @@ public sealed class AggregateService(IDocumentSession session, RequestTimings ti
             session.LoadAsync<AggregateDraftDocument>(AggregateDraftDocument.DraftId(id, request.User), cancellationToken));
         if (existing is not null)
         {
+            await this.AttachBaseAsync(existing, snapshotDocument, cancellationToken);
             return this.ProjectDraft(model, existing, snapshotDocument, parentSnapshot);
         }
 
@@ -363,8 +375,10 @@ public sealed class AggregateService(IDocumentSession session, RequestTimings ti
 
         var user = string.IsNullOrWhiteSpace(request.User) ? draft.User : request.User;
         commit.User = user;
-        var changes = timings.Measure("project", () => ProjectCommitChanges(model.Schema, snapshotDocument.Snapshot.Clone(), commit));
+        var superseded = snapshotDocument.Snapshot.Clone();
+        var changes = timings.Measure("project", () => ProjectCommitChanges(model.Schema, superseded, commit));
         snapshotDocument.Snapshot.Apply(commit);
+        await this.KeepBaseForOtherDraftsAsync(model, id, draftId, superseded, cancellationToken);
 
         var events = draft.PendingEvents.Concat(ToEventRecords(root.DequeueEvents())).ToList();
         session.Store(snapshotDocument);
@@ -489,6 +503,13 @@ public sealed class AggregateService(IDocumentSession session, RequestTimings ti
         var (draft, snapshotDocument, parentSnapshot) = context.Value;
         var overlay = draft.ToOverlay();
         timings.Measure("rebase", () => ApiRequestException.Run(overlay.FinishRebase)); // rejected while a conflict is unresolved
+
+        // The draft now sits on the rebase target. If the aggregate moved on while the rebase was open, that
+        // target is no longer the current snapshot, so it is kept as this draft's base.
+        if (overlay.Snapshot.LastCommitId is { } targetCommit && targetCommit != snapshotDocument.Snapshot.LastCommitId)
+        {
+            session.Store(new AggregateBaseSnapshotDocument { Id = targetCommit, Model = model.Name, AggregateId = id, Snapshot = overlay.Snapshot.Clone() });
+        }
 
         // Rebase runs no change reactions: recompute derived values against the merged data.
         var root = timings.Measure("bind", () => model.Bind(overlay, parentSnapshot));
@@ -829,6 +850,7 @@ public sealed class AggregateService(IDocumentSession session, RequestTimings ti
         // it is read, and the migration commits join its history like any other commit.
         if (document.Snapshot.SchemaVersion < model.Definition.CurrentSchemaVersion)
         {
+            await this.KeepBaseForOtherDraftsAsync(model, id, committingDraftId: null, document.Snapshot.Clone(), cancellationToken);
             var commits = timings.Measure("migrate", () => KVMigrator.Migrate(document.Snapshot, model.Definition));
             foreach (var commit in commits)
             {
@@ -874,12 +896,81 @@ public sealed class AggregateService(IDocumentSession session, RequestTimings ti
             return null;
         }
 
+        await this.AttachBaseAsync(draft, snapshotDocument, cancellationToken);
         var parentSnapshot = await this.LoadParentSnapshotAsync(model, snapshotDocument, cancellationToken);
         return (draft, snapshotDocument, parentSnapshot);
     }
 
-    // The commits after the draft's base, in chain order, found by walking PreviousCommitId back from the
-    // latest commit (timestamps can collide; the chain can't).
+    // Gives a loaded draft its base snapshot: the aggregate's current one while the draft is up to date,
+    // otherwise the copy kept when the aggregate moved on.
+    private async Task AttachBaseAsync(AggregateDraftDocument draft, AggregateSnapshotDocument latest, CancellationToken cancellationToken)
+    {
+        if (draft.Snapshot is { } embedded)
+        {
+            // A draft stored by an earlier version carries its base. Keep a copy if it is already behind,
+            // because the next save drops the embedded one.
+            draft.Base = embedded;
+            if (embedded.LastCommitId is { } commitId && commitId != latest.Snapshot.LastCommitId)
+            {
+                session.Store(new AggregateBaseSnapshotDocument { Id = commitId, Model = draft.Model, AggregateId = draft.AggregateId, Snapshot = embedded.Clone() });
+            }
+
+            return;
+        }
+
+        if (draft.BaseCommitId == latest.Snapshot.LastCommitId)
+        {
+            draft.Base = latest.Snapshot;
+            return;
+        }
+
+        var kept = draft.BaseCommitId is { } baseCommitId
+            ? await timings.MeasureAsync("load", () => session.LoadAsync<AggregateBaseSnapshotDocument>(baseCommitId, cancellationToken))
+            : null;
+        if (kept is not null)
+        {
+            draft.Base = kept.Snapshot;
+        }
+        else if (draft.Changes.Count == 0 && !draft.IsRebasing)
+        {
+            // Nothing to lose: an empty draft can sit on any snapshot, so it moves to the latest.
+            draft.Base = latest.Snapshot;
+        }
+        else
+        {
+            throw new InvalidOperationException($"The base snapshot (commit '{draft.BaseCommitId}') of draft '{draft.Id}' is missing.");
+        }
+    }
+
+    // Called when an aggregate's snapshot is about to be replaced. Keeps the superseded snapshot, because a
+    // draft may be based on it (one may even be opened on it while this request runs), and drops older kept
+    // snapshots that no draft refers to any more. A draft is only ever opened on the current snapshot, so an
+    // older one that is unreferenced now stays unreferenced. A batch (migrating every aggregate) passes
+    // onlyIfReferenced, so aggregates without drafts get no copy.
+    private async Task KeepBaseForOtherDraftsAsync(
+        IAggregateModel model, Guid aggregateId, Guid? committingDraftId, KVSnapshot superseded, CancellationToken cancellationToken, bool onlyIfReferenced = false)
+    {
+        var drafts = await timings.MeasureAsync("load", () => session.Query<AggregateDraftDocument>()
+            .Where(draft => draft.AggregateId == aggregateId)
+            .Select(draft => new DraftBase(draft.Id, draft.BaseCommitId))
+            .ToListAsync(cancellationToken));
+        var referenced = drafts.Where(draft => draft.Id != committingDraftId).Select(draft => draft.BaseCommitId).ToHashSet();
+        var kept = await timings.MeasureAsync("load", () => session.Query<AggregateBaseSnapshotDocument>()
+            .Where(document => document.AggregateId == aggregateId)
+            .Select(document => document.Id)
+            .ToListAsync(cancellationToken));
+
+        foreach (var commitId in kept.Where(commitId => !referenced.Contains(commitId)))
+        {
+            session.Delete<AggregateBaseSnapshotDocument>(commitId);
+        }
+
+        if (superseded.LastCommitId is { } supersededCommit && (referenced.Count > 0 || !onlyIfReferenced))
+        {
+            session.Store(new AggregateBaseSnapshotDocument { Id = supersededCommit, Model = model.Name, AggregateId = aggregateId, Snapshot = superseded });
+        }
+    }
+
     // The commits from the draft's base (exclusive) to the latest, oldest first. Only the change sets stored
     // since the base's timestamp are read (with a second's margin for clock and storage precision), so a
     // draft one commit behind does not load the whole history; the chain walk then keeps exactly the
@@ -968,6 +1059,8 @@ public sealed class AggregateService(IDocumentSession session, RequestTimings ti
     }
 
     /// <summary>Data keys sorted ordinally, so every key under a path is one contiguous range.</summary>
+    private sealed record DraftBase(Guid Id, Guid? BaseCommitId);
+
     private sealed class KeyIndex
     {
         private readonly string[] keys;

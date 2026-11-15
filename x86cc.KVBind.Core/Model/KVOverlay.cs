@@ -271,19 +271,12 @@ public sealed class KVOverlay
 
     public void Clear() => this.Changes.Clear();
 
-    public void Discard(string path)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        var normalized = KVPath.Normalize(path);
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            this.Clear();
-            return;
-        }
-
-        foreach (var key in this.Changes.Keys.Where(k => KVPath.IsSameOrDescendant(k, normalized)).ToList())
-            this.Changes.Remove(key);
-    }
+    /// <summary>
+    /// Drops the draft's changes at and beneath <paramref name="path"/>, so it reads as the snapshot again.
+    /// On a collection item this includes its membership: an item the draft added disappears, an item the
+    /// draft removed comes back at its committed position, and an item it only edited keeps its place.
+    /// </summary>
+    public void Discard(string path) => this.DiscardPath(path);
 
     public bool IsSnapshotBacked(string path) => this.Snapshot.ContainsPathOrDescendant(path);
 
@@ -409,6 +402,24 @@ public sealed class KVOverlay
         };
     }
 
+    // Discard, telling the caller whether the item's membership was reverted: Removed when an item the draft
+    // added disappeared, Added when an item it removed came back, null otherwise.
+    internal KVChangeKind? DiscardPath(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        var normalized = KVPath.Normalize(path);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            this.Clear();
+            return null;
+        }
+
+        foreach (var key in this.Changes.Keys.Where(k => KVPath.IsSameOrDescendant(k, normalized)).ToList())
+            this.Changes.Remove(key);
+
+        return this.RevertItemMembership(normalized);
+    }
+
     // True when the path equals or sits under an inherited root member.
     private bool IsInheritedPath(ReadOnlySpan<char> path)
     {
@@ -504,6 +515,70 @@ public sealed class KVOverlay
             default:
                 throw new InvalidOperationException($"Conflict at '{conflict.Path}' is unresolved.");
         }
+    }
+
+    // When the path is a collection item (its parent holds an $items list naming it, in the draft or the
+    // snapshot), brings the item's membership back to the snapshot's, leaving the rest of the list as the
+    // draft has it.
+    private KVChangeKind? RevertItemMembership(string itemPath)
+    {
+        var slash = itemPath.LastIndexOf('/');
+        if (slash <= 0)
+        {
+            return null;
+        }
+
+        var itemsPath = KVPath.Combine(itemPath[..slash], "$items");
+        if (!this.Changes.TryGetValue(itemsPath, out var draftItems) || draftItems == KVValue.Tombstone)
+        {
+            return null; // the draft did not change this collection's membership
+        }
+
+        var itemId = itemPath[(slash + 1)..];
+        if (itemId.StartsWith('$'))
+        {
+            return null; // a reserved key ($items, $type), not an item
+        }
+
+        var current = KVMerge.ExtractItemIds(draftItems);
+        var committed = this.Snapshot.TryGet(itemsPath, out var snapshotItems) ? KVMerge.ExtractItemIds(snapshotItems) : [];
+        var isCurrent = current.Contains(itemId, StringComparer.Ordinal);
+        var isCommitted = committed.Contains(itemId, StringComparer.Ordinal);
+
+        KVChangeKind? reverted;
+        if (isCurrent && !isCommitted)
+        {
+            current.Remove(itemId);
+            reverted = KVChangeKind.Removed;
+        }
+        else if (!isCurrent && isCommitted)
+        {
+            // Back after the nearest committed predecessor that is still a member, else at the start.
+            var index = 0;
+            for (var i = committed.IndexOf(itemId) - 1; i >= 0; i--)
+            {
+                var at = current.IndexOf(committed[i]);
+                if (at >= 0)
+                {
+                    index = at + 1;
+                    break;
+                }
+            }
+
+            current.Insert(index, itemId);
+            reverted = KVChangeKind.Added;
+        }
+        else
+        {
+            return null; // only edited: it keeps its place
+        }
+
+        if (current.SequenceEqual(committed, StringComparer.Ordinal))
+            this.Changes.Remove(itemsPath);
+        else
+            this.Changes[itemsPath] = KVMerge.BuildItemsValue(current);
+
+        return reverted;
     }
 
     private void RemoveChangesUnder(string path)

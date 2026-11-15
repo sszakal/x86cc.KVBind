@@ -147,6 +147,17 @@ public class CollectionAllowedOperationsTests : KVModelTestBase
     }
 
     [Fact]
+    public void DiscardOfOneRemovedItem_WhenAddIsNotAllowed_Throws()
+    {
+        var root = this.CreateCommitted();
+        root.Fixed.RemoveById("Snake");
+
+        var act = () => root.Patch(KVPatchOperation.Discard("/Fixed/Snake"));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*collection 'Fixed' does not allow 'ADD'.");
+    }
+
+    [Fact]
     public void Discard_WhenItWouldReorderAndMoveIsNotAllowed_Throws()
     {
         var root = this.CreateCommitted();

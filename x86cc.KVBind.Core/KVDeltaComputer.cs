@@ -16,7 +16,7 @@ internal static class KVDeltaComputer
         }
 
         // New (draft-only) collection item.
-        if (isCollectionItem && !node.Model.Overlay.IsSnapshotBacked(node.Model.DataPath) && HasDraftState(node))
+        if (isCollectionItem && !node.Model.Overlay.IsSnapshotBacked(node.Model.DataPath) && node.Model.Overlay.HasDraftState(node.Model.DataPath))
             return new KVChangeDeltaGroup([new KVChangeDelta(nodePath, KVChangeDeltaType.Added)], []);
 
         AddFieldDeltas(node, nodePath, deltas);
@@ -104,18 +104,6 @@ internal static class KVDeltaComputer
     {
         if (group.Deltas.Count > 0 || group.Children.Count > 0)
             children.Add(group);
-    }
-
-    private static bool HasDraftState(KVNode node)
-    {
-        if (node.Model.Overlay.HasDraftState(node.Model.DataPath)) return true;
-        foreach (var childDef in node.Definition.Nodes)
-        {
-            var childNode = childDef.GetChildNode(node);
-            if (childNode is KVNode kvChild && HasDraftState(kvChild)) return true;
-        }
-
-        return false;
     }
 
     private static bool TryCreateNestedNodeTypeDelta(KVModel model, string nodePath, out KVChangeDelta delta)

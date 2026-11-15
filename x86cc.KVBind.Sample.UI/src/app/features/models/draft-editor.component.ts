@@ -194,7 +194,7 @@ export class DraftEditorComponent implements OnInit, OnDestroy {
     return allows(collection, 'RESET') && !!type && !hasReadOnlyMembers(type.node);
   }
 
-  hasReadOnly = hasReadOnlyMembers;
+  hasReadOnly(node: KVNodeSchema): boolean { return hasReadOnlyMembers(node); }
 
   show(value: unknown): string { return value == null || value === '' ? '—' : String(value); }
   labelOf = labelOf;

@@ -95,6 +95,12 @@ dotnet run -c Release --project x86cc.KVBind.Benchmarks -- load http://localhost
 # 1 / 10 / 100 / 1,000 commits behind rebased; and the rebase in process
 dotnet run -c Release --project x86cc.KVBind.Benchmarks -- history http://localhost:5101 1000 3 history.md
 dotnet run -c Release --project x86cc.KVBind.Benchmarks -- --filter "*DeepHistory*"
+
+# Memory: what a loaded form retains, and how big it is when stored, for every form
+dotnet run -c Release --project x86cc.KVBind.Benchmarks -- memory memory.md
+
+# Capacity: completely filled 1,000 / 2,000-field forms, flat and four levels deep
+dotnet run -c Release --project x86cc.KVBind.Benchmarks -- capacity capacity.md
 ```
 
 The results and the hot spots found are in [PERFORMANCE.md](PERFORMANCE.md).

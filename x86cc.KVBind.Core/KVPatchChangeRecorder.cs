@@ -45,7 +45,12 @@ internal sealed class KVPatchChangeRecorder
         if (this.entries.TryGetValue(path, out var entry))
         {
             // Several changes to one path in a patch: keep its state before the first and after the last.
-            entry.ExistsAfter = existsAfter;
+            // A replacement (RESET, DISCARD) changes the data in place, not whether the path exists.
+            if (kind != KVChangeKind.Replaced)
+            {
+                entry.ExistsAfter = existsAfter;
+            }
+
             entry.NewValue = newValue;
             entry.IsValueOnly &= kind == KVChangeKind.Value;
             entry.CoversSubtree |= coversSubtree;

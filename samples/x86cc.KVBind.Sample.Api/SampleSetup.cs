@@ -28,7 +28,8 @@ public static class SampleSetup
         // meantime. Without it, two concurrent commits both pass the stale-draft check and the later one
         // silently overwrites the earlier (forking the commit chain), and concurrent patches lose updates.
         options.Schema.For<AggregateSnapshotDocument>().Identity(x => x.Id).UseOptimisticConcurrency(true).Index(x => x.Model);
-        options.Schema.For<AggregateDraftDocument>().Identity(x => x.Id).UseOptimisticConcurrency(true);
+        options.Schema.For<AggregateDraftDocument>().Identity(x => x.Id).UseOptimisticConcurrency(true).Index(x => x.AggregateId);
+        options.Schema.For<AggregateBaseSnapshotDocument>().Identity(x => x.Id).Index(x => x.AggregateId);
         options.Schema.For<AggregateChangeSetDocument>().Identity(x => x.Id).Index(x => x.AggregateId);
     }
 
