@@ -12,12 +12,6 @@ internal sealed class KVValueConstraints
 {
     private static readonly TimeSpan PatternTimeout = TimeSpan.FromSeconds(1);
 
-    private static readonly HashSet<Type> NumericTypes =
-    [
-        typeof(sbyte), typeof(byte), typeof(short), typeof(ushort), typeof(int), typeof(uint),
-        typeof(long), typeof(ulong), typeof(float), typeof(double), typeof(decimal),
-    ];
-
     private Regex? patternRegex;
 
     public int? MinLength { get; private set; }
@@ -113,7 +107,7 @@ internal sealed class KVValueConstraints
 
         // A float/double outside decimal's range (1e30, infinity) still has an order against a bound of
         // another numeric type; compare as doubles rather than treating it as "not comparable".
-        if (value.GetType() != bound.GetType() && IsNumber(value) && IsNumber(bound))
+        if (value.GetType() != bound.GetType() && KVValues.IsNumber(value) && KVValues.IsNumber(bound))
         {
             return Convert.ToDouble(value, CultureInfo.InvariantCulture)
                 .CompareTo(Convert.ToDouble(bound, CultureInfo.InvariantCulture));
@@ -127,7 +121,7 @@ internal sealed class KVValueConstraints
     private static bool TryGetNumber(object value, out decimal number)
     {
         number = 0m;
-        if (!IsNumber(value))
+        if (!KVValues.IsNumber(value))
         {
             return false;
         }
@@ -142,8 +136,6 @@ internal sealed class KVValueConstraints
             return false;
         }
     }
-
-    private static bool IsNumber(object value) => NumericTypes.Contains(value.GetType());
 
     private static bool IsFullMatch(Regex regex, string text)
     {

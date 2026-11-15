@@ -420,11 +420,13 @@ public sealed class KVBindSourceGenerator : IIncrementalGenerator
 
         // Containing types are re-opened so a model declared inside another type lands in the right scope.
         var indent = string.Empty;
+        var depth = 0;
         foreach (var containing in model.ContainingTypeDeclarations.AsImmutableArray())
         {
             sb.AppendLine($"{indent}{containing}");
             sb.AppendLine($"{indent}{{");
-            indent += "    ";
+            depth++;
+            indent = new string(' ', 4 * depth);
         }
 
         sb.AppendLine($"{indent}{model.TypeDeclaration}");
@@ -561,14 +563,14 @@ public sealed class KVBindSourceGenerator : IIncrementalGenerator
     // e.g. "internal partial class Model<T>". Constraints and base types may be omitted on a partial part.
     private static string BuildTypeDeclaration(INamedTypeSymbol type)
     {
-        var keyword = type.IsRecord
-            ? (type.TypeKind == TypeKind.Struct ? "record struct" : "record")
-            : type.TypeKind switch
-            {
-                TypeKind.Struct => "struct",
-                TypeKind.Interface => "interface",
-                _ => "class"
-            };
+        var keyword = (type.IsRecord, type.TypeKind) switch
+        {
+            (true, TypeKind.Struct) => "record struct",
+            (true, _) => "record",
+            (false, TypeKind.Struct) => "struct",
+            (false, TypeKind.Interface) => "interface",
+            _ => "class"
+        };
 
         var name = type.TypeParameters.Length == 0
             ? type.Name

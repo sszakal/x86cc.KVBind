@@ -11,6 +11,12 @@ public sealed class KVNestedNodeOptionsBuilder<TBase>
 
     private readonly Dictionary<string, object?> annotations = new(StringComparer.Ordinal);
 
+    // The default subtype, given either as a CLR type (DefaultType<TSubtype>()) or as a token
+    // (DefaultType("TOKEN")); resolved against the bound subtypes in ResolveDefaultTypeToken.
+    private Type? defaultTypeValue;
+
+    private string? defaultTokenValue;
+
     internal IReadOnlyList<KVNestedNodeTypeDefinition> TypeDefinitions => this.typeDefinitions;
 
     internal string? DisplayNameValue { get; private set; }
@@ -20,8 +26,6 @@ public sealed class KVNestedNodeOptionsBuilder<TBase>
     internal bool IsInherited { get; private set; }
 
     internal bool IsPatchReadOnly { get; private set; }
-
-    internal string? DefaultTypeTokenValue { get; private set; }
 
     internal bool IsRequired { get; private set; }
 
@@ -61,19 +65,22 @@ public sealed class KVNestedNodeOptionsBuilder<TBase>
         return this;
     }
 
-    // A fresh aggregate initializes this slot to this subtype (ApplyDefaults). Uses the subtype's default
-    // token (typeof(TSubtype).Name) — declare a matching Bind<TSubtype>().
+    // A fresh aggregate initializes this slot to this subtype (ApplyDefaults). The subtype must be bound
+    // with Bind<TSubtype>(...), before or after this call; its bound token is used, whatever it is.
     public KVNestedNodeOptionsBuilder<TBase> DefaultType<TSubtype>()
         where TSubtype : TBase
     {
-        this.DefaultTypeTokenValue = typeof(TSubtype).Name;
+        this.defaultTypeValue = typeof(TSubtype);
+        this.defaultTokenValue = null;
         return this;
     }
 
+    // As DefaultType<TSubtype>(), naming the subtype by its bound token.
     public KVNestedNodeOptionsBuilder<TBase> DefaultType(string typeToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(typeToken);
-        this.DefaultTypeTokenValue = typeToken;
+        this.defaultTokenValue = typeToken;
+        this.defaultTypeValue = null;
         return this;
     }
 
@@ -153,5 +160,27 @@ public sealed class KVNestedNodeOptionsBuilder<TBase>
         });
 
         return this;
+    }
+
+    // The token of the declared default subtype, or null when none is declared. Throws when the default does
+    // not name a bound subtype, so the mistake surfaces when the definition is built instead of at the first
+    // CreateNew.
+    internal string? ResolveDefaultTypeToken(string nestedNodePath)
+    {
+        if (this.defaultTypeValue is { } defaultType)
+        {
+            return this.typeDefinitions.Find(definition => definition.ModelType == defaultType)?.TypeToken
+                   ?? throw new InvalidOperationException(
+                       $"Nested node '{nestedNodePath}' declares DefaultType<{defaultType.Name}>(), but '{defaultType.Name}' is not bound with Bind<{defaultType.Name}>(...).");
+        }
+
+        if (this.defaultTokenValue is { } defaultToken
+            && !this.typeDefinitions.Exists(definition => string.Equals(definition.TypeToken, defaultToken, StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException(
+                $"Nested node '{nestedNodePath}' declares DefaultType(\"{defaultToken}\"), but no subtype is bound with that token.");
+        }
+
+        return this.defaultTokenValue;
     }
 }

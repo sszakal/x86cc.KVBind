@@ -28,7 +28,6 @@ internal static class KVPatchRuntime
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(operations);
 
-        var registry = KVPatchOperationRegistry.CreateDefault();
         var context = new KVPatchExecutionContext
         {
             Root = root
@@ -38,7 +37,7 @@ internal static class KVPatchRuntime
         {
             ArgumentNullException.ThrowIfNull(operation, nameof(operations));
             var target = KVPatchTargetResolver.Resolve(root, operation);
-            registry.Apply(target, operation, context);
+            KVPatchOperationRegistry.Apply(target, operation, context);
         }
     }
 
@@ -47,79 +46,28 @@ internal static class KVPatchRuntime
         return new InvalidOperationException($"Patch operation '{operation.OperationCode}' for '{operation.Path}' is not allowed: '{memberPath}' is patch read-only.");
     }
 
-    // True when the definition declares a PatchReadOnly() member anywhere beneath it.
-    internal static bool ContainsPatchReadOnly(KVNodeDefinition definition)
+    // True when the definition declares a PatchReadOnly() member anywhere beneath it. Definitions can be
+    // recursive (a nested type whose items hold that type again), so each one is visited once.
+    internal static bool ContainsPatchReadOnly(KVNodeDefinition definition) =>
+        ContainsPatchReadOnly(definition, new HashSet<KVNodeDefinition>(ReferenceEqualityComparer.Instance));
+
+    private static bool ContainsPatchReadOnly(KVNodeDefinition definition, HashSet<KVNodeDefinition> visited)
     {
+        if (!visited.Add(definition))
+        {
+            return false;
+        }
+
         return definition.Fields.Any(static field => field.IsPatchReadOnly)
-            || definition.Nodes.Any(static node => node.IsPatchReadOnly || ContainsPatchReadOnly(node))
-            || definition.Collections.Any(static collection => collection.IsPatchReadOnly
-                || collection.ItemDefinitionsByToken.Values.Any(static item => ContainsPatchReadOnly(item.NodeDefinition)))
-            || definition.NestedNodes.Any(static nested => nested.IsPatchReadOnly
-                || nested.TypeDefinitionsByToken.Values.Any(static type => ContainsPatchReadOnly(type.NodeDefinition)));
+            || definition.Nodes.Any(node => node.IsPatchReadOnly || ContainsPatchReadOnly(node, visited))
+            || definition.Collections.Any(collection => collection.IsPatchReadOnly
+                || collection.ItemDefinitionsByToken.Values.Any(item => ContainsPatchReadOnly(item.NodeDefinition, visited)))
+            || definition.NestedNodes.Any(nested => nested.IsPatchReadOnly
+                || nested.TypeDefinitionsByToken.Values.Any(type => ContainsPatchReadOnly(type.NodeDefinition, visited)));
     }
 }
 
-internal abstract class KVPatchTarget
-{
-    public required string CanonicalPath { get; init; }
-}
-
-internal sealed class KVPathPatchTarget : KVPatchTarget;
-
-internal sealed class KVFieldPatchTarget : KVPatchTarget
-{
-    public required KVNode Node { get; init; }
-
-    public required KVFieldDefinition Definition { get; init; }
-
-    public required string FieldKey { get; init; }
-}
-
-internal sealed class KVCollectionPatchTarget : KVPatchTarget
-{
-    public required KVNode Owner { get; init; }
-
-    public required IKVCollectionNode Collection { get; init; }
-
-    public required KVCollectionDefinition Definition { get; init; }
-}
-
-internal sealed class KVCollectionItemPatchTarget : KVPatchTarget
-{
-    public required KVNode Owner { get; init; }
-
-    public required IKVCollectionNode Collection { get; init; }
-
-    public required KVCollectionDefinition Definition { get; init; }
-
-    public required KVNode Item { get; init; }
-
-    public required string ItemId { get; init; }
-}
-
-// A field group (KVFieldGroupNode) addressed as a whole — currently only by RESET.
-internal sealed class KVNodePatchTarget : KVPatchTarget
-{
-    public required KVNode Node { get; init; }
-
-    public required KVNodeDefinition Definition { get; init; }
-}
-
-internal sealed class KVNestedNodePatchTarget : KVPatchTarget
-{
-    public required KVNode Owner { get; init; }
-
-    public required KVNestedNodeDefinition Definition { get; init; }
-
-    public required KVModel SlotModel { get; init; }
-}
-
-internal sealed class KVPatchExecutionContext
-{
-    public required KVRootNode Root { get; init; }
-}
-
-internal sealed class KVPatchOperationRegistry
+internal static class KVPatchOperationRegistry
 {
     private static readonly IReadOnlyDictionary<string, KVPatchOperationDescriptor> BuiltInOperations =
         new Dictionary<string, KVPatchOperationDescriptor>(StringComparer.OrdinalIgnoreCase)
@@ -138,8 +86,6 @@ internal sealed class KVPatchOperationRegistry
                 ApplyReset)
         };
 
-    public static KVPatchOperationRegistry CreateDefault() => new();
-
     internal static void EnsureCustomOperation(string operation)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(operation);
@@ -149,7 +95,7 @@ internal sealed class KVPatchOperationRegistry
         }
     }
 
-    internal void Apply(KVPatchTarget target, KVPatchOperation operation, KVPatchExecutionContext context)
+    internal static void Apply(KVPatchTarget target, KVPatchOperation operation, KVPatchExecutionContext context)
     {
         var descriptor = Resolve(target, operation);
         var targetKind = GetTargetKind(target);
@@ -160,6 +106,19 @@ internal sealed class KVPatchOperationRegistry
 
         EnsureCollectionOperationAllowed(target, operation, context);
         descriptor.Invoke(target, operation, context);
+    }
+
+    // The node a node-level custom operation runs on: the root or a field group, a collection item, or
+    // the active subtype of a nested node slot (null when the slot is not initialized).
+    internal static KVNode? TryGetTargetNode(KVPatchTarget target)
+    {
+        return target switch
+        {
+            KVNodePatchTarget nodeTarget => nodeTarget.Node,
+            KVCollectionItemPatchTarget itemTarget => itemTarget.Item,
+            KVNestedNodePatchTarget nestedTarget => nestedTarget.Owner.GetActiveNestedNode(nestedTarget.Definition, nestedTarget.SlotModel),
+            _ => null
+        };
     }
 
     private static void EnsureCollectionOperationAllowed(KVPatchTarget target, KVPatchOperation operation, KVPatchExecutionContext context)
@@ -419,19 +378,6 @@ internal sealed class KVPatchOperationRegistry
         throw Unsupported(target, operation);
     }
 
-    // The node a node-level custom operation runs on: the root or a field group, a collection item, or
-    // the active subtype of a nested node slot (null when the slot is not initialized).
-    internal static KVNode? TryGetTargetNode(KVPatchTarget target)
-    {
-        return target switch
-        {
-            KVNodePatchTarget nodeTarget => nodeTarget.Node,
-            KVCollectionItemPatchTarget itemTarget => itemTarget.Item,
-            KVNestedNodePatchTarget nestedTarget => nestedTarget.Owner.GetActiveNestedNode(nestedTarget.Definition, nestedTarget.SlotModel),
-            _ => null
-        };
-    }
-
     private static KVPatchTargetKind GetTargetKind(KVPatchTarget target)
     {
         return target switch
@@ -454,32 +400,81 @@ internal sealed class KVPatchOperationRegistry
     private static void ApplySet(KVPatchTarget target, KVPatchOperation operation, KVPatchExecutionContext context)
     {
         var fieldTarget = (KVFieldPatchTarget)target;
-        var value = operation.Value;
-        if (fieldTarget.Definition.AllowedValues is not null && value is not null)
+
+        // A JSON null clears, like a CLR null.
+        var value = operation.Value is JsonElement { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined } ? null : operation.Value;
+        var allowedValues = fieldTarget.Definition.AllowedValues;
+        if (value is null)
         {
+            // Cleared.
+        }
+        else if (allowedValues is { IsElementWise: false })
+        {
+            value = ResolveAllowedValue(allowedValues, value, fieldTarget.CanonicalPath);
+        }
+        else if (allowedValues is not null)
+        {
+            // Element-wise: a JSON array arrives as its text and is matched element by element.
+            if (value is JsonElement json)
+            {
+                value = ToAllowedValueToken(json);
+            }
+
             if (value is string token)
             {
                 try
                 {
-                    value = fieldTarget.Definition.AllowedValues.DenormalizeFromStorage(token);
+                    value = allowedValues.DenormalizeFromStorage(token);
                 }
                 catch (InvalidOperationException)
                 {
                     // Keep unknown token as-is so validation can report allowed_values.
                 }
             }
-            else if (!fieldTarget.Definition.AllowedValues.IsAllowed(value))
+            else if (!allowedValues.IsAllowed(value))
             {
-                throw new InvalidOperationException($"Value for field '{fieldTarget.CanonicalPath}' is not part of configured allowed values.");
+                throw NotAllowed(fieldTarget.CanonicalPath);
             }
         }
-        else if (value is not null)
+        else
         {
             value = KVPatchValueConverter.ConvertToFieldType(value, fieldTarget.Definition.ValueType, fieldTarget.CanonicalPath);
         }
 
         fieldTarget.Node.SetFieldForPatch(fieldTarget.FieldKey, value);
     }
+
+    // A single-value field with allowed values: a client sends a typed value or a token, in JSON both as text
+    // or numbers, so the definition decides which allowed value it stands for. An unknown value is kept for
+    // validation only when tokens are text (it reads back as text); otherwise it is rejected.
+    private static object ResolveAllowedValue(KVAllowedValuesDefinition allowedValues, object value, string path)
+    {
+        if (value is JsonElement json)
+        {
+            value = json.ValueKind is JsonValueKind.Array or JsonValueKind.Object
+                ? throw new InvalidOperationException($"Field '{path}' takes a single value, not a JSON {json.ValueKind.ToString().ToLowerInvariant()}.")
+                : ToAllowedValueToken(json)!;
+        }
+
+        if (allowedValues.TryResolve(value, out var resolved))
+        {
+            return resolved!;
+        }
+
+        return value is string && allowedValues.KeepsUnknownTokens ? value : throw NotAllowed(path);
+    }
+
+    private static InvalidOperationException NotAllowed(string path) =>
+        new($"Value for field '{path}' is not part of configured allowed values.");
+
+    private static object? ToAllowedValueToken(JsonElement json) => json.ValueKind switch
+    {
+        JsonValueKind.String => json.GetString(),
+        JsonValueKind.Number => KVValues.ReadJsonNumber(json),
+        JsonValueKind.True => true,
+        JsonValueKind.False => false,
+        _ => json.GetRawText()
+    };
 
     private static void ApplyUnset(KVPatchTarget target, KVPatchOperation operation, KVPatchExecutionContext context)
     {
@@ -531,7 +526,7 @@ internal sealed class KVPatchOperationRegistry
 
         nestedTarget.Definition.GetTypeDefinition(typeToken);
         var oldTypeToken = KVNestedNode.GetItemType(nestedTarget.SlotModel);
-        nestedTarget.Owner.ClearNestedNodeModelForPatch(nestedTarget.SlotModel);
+        KVNode.ClearNestedNodeModelForPatch(nestedTarget.SlotModel);
         KVNestedNode.SetItemType(nestedTarget.SlotModel, typeToken);
         nestedTarget.Owner.DetachNestedNodeForPatch(nestedTarget.Definition.SubSegmentPath);
         nestedTarget.Owner.RebindCurrentContextForPatch();
@@ -546,7 +541,7 @@ internal sealed class KVPatchOperationRegistry
     {
         var nestedTarget = (KVNestedNodePatchTarget)target;
         var oldTypeToken = KVNestedNode.GetItemType(nestedTarget.SlotModel);
-        nestedTarget.Owner.ClearNestedNodeModelForPatch(nestedTarget.SlotModel);
+        KVNode.ClearNestedNodeModelForPatch(nestedTarget.SlotModel);
         KVNestedNode.ClearItemType(nestedTarget.SlotModel);
         nestedTarget.Owner.DetachNestedNodeForPatch(nestedTarget.Definition.SubSegmentPath);
         nestedTarget.Owner.RebindCurrentContextForPatch();
@@ -598,12 +593,72 @@ internal sealed class KVPatchOperationRegistry
     }
 }
 
+internal abstract class KVPatchTarget
+{
+    public required string CanonicalPath { get; init; }
+}
+
+internal sealed class KVPathPatchTarget : KVPatchTarget;
+
+internal sealed class KVFieldPatchTarget : KVPatchTarget
+{
+    public required KVNode Node { get; init; }
+
+    public required KVFieldDefinition Definition { get; init; }
+
+    public required string FieldKey { get; init; }
+}
+
+internal sealed class KVCollectionPatchTarget : KVPatchTarget
+{
+    public required KVNode Owner { get; init; }
+
+    public required IKVCollectionNode Collection { get; init; }
+
+    public required KVCollectionDefinition Definition { get; init; }
+}
+
+internal sealed class KVCollectionItemPatchTarget : KVPatchTarget
+{
+    public required KVNode Owner { get; init; }
+
+    public required IKVCollectionNode Collection { get; init; }
+
+    public required KVCollectionDefinition Definition { get; init; }
+
+    public required KVNode Item { get; init; }
+
+    public required string ItemId { get; init; }
+}
+
+// A field group (KVFieldGroupNode) addressed as a whole — currently only by RESET.
+internal sealed class KVNodePatchTarget : KVPatchTarget
+{
+    public required KVNode Node { get; init; }
+
+    public required KVNodeDefinition Definition { get; init; }
+}
+
+internal sealed class KVNestedNodePatchTarget : KVPatchTarget
+{
+    public required KVNode Owner { get; init; }
+
+    public required KVNestedNodeDefinition Definition { get; init; }
+
+    public required KVModel SlotModel { get; init; }
+}
+
+internal sealed class KVPatchExecutionContext
+{
+    public required KVRootNode Root { get; init; }
+}
+
 internal sealed class KVPatchOperationDescriptor
 {
+    private const KVPatchTargetKind NodeTargetKinds = KVPatchTargetKind.Node | KVPatchTargetKind.CollectionItem | KVPatchTargetKind.NestedNode;
+
     // Payloads usually arrive from web clients: camelCase names, and numbers that may be sent as strings.
     private static readonly JsonSerializerOptions ArgumentJsonOptions = new(JsonSerializerDefaults.Web);
-
-    private const KVPatchTargetKind NodeTargetKinds = KVPatchTargetKind.Node | KVPatchTargetKind.CollectionItem | KVPatchTargetKind.NestedNode;
 
     private readonly Action<KVPatchTarget, KVPatchOperation, KVPatchExecutionContext> invoke;
 

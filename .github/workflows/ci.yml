@@ -25,11 +25,12 @@ jobs:
       - name: Integration tests
         run: dotnet test x86cc.KVBind.IntegrationTests/x86cc.KVBind.IntegrationTests.csproj -c Release
 
-      # Validate that both NuGet packages build on every push/PR.
+      # Validate that the NuGet packages build on every push/PR.
       - name: Pack (validate)
         run: |
           dotnet pack x86cc.KVBind.Core/x86cc.KVBind.Core.csproj -c Release -o ./artifacts
           dotnet pack x86cc.KVBind.SourceGenerator/x86cc.KVBind.SourceGenerator.csproj -c Release -o ./artifacts
+          dotnet pack x86cc.KVBind.Schema/x86cc.KVBind.Schema.csproj -c Release -o ./artifacts
 
       - uses: actions/upload-artifact@v4
         with:

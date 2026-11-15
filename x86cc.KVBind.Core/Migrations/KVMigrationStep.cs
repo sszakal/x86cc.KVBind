@@ -117,7 +117,7 @@ internal sealed class RenameFieldStep(KVTarget target, string toSegment) : IKVMi
 
             var slash = path.LastIndexOf('/');
             var newPath = slash < 0 ? toSegment : path[..(slash + 1)] + toSegment;
-            delta[newPath] = value!;
+            delta[newPath] = value;
             delta[path] = KVValue.Tombstone;
         }
     }
@@ -132,12 +132,12 @@ internal sealed class RenameSegmentStep(string fromPath, string toPath) : IKVMig
         var fromPrefix = fromPath + "/";
         foreach (var key in source.Keys)
         {
-            string? newKey =
-                string.Equals(key, fromPath, StringComparison.Ordinal) ? toPath
-                : key.StartsWith(fromPrefix, StringComparison.Ordinal) ? toPath + "/" + key[fromPrefix.Length..]
-                : null;
-
-            if (newKey is null)
+            string newKey;
+            if (string.Equals(key, fromPath, StringComparison.Ordinal))
+                newKey = toPath;
+            else if (key.StartsWith(fromPrefix, StringComparison.Ordinal))
+                newKey = toPath + "/" + key[fromPrefix.Length..];
+            else
                 continue;
 
             delta[newKey] = source[key];

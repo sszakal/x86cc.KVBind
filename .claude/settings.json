@@ -6,12 +6,12 @@
       "Bash(git status)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)",
     ],
     "deny": [
       "Bash(rm:*)",
-      "Bash(curl:*)",
-      "Bash(wget:*)",
       "Bash(git push:*)",
       "Bash(git reset --hard:*)",
       "Bash(dotnet nuget push:*)"

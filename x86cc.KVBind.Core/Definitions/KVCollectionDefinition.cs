@@ -44,6 +44,10 @@ public class KVCollectionDefinition : KVDefinition
 
     public Func<KVNode, IKVCollectionNode> GetCollection { get; init; } = _ => throw new NotSupportedException("GetCollection is not configured.");
 
+    /// <summary>The custom patch operations registered on the collection itself (item operations are on
+    /// each item's <see cref="KVNodeDefinition.OperationNames"/>).</summary>
+    public IReadOnlyCollection<string> OperationNames => this.PatchOperations.Keys;
+
     // Seeds initial items into a fresh, empty collection (ApplyDefaults). Null = default to empty.
     internal Action<IKVCollectionNode>? DefaultSeed { get; set; }
 

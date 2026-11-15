@@ -237,7 +237,7 @@ public partial class VrContract : KVRootNode
     public void ChooseLicensor(string name)
     {
         this.Licensor = new VrParty();
-        this.Licensor!.Name = name;
+        this.Licensor.Name = name;
     }
 
     public void ChooseGuarantor() => this.Guarantor = new VrParty();

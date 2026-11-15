@@ -42,7 +42,7 @@ public class DeltaComputationTests : KVModelTestBase
         var root = this.CreateRoot<ChangeSetTestModel>(model);
         var item = root.Items.Create(Guid.Parse("12300000-0000-0000-0000-000000000000"));
         item.Amount = 10;
-        this.CommitSetup(model);
+        CommitSetup(model);
         root = this.CreateRoot<ChangeSetTestModel>(model);
 
         root.Items.RemoveById(item.ItemId()!);
@@ -60,7 +60,7 @@ public class DeltaComputationTests : KVModelTestBase
         var model = new KVModelRoot();
         var root = this.CreateRoot<ChangeSetTestModel>(model);
         root.Status = 42;
-        this.CommitSetup(model);
+        CommitSetup(model);
         root = this.CreateRoot<ChangeSetTestModel>(model);
 
         root.Patch(KVPatchOperation.Unset("/Status"));
@@ -89,7 +89,7 @@ public class DeltaComputationTests : KVModelTestBase
         var root = this.CreateRoot<ChangeSetTestModel>(model);
         var item = root.Items.Create(Guid.Parse("00000000-0000-0000-0000-000000000001"));
         item.Name = "base";
-        this.CommitSetup(model);
+        CommitSetup(model);
         root = this.CreateRoot<ChangeSetTestModel>(model);
         var reloadedItem = root.Items.GetById(item.ItemId()!)!;
 
@@ -118,7 +118,7 @@ public class DeltaComputationTests : KVModelTestBase
         var model = new KVModelRoot();
         var root = this.CreateRoot<ChangeSetTestModel>(model);
         root.Status = 42;
-        this.CommitSetup(model);
+        CommitSetup(model);
         root = this.CreateRoot<ChangeSetTestModel>(model);
 
         root.Status = 99;
@@ -133,7 +133,7 @@ public class DeltaComputationTests : KVModelTestBase
         var model = new KVModelRoot();
         var root = this.CreateRoot<ChangeSetTestModel>(model);
         root.General.Code = "OLD";
-        this.CommitSetup(model);
+        CommitSetup(model);
         root = this.CreateRoot<ChangeSetTestModel>(model);
 
         root.General.Code = "NEW";
@@ -148,7 +148,7 @@ public class DeltaComputationTests : KVModelTestBase
         var model = new KVModelRoot();
         var root = this.CreateRoot<NestedNodeRoot>(model);
         root.Patch(KVPatchOperation.Init("/Animal", "DOG"));
-        this.CommitSetup(model);
+        CommitSetup(model);
         root = this.CreateRoot<NestedNodeRoot>(model);
 
         root.Patch(KVPatchOperation.Init("/Animal", "CAT")); // replace type

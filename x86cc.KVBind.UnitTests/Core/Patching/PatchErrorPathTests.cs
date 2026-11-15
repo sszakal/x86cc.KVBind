@@ -11,7 +11,7 @@ public class PatchErrorPathTests : KVModelTestBase
         this.RegisterModelDefinition<PatchErrorModel>(builder =>
         {
             builder.Field(x => x.Title);
-            builder.Field(x => x.Choice, field => field.AllowedValues(FieldEnum.First, FieldEnum.Second));
+            builder.Field(x => x.Choice, field => field.AllowedValues(FieldChoice.First, FieldChoice.Second));
             builder.Collection(x => x.Items, collection =>
             {
                 collection.Operation<ItemsToGroup>("GROUP", x => x.GroupItems);
@@ -87,7 +87,7 @@ public class PatchErrorPathTests : KVModelTestBase
         var model = this.CreateRoot<PatchErrorModel>();
         model.CommitSetup();
 
-        var act = () => model.Patch(KVPatchOperation.Set("/Choice", FieldEnum.Third));
+        var act = () => model.Patch(KVPatchOperation.Set("/Choice", FieldChoice.Third));
 
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("Value for field 'Choice' is not part of configured allowed values.");
@@ -99,9 +99,9 @@ public class PatchErrorPathTests : KVModelTestBase
         var model = this.CreateRoot<PatchErrorModel>();
         model.CommitSetup();
 
-        model.Patch(KVPatchOperation.Set("/Choice", FieldEnum.Second));
+        model.Patch(KVPatchOperation.Set("/Choice", FieldChoice.Second));
 
-        model.Choice.Should().Be(FieldEnum.Second);
+        model.Choice.Should().Be(FieldChoice.Second);
     }
 
     // ── MOVE ─────────────────────────────────────────────────────────────────
@@ -302,7 +302,7 @@ public partial class PatchErrorModel : KVRootNode
     public partial string? Title { get; set; }
 
     [KVBind("Choice")]
-    public partial FieldEnum Choice { get; set; }
+    public partial FieldChoice Choice { get; set; }
 
     [KVBind("Items")]
     public KVCollectionNode<ChangeSetPatchItemNode> Items { get; } = new();

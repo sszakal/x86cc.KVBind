@@ -51,7 +51,9 @@ public class OverlayCommitTests
         snapshot.Data["Title"] = "Original";
 
         var clone = snapshot.Clone();
+#pragma warning disable S4143 // overwritten on purpose: the clone must not see the change
         snapshot.Data["Title"] = "Changed";
+#pragma warning restore S4143
         snapshot.LastCommitId = Guid.Parse("55555555-5555-5555-5555-555555555555");
 
         clone.LastCommitId.Should().Be(Guid.Parse("33333333-3333-3333-3333-333333333333"));

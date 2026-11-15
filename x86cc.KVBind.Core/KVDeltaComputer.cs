@@ -10,10 +10,9 @@ internal static class KVDeltaComputer
         var deltas = new List<KVChangeDelta>();
 
         // Nested node type change: emit a single slot-level delta instead of individual field deltas.
-        if (!isCollectionItem && !string.IsNullOrWhiteSpace(nodePath))
+        if (!isCollectionItem && !string.IsNullOrWhiteSpace(nodePath) && TryCreateNestedNodeTypeDelta(node.Model, nodePath, out var typeDelta))
         {
-            if (TryCreateNestedNodeTypeDelta(node.Model, nodePath, out var typeDelta))
-                return new KVChangeDeltaGroup([typeDelta], []);
+            return new KVChangeDeltaGroup([typeDelta], []);
         }
 
         // New (draft-only) collection item.

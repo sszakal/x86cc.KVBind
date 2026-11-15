@@ -36,6 +36,15 @@ public class KVFieldDefinition : KVDefinition
 
     public object? Max => this.Constraints?.Max;
 
+    /// <summary>True when the field only accepts declared values (see <see cref="AllowedValueOptions"/>).</summary>
+    public bool HasAllowedValues => this.AllowedValues is not null;
+
+    /// <summary>True when the field is a sequence and every element must be an allowed value.</summary>
+    public bool AllowedValuesApplyToElements => this.AllowedValues?.IsElementWise ?? false;
+
+    /// <summary>The declared allowed values in declaration order; empty when the field has none.</summary>
+    public IReadOnlyList<KVAllowedValueInfo> AllowedValueOptions => this.AllowedValues?.Options ?? [];
+
     internal KVAllowedValuesDefinition? AllowedValues { get; init; }
 
     internal KVValueConstraints? Constraints { get; init; }

@@ -49,7 +49,7 @@ public class NativeComponent : IComponent
 
     public decimal DecimalField { get; set; }
 
-    public string StringField { get; set; }
+    public string StringField { get; set; } = string.Empty;
 
     public DateTime DateTimeField { get; set; }
 
@@ -63,11 +63,11 @@ public class NativeComponent : IComponent
 
     public Guid GuidField { get; set; }
 
-    public int[] ArrayOfInts { get; set; }
+    public int[] ArrayOfInts { get; set; } = [];
 
-    public string[] ArrayOfStrings { get; set; }
+    public string[] ArrayOfStrings { get; set; } = [];
 
-    public DateTime[] ArrayOfDates { get; set; }
+    public DateTime[] ArrayOfDates { get; set; } = [];
 }
 
 public class NativeComponentCollectionItemLevel1 : IComponent
@@ -86,7 +86,7 @@ public class NativeComponentCollectionItemLevel1 : IComponent
 
     public decimal DecimalField { get; set; }
 
-    public string StringField { get; set; }
+    public string StringField { get; set; } = string.Empty;
 
     public DateTime DateTimeField { get; set; }
 
@@ -100,11 +100,11 @@ public class NativeComponentCollectionItemLevel1 : IComponent
 
     public Guid GuidField { get; set; }
 
-    public int[] ArrayOfInts { get; set; }
+    public int[] ArrayOfInts { get; set; } = [];
 
-    public string[] ArrayOfStrings { get; set; }
+    public string[] ArrayOfStrings { get; set; } = [];
 
-    public DateTime[] ArrayOfDates { get; set; }
+    public DateTime[] ArrayOfDates { get; set; } = [];
 
     public IEnumerable<IComponent> GetAllComponents()
     {
@@ -128,7 +128,7 @@ public class NativeComponentCollectionItemLevel2 : IComponent
 
     public decimal DecimalField { get; set; }
 
-    public string StringField { get; set; }
+    public string StringField { get; set; } = string.Empty;
 
     public DateTime DateTimeField { get; set; }
 
@@ -142,11 +142,11 @@ public class NativeComponentCollectionItemLevel2 : IComponent
 
     public Guid GuidField { get; set; }
 
-    public int[] ArrayOfInts { get; set; }
+    public int[] ArrayOfInts { get; set; } = [];
 
-    public string[] ArrayOfStrings { get; set; }
+    public string[] ArrayOfStrings { get; set; } = [];
 
-    public DateTime[] ArrayOfDates { get; set; }
+    public DateTime[] ArrayOfDates { get; set; } = [];
 
     public IEnumerable<IComponent> GetAllComponents()
     {
@@ -168,7 +168,7 @@ public class NativeComponentCollectionItemLevel3 : IComponent
 
     public decimal DecimalField { get; set; }
 
-    public string StringField { get; set; }
+    public string StringField { get; set; } = string.Empty;
 
     public DateTime DateTimeField { get; set; }
 
@@ -182,11 +182,11 @@ public class NativeComponentCollectionItemLevel3 : IComponent
 
     public Guid GuidField { get; set; }
 
-    public int[] ArrayOfInts { get; set; }
+    public int[] ArrayOfInts { get; set; } = [];
 
-    public string[] ArrayOfStrings { get; set; }
+    public string[] ArrayOfStrings { get; set; } = [];
 
-    public DateTime[] ArrayOfDates { get; set; }
+    public DateTime[] ArrayOfDates { get; set; } = [];
 }
 
 public class NativeRoot : NativeComponent

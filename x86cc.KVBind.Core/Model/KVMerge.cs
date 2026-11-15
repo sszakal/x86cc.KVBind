@@ -192,6 +192,9 @@ public static class KVMerge
         private bool OverlayTouchedUnder(string path) =>
             this.changes.Keys.Any(k => KVPath.IsSameOrDescendant(k, path) && this.changes[k] != null);
 
+        private bool DraftDeletedAtOrAbove(string path) =>
+            this.changes.Any(pair => pair.Value == KVValue.Tombstone && KVPath.IsSameOrDescendant(path, pair.Key));
+
         private bool CoveredByStructuralNode(string path) =>
             this.structuralNodes.Any(n => KVPath.IsSameOrDescendant(path, n));
 
@@ -227,17 +230,44 @@ public static class KVMerge
         }
 
         // ── Pass 0b — incoming $type change (target changed a node the draft left untouched) ──
+        // Outermost nodes first (then by path, so the result never depends on the order the upstream commits
+        // list their keys in): a switched node consumes everything beneath it, so a nested node that upstream
+        // switched too is covered by the outer entry instead of raising an overlapping one.
         private void DetectIncomingTypeChanges()
         {
-            foreach (var key in this.mainChanged.Where(k => IsReservedLeaf(k, TypeSegment)))
+            var typeKeys = this.mainChanged
+                .Where(k => IsReservedLeaf(k, TypeSegment))
+                .OrderBy(k => k.Count(c => c == '/'))
+                .ThenBy(k => k, System.StringComparer.Ordinal)
+                .ToList();
+            foreach (var key in typeKeys)
             {
                 if (this.consumed.Contains(key)) continue;
                 var nodePath = ParentPath(key);
                 if (string.IsNullOrEmpty(nodePath)) continue;
-                if (this.OverlayTouchedUnder(nodePath)) continue; // draft touched it — leave to leaf-level handling.
+                if (this.CoveredByStructuralNode(nodePath)) continue;
 
                 this.baseSnapshot.Data.TryGetValue(key, out var baseType);
-                this.TheirsGet(key, out var mainType);
+                var upstreamKeepsNode = this.TheirsGet(key, out var mainType);
+
+                if (this.OverlayTouchedUnder(nodePath))
+                {
+                    // The draft set the same $type upstream chose, upstream dropped the node, or the draft
+                    // deleted it: leaf-level and delete/edit handling own those cases.
+                    if (this.changes.ContainsKey(key) || !upstreamKeepsNode || this.DraftDeletedAtOrAbove(nodePath)) continue;
+
+                    // Upstream switched the type of a node whose fields the draft edited. Merging leaf by
+                    // leaf would mix the two types' fields, so the whole node is one structural conflict.
+                    this.conflicts.Add(new KVConflict
+                    {
+                        Path = nodePath, Kind = KVConflictKind.Structural,
+                        BaseValue = baseType, MainValue = mainType, OursValue = baseType,
+                    });
+                    this.structuralNodes.Add(nodePath);
+                    this.ConsumeMainChangedUnder(nodePath);
+                    continue;
+                }
+
                 this.incoming.Add(new KVConflict
                 {
                     Path = nodePath, Kind = KVConflictKind.Incoming,

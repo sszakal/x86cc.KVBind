@@ -334,6 +334,74 @@ public class RebaseTests
     }
 
     [Fact]
+    public void BeginRebase_WhenUpstreamChangedTypeOfNodeDraftEdited_ProducesSingleStructuralConflictAtNode()
+    {
+        var v1 = Snapshot(("Claimant/$type", "PERSON"), ("Claimant/FullName", "Ann"));
+        var overlay = KVOverlay.Create(v1.Clone(), "editor");
+        overlay.Set("Claimant/FullName", "Ann B.");
+        var v2 = Snapshot(("Claimant/$type", "COMPANY"), ("Claimant/CompanyName", "Acme"));
+
+        Rebase(overlay, v2).Should().Be(KVRebaseOutcome.HasUnresolvedConflicts);
+
+        var conflict = overlay.Conflicts.Should().ContainSingle().Subject;
+        conflict.Path.Should().Be("Claimant");
+        conflict.Kind.Should().Be(KVConflictKind.Structural);
+        conflict.BaseValue!.Value.Should().Be("PERSON");
+        conflict.MainValue!.Value.Should().Be("COMPANY");
+        conflict.OursValue!.Value.Should().Be("PERSON");
+    }
+
+    [Fact]
+    public void FinishRebase_UpstreamTypeChange_TakeOurs_KeepsDraftNodeWithoutTargetFields()
+    {
+        var v1 = Snapshot(("Claimant/$type", "PERSON"), ("Claimant/FullName", "Ann"), ("Claimant/Age", "40"));
+        var overlay = KVOverlay.Create(v1.Clone(), "editor");
+        overlay.Set("Claimant/FullName", "Ann B.");
+        var v2 = Snapshot(("Claimant/$type", "COMPANY"), ("Claimant/CompanyName", "Acme"));
+
+        Rebase(overlay, v2);
+        overlay.ResolveConflict("Claimant", KVConflictResolution.Ours);
+        overlay.FinishRebase();
+
+        Effective(overlay, "Claimant/$type").Should().Be("PERSON");
+        Effective(overlay, "Claimant/FullName").Should().Be("Ann B.");
+        Effective(overlay, "Claimant/Age").Should().Be("40"); // untouched base field of our type is kept
+        Effective(overlay, "Claimant/CompanyName").Should().BeNull();
+    }
+
+    [Fact]
+    public void FinishRebase_UpstreamTypeChange_TakeTheirs_DropsDraftFieldOfOldType()
+    {
+        var v1 = Snapshot(("Claimant/$type", "PERSON"), ("Claimant/FullName", "Ann"));
+        var overlay = KVOverlay.Create(v1.Clone(), "editor");
+        overlay.Set("Claimant/FullName", "Ann B.");
+        var v2 = Snapshot(("Claimant/$type", "COMPANY"), ("Claimant/CompanyName", "Acme"));
+
+        Rebase(overlay, v2);
+        overlay.ResolveConflict("Claimant", KVConflictResolution.Theirs);
+        overlay.FinishRebase();
+
+        Effective(overlay, "Claimant/$type").Should().Be("COMPANY");
+        Effective(overlay, "Claimant/CompanyName").Should().Be("Acme");
+        Effective(overlay, "Claimant/FullName").Should().BeNull();
+    }
+
+    [Fact]
+    public void BeginRebase_WhenUpstreamTypeChangeLeavesDraftUntouched_IsIncomingAtNode()
+    {
+        var v1 = Snapshot(("Claimant/$type", "PERSON"), ("Claimant/FullName", "Ann"), ("Title", "A"));
+        var overlay = KVOverlay.Create(v1.Clone(), "editor");
+        overlay.Set("Title", "B");
+        var v2 = Snapshot(("Claimant/$type", "COMPANY"), ("Claimant/CompanyName", "Acme"), ("Title", "A"));
+
+        Rebase(overlay, v2).Should().Be(KVRebaseOutcome.CanAutomerge);
+
+        var conflict = overlay.Conflicts.Should().ContainSingle().Subject;
+        conflict.Path.Should().Be("Claimant");
+        conflict.Kind.Should().Be(KVConflictKind.Incoming);
+    }
+
+    [Fact]
     public void FinishRebase_TypeMismatch_TakeTheirs_ShowsTargetNodeCleanly()
     {
         var v1 = Snapshot();
@@ -349,6 +417,70 @@ public class RebaseTests
         Effective(overlay, "Claimant/$type").Should().Be("COMPANY");
         Effective(overlay, "Claimant/CompanyName").Should().Be("Acme");
         Effective(overlay, "Claimant/FullName").Should().BeNull();
+    }
+
+    // Upstream switched the type of nested nodes at several levels and the draft edited the innermost one:
+    // one structural conflict at the outermost switched node covers the rest, whatever order the upstream
+    // commit lists the $type keys in.
+    [Fact]
+    public void BeginRebase_WhenUpstreamSwitchesNestedTypesAtSeveralLevels_RaisesOneConflictAtTheOutermost()
+    {
+        var v1 = Snapshot(
+            ("Contact/$type", "PERSON"),
+            ("Contact/Detail/$type", "HOME"),
+            ("Contact/Detail/Inner/$type", "FLAT"),
+            ("Contact/Detail/Inner/Name", "Ann"));
+        var overlay = KVOverlay.Create(v1.Clone(), "editor");
+        overlay.Set("Contact/Detail/Inner/Name", "Ann B.");
+
+        // The upstream commit lists the innermost switch first, as it would if that edit was made first.
+        var commit = Commit(
+            v1,
+            ("Contact/Detail/Inner/$type", "FLOOR"),
+            ("Contact/Detail/$type", "OFFICE"),
+            ("Contact/$type", "COMPANY"));
+        var v2 = v1.Clone();
+        v2.Apply(commit);
+
+        overlay.BeginRebase(v2, [commit]).Should().Be(KVRebaseOutcome.HasUnresolvedConflicts);
+
+        var conflict = overlay.Conflicts.Should().ContainSingle().Subject;
+        conflict.Path.Should().Be("Contact");
+        conflict.Kind.Should().Be(KVConflictKind.Structural);
+    }
+
+    // Keeping the draft's version of a switched node must not write base values back under a part of it
+    // the draft deleted: the draft's tombstone already covers them.
+    [Fact]
+    public void FinishRebase_UpstreamTypeChange_TakeOurs_PinsNothingUnderWhatTheDraftDeleted()
+    {
+        var v1 = SnapshotV(
+            ("Contact/$type", "PERSON"),
+            ("Contact/Name", "Ann"),
+            ("Contact/Orders/$items", Items("o1")),
+            ("Contact/Orders/o1/Sku", "A"),
+            ("Contact/Orders/o1/Qty", "1"));
+        var overlay = KVOverlay.Create(v1.Clone(), "editor");
+        overlay.Set("Contact/Name", "Ann B.");
+        overlay.Remove("Contact/Orders/o1");
+        var v2 = SnapshotV(
+            ("Contact/$type", "COMPANY"),
+            ("Contact/CompanyName", "Acme"),
+            ("Contact/Orders/$items", Items("o1")),
+            ("Contact/Orders/o1/Sku", "B"),
+            ("Contact/Orders/o1/Qty", "1"),
+            ("Contact/Orders/o1/Note", "new upstream"));
+
+        Rebase(overlay, v2);
+        overlay.ResolveConflict("Contact", KVConflictResolution.Ours);
+        overlay.FinishRebase();
+
+        overlay.Changes.Keys.Where(k => k.StartsWith("Contact/Orders/o1/", StringComparison.Ordinal)).Should().BeEmpty();
+        overlay.Changes["Contact/Orders/o1"].Should().BeSameAs(KVValue.Tombstone);
+        overlay.IsRemoved("Contact/Orders/o1/Sku").Should().BeTrue();
+        overlay.IsRemoved("Contact/Orders/o1/Note").Should().BeTrue();
+        Effective(overlay, "Contact/Name").Should().Be("Ann B.");
+        Effective(overlay, "Contact/CompanyName").Should().BeNull();
     }
 
     [Fact]

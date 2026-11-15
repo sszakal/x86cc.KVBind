@@ -16,48 +16,72 @@ internal readonly record struct KVExplicitAllowedValue(
     string? Template = null,
     IReadOnlyList<KVAllowedValuePlaceholder>? Placeholders = null);
 
+/// <summary>One allowed value as declared in the DSL: the stored id, its label, and for an allowed-value
+/// component the display template and the placeholders it asks for.</summary>
+public sealed record KVAllowedValueInfo(
+    string Id,
+    string Label,
+    string? Template,
+    IReadOnlyList<KVAllowedValuePlaceholderInfo> Placeholders);
+
+/// <summary>A parameter of an allowed-value component (e.g. a deductible amount).</summary>
+public sealed record KVAllowedValuePlaceholderInfo(string Name, string Label, Type ValueType, bool IsRequired);
+
 internal sealed class KVAllowedValuesDefinition
 {
     private readonly Func<object?, bool> isAllowed;
     private readonly Func<object?, object?> normalizeForStorage;
     private readonly Func<object?, object?> denormalizeFromStorage;
-    private readonly IReadOnlyDictionary<string, KVExplicitAllowedValue>? entriesById;
-    private readonly IReadOnlyDictionary<object, KVExplicitAllowedValue>? entriesByValue;
+    private readonly Resolver resolve;
 
     private KVAllowedValuesDefinition(
         Func<object?, bool> isAllowed,
         Func<object?, object?> normalizeForStorage,
         Func<object?, object?> denormalizeFromStorage,
-        IReadOnlyDictionary<string, KVExplicitAllowedValue>? entriesById = null,
-        IReadOnlyDictionary<object, KVExplicitAllowedValue>? entriesByValue = null)
+        Resolver? resolve = null)
     {
         this.isAllowed = isAllowed;
         this.normalizeForStorage = normalizeForStorage;
         this.denormalizeFromStorage = denormalizeFromStorage;
-        this.entriesById = entriesById;
-        this.entriesByValue = entriesByValue;
+        this.resolve = resolve ?? ((object _, out object? resolved) =>
+        {
+            resolved = null;
+            return false;
+        });
     }
+
+    // Reads an incoming value (a typed value, or a token as a client sends it) as one of the allowed values.
+    private delegate bool Resolver(object value, out object? resolved);
+
+    // The declared values, in declaration order, for describing the field (e.g. a schema for a UI).
+    public IReadOnlyList<KVAllowedValueInfo> Options { get; private init; } = [];
+
+    // True when the field is a sequence and each element must be one of the options.
+    public bool IsElementWise { get; private init; }
+
+    // True when the tokens are text, so an unknown text value can be kept in a draft for validation to report
+    // (and read back as text). For other token types an unknown value has no readable form and is rejected.
+    public bool KeepsUnknownTokens { get; private init; }
 
     public static KVAllowedValuesDefinition Create<TValue>(IEnumerable<TValue> values)
     {
-        var allowedSet = new HashSet<TValue>(values);
+        var declared = values.ToArray();
+        var allowedSet = new HashSet<TValue>(declared);
         return new KVAllowedValuesDefinition(
             isAllowed: value => value is TValue typed && allowedSet.Contains(typed),
             normalizeForStorage: value => value,
-            denormalizeFromStorage: value => value);
-    }
-
-    public static KVAllowedValuesDefinition CreateExplicit(IReadOnlyCollection<KVExplicitAllowedValue> values)
-    {
-        ArgumentNullException.ThrowIfNull(values);
-
-        var index = ExplicitValueIndex.Build(values);
-        return new KVAllowedValuesDefinition(
-            isAllowed: index.IsAllowed,
-            normalizeForStorage: value => value is null ? null : index.NormalizeItem(value),
-            denormalizeFromStorage: index.Denormalize,
-            index.ById,
-            index.ByValue);
+            denormalizeFromStorage: value => value,
+            resolve: (object value, out object? resolved) =>
+            {
+                // The values are their own tokens: match the value as the field's type ("2" or 2.0 for 2).
+                var found = TryAs<TValue>(value, out var typed) && allowedSet.Contains(typed);
+                resolved = found ? typed : null;
+                return found;
+            })
+        {
+            Options = DescribeTokens(declared, value => value!, labelSelector: null),
+            KeepsUnknownTokens = typeof(TValue) == typeof(string),
+        };
     }
 
     public static KVAllowedValuesDefinition Create<TValue, TToken>(
@@ -76,14 +100,54 @@ internal sealed class KVAllowedValuesDefinition
         }
 
         return new KVAllowedValuesDefinition(
-            isAllowed: value => (value is TValue typed && valueToToken.ContainsKey(typed!))
+            isAllowed: value => (value is TValue typed && valueToToken.ContainsKey(typed))
                               || (value is TToken token && tokenToValue.ContainsKey(token)),
             normalizeForStorage: value => value is TValue typed
-                ? valueToToken[typed!]
+                ? valueToToken[typed]
                 : throw new InvalidOperationException("Value type mismatch for allowed values."),
             denormalizeFromStorage: value => value is TToken token && tokenToValue.TryGetValue(token, out var typed)
                 ? typed
-                : throw new InvalidOperationException("Stored value token is not part of allowed values."));
+                : throw new InvalidOperationException("Stored value token is not part of allowed values."),
+            resolve: (object value, out object? resolved) =>
+            {
+                // The token first: tokens are the wire form, so 10 means the value whose token is 10, even when
+                // 10 is also an enum member's number or another allowed value. Then the value as the field's type.
+                if (TryAs<TToken>(value, out var token) && tokenToValue.TryGetValue(token, out var byToken))
+                {
+                    resolved = byToken;
+                    return true;
+                }
+
+                var found = TryAs<TValue>(value, out var converted) && valueToToken.ContainsKey(converted!);
+                resolved = found ? converted : null;
+                return found;
+            })
+        {
+            Options = DescribeTokens(tokenToValue.Values, value => tokenSelector(value), labelSelector),
+            KeepsUnknownTokens = typeof(TToken) == typeof(string),
+        };
+    }
+
+    public static KVAllowedValuesDefinition CreateExplicit(IReadOnlyCollection<KVExplicitAllowedValue> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+
+        var index = ExplicitValueIndex.Build(values);
+        return new KVAllowedValuesDefinition(
+            isAllowed: index.IsAllowed,
+            normalizeForStorage: value => value is null ? null : index.NormalizeItem(value),
+            denormalizeFromStorage: index.Denormalize,
+            resolve: (object value, out object? resolved) =>
+            {
+                // By id or by value; read back as the entry's value.
+                var found = index.IsAllowed(value);
+                resolved = found ? index.Denormalize(index.NormalizeItem(value)) : null;
+                return found;
+            })
+        {
+            Options = DescribeExplicit(values),
+            KeepsUnknownTokens = true,
+        };
     }
 
     public static KVAllowedValuesDefinition CreateForElements<TElement, TToken>(
@@ -101,14 +165,19 @@ internal sealed class KVAllowedValuesDefinition
             tokenToValue[token] = value;
         }
 
+        var allowedElements = new HashSet<TElement>(tokenToValue.Values);
         return new KVAllowedValuesDefinition(
             isAllowed: value => TryReadSequence(value, out var items) && items.All(IsAllowedItem),
             normalizeForStorage: value => NormalizeSequence<TToken>(value, IsAllowedItem, NormalizeItem),
-            denormalizeFromStorage: value => DenormalizeSequence(value, tokenToValue));
+            denormalizeFromStorage: value => DenormalizeSequence(value, tokenToValue, allowedElements))
+        {
+            Options = DescribeTokens(tokenToValue.Values, value => tokenSelector(value), labelSelector),
+            IsElementWise = true,
+        };
 
         bool IsAllowedItem(object? value)
         {
-            return (value is TElement typed && valueToToken.ContainsKey(typed!))
+            return (value is TElement typed && valueToToken.ContainsKey(typed))
                    || (TryConvertToken<TToken>(value, out var token) && tokenToValue.ContainsKey(token));
         }
 
@@ -116,7 +185,7 @@ internal sealed class KVAllowedValuesDefinition
         {
             if (value is TElement typed)
             {
-                return valueToToken[typed!];
+                return valueToToken[typed];
             }
 
             if (TryConvertToken<TToken>(value, out var token) && tokenToValue.ContainsKey(token))
@@ -145,10 +214,15 @@ internal sealed class KVAllowedValuesDefinition
             }
         }
 
+        var allowedExplicitElements = new HashSet<TElement>(elementsById.Values);
         return new KVAllowedValuesDefinition(
             isAllowed: value => TryReadSequence(value, out var items) && items.All(index.IsAllowed),
             normalizeForStorage: value => NormalizeSequence<string>(value, index.IsAllowed, index.NormalizeItem),
-            denormalizeFromStorage: value => DenormalizeSequence(value, elementsById));
+            denormalizeFromStorage: value => DenormalizeSequence(value, elementsById, allowedExplicitElements))
+        {
+            Options = DescribeExplicit(values),
+            IsElementWise = true,
+        };
     }
 
     public bool IsAllowed(object? value)
@@ -156,14 +230,17 @@ internal sealed class KVAllowedValuesDefinition
         return this.isAllowed(value);
     }
 
-    public object? DenormalizeFromStorage(object? value)
-    {
-        return this.denormalizeFromStorage(value);
-    }
+    // The allowed value an incoming single value stands for, or false when it is none of them.
+    public bool TryResolve(object value, out object? resolved) => this.resolve(value, out resolved);
 
     public object? NormalizeForStorage(object? value)
     {
         return this.normalizeForStorage(value);
+    }
+
+    public object? DenormalizeFromStorage(object? value)
+    {
+        return this.denormalizeFromStorage(value);
     }
 
     public object? DenormalizeFromStorage(object? value, Type targetType)
@@ -201,6 +278,58 @@ internal sealed class KVAllowedValuesDefinition
         return list;
     }
 
+    // The value as T: itself, or converted losslessly (a JSON number or numeric text for a number, a member
+    // name for an enum).
+    private static bool TryAs<T>(object value, out T typed)
+    {
+        if (value is T same)
+        {
+            typed = same;
+            return true;
+        }
+
+        if (KVPatchValueConverter.TryConvertToFieldType(value, typeof(T), out var converted) && converted is T result)
+        {
+            typed = result;
+            return true;
+        }
+
+        typed = default!;
+        return false;
+    }
+
+    // Explicit values, in declaration order, skipping entries without an id (the index ignores them too).
+    private static KVAllowedValueInfo[] DescribeExplicit(IReadOnlyCollection<KVExplicitAllowedValue> values)
+    {
+        return values
+            .Where(static entry => !string.IsNullOrWhiteSpace(entry.Id))
+            .Select(static entry => new KVAllowedValueInfo(
+                entry.Id,
+                entry.Label,
+                entry.Template,
+                (entry.Placeholders ?? [])
+                    .GroupBy(static p => p.Name, StringComparer.Ordinal)
+                    .Select(static g => g.First())
+                    .Select(static p => new KVAllowedValuePlaceholderInfo(p.Name, p.Label, p.ValueType, p.IsRequired))
+                    .ToArray()))
+            .ToArray();
+    }
+
+    // Token-based values: the id is the token's invariant text, the label falls back to the id.
+    private static KVAllowedValueInfo[] DescribeTokens<TValue>(
+        IEnumerable<TValue> values,
+        Func<TValue, object> tokenSelector,
+        Func<TValue, string>? labelSelector)
+    {
+        return values
+            .Select(value =>
+            {
+                var id = Convert.ToString(tokenSelector(value), CultureInfo.InvariantCulture) ?? string.Empty;
+                return new KVAllowedValueInfo(id, labelSelector?.Invoke(value) ?? id, Template: null, Placeholders: []);
+            })
+            .ToArray();
+    }
+
     private static List<TResult> NormalizeSequence<TResult>(object? value, Func<object?, bool> isAllowed, Func<object?, TResult> normalizeItem)
     {
         if (!TryReadSequence(value, out var items))
@@ -222,7 +351,13 @@ internal sealed class KVAllowedValuesDefinition
         return result;
     }
 
-    private static object? DenormalizeSequence<TToken, TElement>(object? value, IReadOnlyDictionary<TToken, TElement> tokenToValue)
+    // allowedElements is built once per definition (not per read): an item that is already an element is
+    // only accepted when it is one of them; for a string element type every unknown token would otherwise
+    // pass as an "element".
+    private static object? DenormalizeSequence<TToken, TElement>(
+        object? value,
+        IReadOnlyDictionary<TToken, TElement> tokenToValue,
+        HashSet<TElement> allowedElements)
         where TToken : notnull
     {
         if (!TryReadSequence(value, out var items))
@@ -239,7 +374,7 @@ internal sealed class KVAllowedValuesDefinition
                 continue;
             }
 
-            if (item is TElement element)
+            if (item is TElement element && allowedElements.Contains(element))
             {
                 denormalized.Add(element);
                 continue;
@@ -287,17 +422,6 @@ internal sealed class KVAllowedValuesDefinition
         }
     }
 
-    // long when integral, decimal when it fits, otherwise double (1e30 is a valid JSON number).
-    private static object ReadJsonNumber(JsonElement element)
-    {
-        if (element.TryGetInt64(out var longValue))
-        {
-            return longValue;
-        }
-
-        return element.TryGetDecimal(out var decimalValue) ? decimalValue : element.GetDouble();
-    }
-
     private static bool TryReadJsonArray(JsonElement json, out IReadOnlyList<object?> items)
     {
         if (json.ValueKind != JsonValueKind.Array)
@@ -312,7 +436,7 @@ internal sealed class KVAllowedValuesDefinition
             list.Add(element.ValueKind switch
             {
                 JsonValueKind.String => element.GetString(),
-                JsonValueKind.Number => ReadJsonNumber(element),
+                JsonValueKind.Number => KVValues.ReadJsonNumber(element),
                 JsonValueKind.True => true,
                 JsonValueKind.False => false,
                 JsonValueKind.Null => null,
@@ -342,12 +466,15 @@ internal sealed class KVAllowedValuesDefinition
             }
             catch (InvalidCastException)
             {
+                // Not convertible to the token type: treated as no match below.
             }
             catch (FormatException)
             {
+                // Not convertible to the token type: treated as no match below.
             }
             catch (OverflowException)
             {
+                // Not convertible to the token type: treated as no match below.
             }
         }
 
@@ -374,12 +501,6 @@ internal sealed class KVAllowedValuesDefinition
     // entry with the same id or value replaces the earlier one.
     private sealed class ExplicitValueIndex
     {
-        private static readonly HashSet<Type> NumericTypes =
-        [
-            typeof(sbyte), typeof(byte), typeof(short), typeof(ushort), typeof(int), typeof(uint),
-            typeof(long), typeof(ulong), typeof(float), typeof(double), typeof(decimal),
-        ];
-
         public Dictionary<string, KVExplicitAllowedValue> ById { get; } = new(StringComparer.Ordinal);
 
         public Dictionary<object, KVExplicitAllowedValue> ByValue { get; } = [];
@@ -442,7 +563,20 @@ internal sealed class KVAllowedValuesDefinition
             throw new InvalidOperationException("Value type mismatch for allowed values.");
         }
 
-        private static bool IsNumber(object value) => NumericTypes.Contains(value.GetType());
+        public object? Denormalize(object? value)
+        {
+            if (value is null)
+            {
+                return null;
+            }
+
+            if (value is string id && this.ById.TryGetValue(id, out var entry))
+            {
+                return entry.Value;
+            }
+
+            throw new InvalidOperationException("Stored value token is not part of allowed values.");
+        }
 
         // Converts a number to a registered value type only when nothing is lost (2.5 never becomes 2).
         private static bool TryConvertExactly(object number, Type targetType, out object converted)
@@ -451,7 +585,7 @@ internal sealed class KVAllowedValuesDefinition
             try
             {
                 var candidate = Convert.ChangeType(number, numericType, CultureInfo.InvariantCulture);
-                if (IsNumber(candidate)
+                if (KVValues.IsNumber(candidate)
                     && Convert.ToDecimal(candidate, CultureInfo.InvariantCulture) == Convert.ToDecimal(number, CultureInfo.InvariantCulture))
                 {
                     converted = targetType.IsEnum ? Enum.ToObject(targetType, candidate) : candidate;
@@ -474,7 +608,7 @@ internal sealed class KVAllowedValuesDefinition
                 return true;
             }
 
-            if (IsNumber(value))
+            if (KVValues.IsNumber(value))
             {
                 foreach (var valueType in this.ValueTypes)
                 {
@@ -487,21 +621,6 @@ internal sealed class KVAllowedValuesDefinition
 
             entry = default;
             return false;
-        }
-
-        public object? Denormalize(object? value)
-        {
-            if (value is null)
-            {
-                return null;
-            }
-
-            if (value is string id && this.ById.TryGetValue(id, out var entry))
-            {
-                return entry.Value;
-            }
-
-            throw new InvalidOperationException("Stored value token is not part of allowed values.");
         }
     }
 }

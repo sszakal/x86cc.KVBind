@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using x86cc.KVBind.Core;
+using x86cc.KVBind.Core.Model;
 
 namespace x86cc.KVBind.UnitTests.Core;
 
@@ -118,6 +119,80 @@ public class DefaultsTests : KVModelTestBase
         root.Patch(KVPatchOperation.Init("/Owner", "PersonOwner"));
 
         root.Owner.Should().BeOfType<PersonOwner>().Which.Name.Should().Be("anonymous");
+    }
+
+    [Fact]
+    public void DefaultTypeOfType_UsesTheTokenTheTypeIsBoundWith()
+    {
+        var definition = BuildOwner(owner => owner
+            .DefaultType<PersonOwner>()
+            .Bind<PersonOwner>("PERSON", person => person.Field(x => x.Name, f => f.Default("anonymous")))
+            .Bind<CompanyOwner>("COMPANY", company => company.Field(x => x.CompanyName)));
+
+        definition.FindNestedNode("Owner")!.DefaultTypeToken.Should().Be("PERSON");
+
+        var root = KVRootNode.CreateNew<DefaultsRoot>(KVOverlay.Create(new KVSnapshot(), "test"), definition);
+        root.Owner.Should().BeOfType<PersonOwner>().Which.Name.Should().Be("anonymous");
+    }
+
+    [Fact]
+    public void DefaultTypeOfType_DeclaredAfterBind_UsesTheBoundToken()
+    {
+        var definition = BuildOwner(owner => owner
+            .Bind<PersonOwner>("PERSON", person => person.Field(x => x.Name))
+            .Bind<CompanyOwner>("COMPANY", company => company.Field(x => x.CompanyName))
+            .DefaultType<CompanyOwner>());
+
+        definition.FindNestedNode("Owner")!.DefaultTypeToken.Should().Be("COMPANY");
+    }
+
+    [Fact]
+    public void DefaultTypeOfType_WhenTheTypeIsNotBound_ThrowsWhenTheDefinitionIsBuilt()
+    {
+        var act = () => BuildOwner(owner => owner
+            .DefaultType<CompanyOwner>()
+            .Bind<PersonOwner>("PERSON", person => person.Field(x => x.Name)));
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("Nested node 'Owner' declares DefaultType<CompanyOwner>(), but 'CompanyOwner' is not bound*");
+    }
+
+    [Fact]
+    public void DefaultTypeOfToken_WhenNoSubtypeHasThatToken_ThrowsWhenTheDefinitionIsBuilt()
+    {
+        var act = () => BuildOwner(owner => owner
+            .Bind<PersonOwner>("PERSON", person => person.Field(x => x.Name))
+            .DefaultType("PERSN"));
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("Nested node 'Owner' declares DefaultType(\"PERSN\"), but no subtype is bound with that token.");
+    }
+
+    [Fact]
+    public void DefaultType_TheLastDeclarationWins()
+    {
+        var definition = BuildOwner(owner => owner
+            .Bind<PersonOwner>("PERSON", person => person.Field(x => x.Name))
+            .Bind<CompanyOwner>("COMPANY", company => company.Field(x => x.CompanyName))
+            .DefaultType("PERSON")
+            .DefaultType<CompanyOwner>());
+
+        definition.FindNestedNode("Owner")!.DefaultTypeToken.Should().Be("COMPANY");
+    }
+
+    [Fact]
+    public void NestedNodeWithoutDefaultType_HasNoDefaultToken()
+    {
+        var definition = BuildOwner(owner => owner.Bind<PersonOwner>("PERSON", person => person.Field(x => x.Name)));
+
+        definition.FindNestedNode("Owner")!.DefaultTypeToken.Should().BeNull();
+    }
+
+    private static KVNodeDefinition BuildOwner(Action<KVNestedNodeOptionsBuilder<OwnerNode>> configure)
+    {
+        var builder = new KVBindBuilder<DefaultsRoot>();
+        builder.NestedNode(x => x.Owner, configure);
+        return builder.Build();
     }
 
     private DefaultsRoot CreateWithDefaults()

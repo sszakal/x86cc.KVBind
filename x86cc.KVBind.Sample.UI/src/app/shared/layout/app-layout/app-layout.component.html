@@ -2,12 +2,12 @@
   <header class="border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
     <div class="mx-auto flex max-w-(--breakpoint-2xl) items-center justify-between px-4 py-4 md:px-6">
       <div class="flex items-center gap-3">
-        <a routerLink="/claims" class="flex items-center gap-2.5 text-sm font-semibold text-gray-900 dark:text-white">
+        <a routerLink="/models" class="flex items-center gap-2.5 text-sm font-semibold text-gray-900 dark:text-white">
           <span class="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-brand-500 text-xs font-bold text-white">K</span>
           KVBind Demo
         </a>
         <span class="hidden text-gray-200 dark:text-gray-700 sm:block">/</span>
-        <a routerLink="/claims" class="hidden text-sm text-gray-500 hover:text-gray-900 dark:hover:text-white sm:block">Claims</a>
+        <a routerLink="/models" class="hidden text-sm text-gray-500 hover:text-gray-900 dark:hover:text-white sm:block">Models</a>
       </div>
       <div class="flex items-center gap-2">
         <span class="hidden rounded-md bg-gray-100 px-2.5 py-1 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400 sm:block">
@@ -46,4 +46,5 @@
   <main class="mx-auto max-w-(--breakpoint-2xl) p-4 md:p-6">
     <router-outlet></router-outlet>
   </main>
+  <app-perf-panel></app-perf-panel>
 </div>

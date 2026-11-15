@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace x86cc.KVBind.Core;
 
@@ -183,11 +184,34 @@ public sealed class KVPatchOperation
     }
 }
 
-public sealed record KVAddPatchPayload(string ItemId, string? TypeToken = null)
+// Written out instead of as a positional record so the string constructor can carry [JsonConstructor]:
+// with two public constructors System.Text.Json would otherwise refuse to deserialize the payload.
+public sealed record KVAddPatchPayload
 {
+    // The parameters carry the property names: System.Text.Json binds constructor parameters to properties
+    // by name, and renaming them would break callers that pass them by name.
+    [JsonConstructor]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.NamingRules", "SA1313:Parameter names should begin with lower-case letter", Justification = "Bound to properties by name; public API.")]
+    public KVAddPatchPayload(string ItemId, string? TypeToken = null)
+    {
+        this.ItemId = ItemId;
+        this.TypeToken = TypeToken;
+    }
+
     public KVAddPatchPayload(Guid itemId, string? typeToken = null)
         : this(itemId == Guid.Empty ? string.Empty : itemId.ToString("D"), typeToken)
     {
+    }
+
+    public string ItemId { get; init; }
+
+    public string? TypeToken { get; init; }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.NamingRules", "SA1313:Parameter names should begin with lower-case letter", Justification = "Matches the positional record shape; public API.")]
+    public void Deconstruct(out string ItemId, out string? TypeToken)
+    {
+        ItemId = this.ItemId;
+        TypeToken = this.TypeToken;
     }
 }
 

@@ -79,10 +79,27 @@ dotnet_diagnostic.MA0016.severity = none
 # MA0169: Use Equals instead of ==/!= (== against KVValue.Tombstone is an intentional reference check)
 dotnet_diagnostic.MA0169.severity = none
 
+# S1075: Hardcoded URIs / path delimiters. KVBind paths use "/" as their canonical separator (they are not
+# file-system paths), and the benchmark tools default to the local sample's URL.
+dotnet_diagnostic.S1075.severity = none
+
+# S2094: Empty classes/records. Marker records are part of the design: validation profiles and reshape
+# operations are told apart by their type.
+dotnet_diagnostic.S2094.severity = none
+
+# S3236: Caller information hidden. Guard clauses pass nameof(request) on purpose, so errors name the request
+# parameter rather than the member expression.
+dotnet_diagnostic.S3236.severity = none
+
 [x86cc.KVBind.UnitTests/**.cs]
 # SA1118: Parameter should not span multiple lines (InlineSnapshot.Validate rewrites its raw-string argument in place)
 dotnet_diagnostic.SA1118.severity = none
 
+# S1144: Unused private setter (the setters of [KVBind] partial properties are implemented by the source generator)
+dotnet_diagnostic.S1144.severity = none
+
 [x86cc.KVBind.Benchmarks/**.cs]
-# SA1401: Fields should be private (public fields are part of the native models being benchmarked)
+# SA1401 / S1104: Fields should be private (public fields are part of the native models being benchmarked)
 dotnet_diagnostic.SA1401.severity = none
+dotnet_diagnostic.S1104.severity = none
+

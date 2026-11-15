@@ -7,7 +7,7 @@ using x86cc.KVBind.Core.Model;
 
 namespace x86cc.KVBind.UnitTests.Core;
 
-public enum FieldEnum
+public enum FieldChoice
 {
     First,
     Second,
@@ -36,7 +36,7 @@ public class FieldBindingTests : KVModelTestBase
             modelBuilder.Field(x => x.DecimalField);
             modelBuilder.Field(x => x.StructField);
             modelBuilder.Field(x => x.StringField);
-            modelBuilder.Field(x => x.EnumField, field => field.AllowedValues(FieldEnum.First, FieldEnum.Second, FieldEnum.Third));
+            modelBuilder.Field(x => x.EnumField, field => field.AllowedValues(FieldChoice.First, FieldChoice.Second, FieldChoice.Third));
             modelBuilder.Field(x => x.DateTimeField);
             modelBuilder.Field(x => x.DateTimeOffsetField);
             modelBuilder.Field(x => x.TimeOnlyField);
@@ -68,7 +68,7 @@ public class FieldBindingTests : KVModelTestBase
         int[] arrayOfInts = [1, 2, 3];
         string[] arrayOfStrings = ["1", "2", "3"];
         DateTime[] arrayOfDates = [dateTimeValue.AddDays(1), dateTimeValue.AddMinutes(1), dateTimeValue.AddYears(1)];
-        FieldEnum[] arrayOfEnums = [FieldEnum.First, FieldEnum.Third];
+        FieldChoice[] arrayOfEnums = [FieldChoice.First, FieldChoice.Third];
         SmartEnum[] arrayOfSmartEnums = [SmartEnum.First, SmartEnum.Third];
 
         rootNode.BooleanField = true;
@@ -79,7 +79,7 @@ public class FieldBindingTests : KVModelTestBase
         rootNode.DecimalField = 6.125m;
         rootNode.StructField = structValue;
         rootNode.StringField = "notes";
-        rootNode.EnumField = FieldEnum.Second;
+        rootNode.EnumField = FieldChoice.Second;
         rootNode.DateTimeField = dateTimeValue;
         rootNode.DateTimeOffsetField = dateTimeOffsetValue;
         rootNode.TimeOnlyField = timeOnlyValue;
@@ -116,7 +116,7 @@ public class FieldBindingTests : KVModelTestBase
         int[] arrayOfInts = [1, 2, 3];
         string[] arrayOfStrings = ["1", "2", "3"];
         DateTime[] arrayOfDates = [dateTimeValue.AddDays(1), dateTimeValue.AddMinutes(1), dateTimeValue.AddYears(1)];
-        FieldEnum[] arrayOfEnums = [FieldEnum.First, FieldEnum.Third];
+        FieldChoice[] arrayOfEnums = [FieldChoice.First, FieldChoice.Third];
         SmartEnum[] arrayOfSmartEnums = [SmartEnum.First, SmartEnum.Third];
 
         model.Set(nameof(FieldTestModel.BooleanField), true);
@@ -127,7 +127,7 @@ public class FieldBindingTests : KVModelTestBase
         model.Set(nameof(FieldTestModel.DecimalField), 60.125m);
         model.Set(nameof(FieldTestModel.StructField), structValue);
         model.Set(nameof(FieldTestModel.StringField), "seeded");
-        model.Set(nameof(FieldTestModel.EnumField), FieldEnum.Third);
+        model.Set(nameof(FieldTestModel.EnumField), FieldChoice.Third);
         model.Set(nameof(FieldTestModel.DateTimeField), dateTimeValue);
         model.Set(nameof(FieldTestModel.DateTimeOffsetField), dateTimeOffsetValue);
         model.Set(nameof(FieldTestModel.TimeOnlyField), timeOnlyValue);
@@ -217,7 +217,7 @@ public class FieldBindingTests : KVModelTestBase
         var dateTimeValue = new DateTime(2027, 1, 1, 7, 15, 0, DateTimeKind.Utc);
         rootNode.StringField = "2027-01-01";
         rootNode.DateTimeField = dateTimeValue;
-        this.CommitSetup(model);
+        CommitSetup(model);
 
         var restoredSnapshot = JsonSerializer.Deserialize<KVSnapshot>(JsonSerializer.Serialize(model.Snapshot))!;
         var restoredModel = new KVModelRoot(KVOverlay.Create(restoredSnapshot, TestUser));
@@ -232,8 +232,8 @@ public class FieldBindingTests : KVModelTestBase
     {
         var rootNode = this.CreateRoot<FieldTestModel>();
 
-        rootNode.EnumField = (FieldEnum)999;
-        rootNode.EnumField.Should().Be((FieldEnum)999);
+        rootNode.EnumField = (FieldChoice)999;
+        rootNode.EnumField.Should().Be((FieldChoice)999);
     }
 
     [Fact]
@@ -277,7 +277,7 @@ public partial class FieldTestModel : KVRootNode
     public partial string StringField { get; set; }
 
     [KVBind(nameof(EnumField))]
-    public partial FieldEnum EnumField { get; set; }
+    public partial FieldChoice EnumField { get; set; }
 
     [KVBind(nameof(DateTimeField))]
     public partial DateTime DateTimeField { get; set; }
@@ -310,7 +310,7 @@ public partial class FieldTestModel : KVRootNode
     public partial DateTime[] ArrayOfDates { get; set; }
 
     [KVBind(nameof(ArrayOfEnums))]
-    public partial FieldEnum[] ArrayOfEnums { get; set; }
+    public partial FieldChoice[] ArrayOfEnums { get; set; }
 
     [KVBind(nameof(ArrayOfSmartEnums))]
     public partial SmartEnum[] ArrayOfSmartEnums { get; set; }

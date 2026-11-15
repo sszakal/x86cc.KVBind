@@ -107,7 +107,7 @@ public class StructuralChangeReactionTests : KVModelTestBase
 
         root.ChoosePerson();
 
-        ((ScrPerson)root.Party!).Name.Should().Be("anonymous");
+        ((ScrPerson)root.Party).Name.Should().Be("anonymous");
     }
 
     [Fact]

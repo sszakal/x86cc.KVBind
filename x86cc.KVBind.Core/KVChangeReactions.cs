@@ -26,8 +26,8 @@ public sealed class KVChangeContext<TNode>
 
     public object? NewValue { get; }
 
-    // Field value change, or a structural one (item added/removed/moved, nested node initialized/dropped);
-    // see KVChangeKind for what OldValue/NewValue hold in each case.
+    // A field value change, or a structural change: an item added, removed or moved, or a nested node
+    // initialized or dropped. KVChangeKind documents what the old and new value hold in each case.
     public KVChangeKind Kind { get; }
 }
 
@@ -173,46 +173,42 @@ internal sealed class KVPathPattern
     }
 
     // True when the pattern watches `path` itself or something beneath it ("" covers everything).
-    internal bool MatchesAtOrUnder(string path)
+    internal bool MatchesAtOrUnder(string path) => this.Match(path, exact: false);
+
+    internal bool Matches(string path) => this.Match(path, exact: true);
+
+    // Compares the path's segments with the pattern's in place, without splitting the path: this runs for
+    // every reaction of every ancestor on every write. Empty segments are skipped, as a split with
+    // RemoveEmptyEntries would. Exact: the path has as many segments as the pattern; otherwise it may
+    // have fewer (a node the pattern watches something under).
+    private bool Match(string path, bool exact)
     {
-        var pathSegments = KVPath.Normalize(path).Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (pathSegments.Length > this.segments.Count)
+        var rest = path.AsSpan();
+        var matched = 0;
+        while (!rest.IsEmpty)
         {
-            return false;
-        }
-
-        for (var i = 0; i < pathSegments.Length; i++)
-        {
-            if (this.segments[i] != "*" && !string.Equals(this.segments[i], pathSegments[i], StringComparison.Ordinal))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    internal bool Matches(string path)
-    {
-        var pathSegments = KVPath.Normalize(path).Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (pathSegments.Length != this.segments.Count)
-        {
-            return false;
-        }
-
-        for (var i = 0; i < this.segments.Count; i++)
-        {
-            if (this.segments[i] == "*")
+            var slash = rest.IndexOf('/');
+            var segment = slash < 0 ? rest : rest[..slash];
+            rest = slash < 0 ? [] : rest[(slash + 1)..];
+            if (segment.IsEmpty)
             {
                 continue;
             }
 
-            if (!string.Equals(this.segments[i], pathSegments[i], StringComparison.Ordinal))
+            if (matched == this.segments.Count)
             {
                 return false;
             }
+
+            var expected = this.segments[matched];
+            if (!string.Equals(expected, "*", StringComparison.Ordinal) && !segment.SequenceEqual(expected))
+            {
+                return false;
+            }
+
+            matched++;
         }
 
-        return true;
+        return !exact || matched == this.segments.Count;
     }
 }

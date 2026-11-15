@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using x86cc.KVBind.Core.Abstractions;
 using x86cc.KVBind.Core.Model;
 
@@ -216,9 +217,6 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
 
     protected override void Rebind() => this.Bind(this.Model, this.Definition, this.Parent);
 
-    private string[] ReadSnapshotItemIds() =>
-        this.Model.Overlay.TryGetSnapshotValue(this.ItemsPath, out var snapVal) && snapVal?.Value is string[] ids ? ids : [];
-
     private static IEnumerable<string> ResolveItemIds(KVModel model)
     {
         var itemsPath = KVPath.Combine(model.DataPath, ItemsKey);
@@ -226,6 +224,9 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
             return ids;
         return [];
     }
+
+    private string[] ReadSnapshotItemIds() =>
+        this.Model.Overlay.TryGetSnapshotValue(this.ItemsPath, out var snapVal) && snapVal?.Value is string[] ids ? ids : [];
 
     private KVNode CreateCore(KVCollectionItemDefinition itemDefinition, string itemId)
     {
@@ -269,11 +270,9 @@ public class KVCollectionNode<TItem> : KVCollectionNodeBase, IEnumerable<TItem>
 
         if (this.Definition.ItemDefinitionsByType.Count == 1)
         {
-            foreach (var definition in this.Definition.ItemDefinitionsByType.Values)
-            {
-                KVCollectionItemNode.SetItemType(itemModel, definition.TypeToken);
-                return definition;
-            }
+            var definition = this.Definition.ItemDefinitionsByType.Values.First();
+            KVCollectionItemNode.SetItemType(itemModel, definition.TypeToken);
+            return definition;
         }
 
         throw new InvalidOperationException($"Collection item '{itemId}' does not declare an item type token.");

@@ -31,6 +31,25 @@ internal static class KVPatchValueConverter
         return converted;
     }
 
+    // The same conversion without throwing: false when the value cannot be read as the field's type (or is
+    // not a declared enum member).
+    internal static bool TryConvertToFieldType(object value, Type fieldType, out object converted)
+    {
+        var targetType = Nullable.GetUnderlyingType(fieldType) ?? fieldType;
+        if (targetType == typeof(object) || targetType.IsInstanceOfType(value))
+        {
+            converted = value;
+        }
+        else if (!(value is JsonElement element
+                     ? TryDeserialize(element.GetRawText(), targetType, out converted)
+                     : TryConvertClrValue(value, targetType, out converted)))
+        {
+            return false;
+        }
+
+        return !targetType.IsEnum || IsDeclaredEnumValue(targetType, converted);
+    }
+
     private static bool IsDeclaredEnumValue(Type enumType, object value)
     {
         if (Enum.IsDefined(enumType, value))

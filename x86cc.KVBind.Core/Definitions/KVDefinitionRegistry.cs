@@ -26,8 +26,11 @@ public interface IKVNodeDefinition
 
 public class KVDefinitionRegistry : IKVDefinitionRegistry
 {
+    // Reflects over this class's own private helper (see ResolveStaticDefinition), not over foreign members.
+#pragma warning disable S3011
     private static readonly MethodInfo StaticDefinitionOfMethod =
         typeof(KVDefinitionRegistry).GetMethod(nameof(StaticDefinitionOf), BindingFlags.NonPublic | BindingFlags.Static)!;
+#pragma warning restore S3011
 
     private readonly ConcurrentDictionary<Type, KVNodeDefinition> definitions = new();
 

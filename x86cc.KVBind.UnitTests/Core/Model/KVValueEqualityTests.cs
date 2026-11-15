@@ -36,7 +36,7 @@ public class KVValueEqualityTests
             (V(9.99m), V(9.99m)),
             (V('x'), V('x')),
             (V(new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc)), V(new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc))),
-            (V(new DateTimeOffset(new DateTime(2024, 1, 1), TimeSpan.FromHours(2))), V(new DateTimeOffset(new DateTime(2024, 1, 1), TimeSpan.FromHours(2)))),
+            (V(new DateTimeOffset(new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Unspecified), TimeSpan.FromHours(2))), V(new DateTimeOffset(new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Unspecified), TimeSpan.FromHours(2)))),
             (V(TimeSpan.FromMinutes(90)), V(TimeSpan.FromMinutes(90))),
             (V(new TimeOnly(13, 30)), V(new TimeOnly(13, 30))),
             (V(new DateOnly(2024, 6, 1)), V(new DateOnly(2024, 6, 1))),

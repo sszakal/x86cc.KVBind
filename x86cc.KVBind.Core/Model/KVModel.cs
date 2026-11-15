@@ -44,35 +44,6 @@ public class KVModel
             : throw new InvalidCastException($"Stored value '{this.ResolveDataPath(segment)}' is '{value.Value.GetType().FullName}', not '{typeof(TValue).FullName}'.");
     }
 
-    // Assembles DataPath + "/" + segment into a stack buffer and probes via the span overload, so a read
-    // does not allocate the combined path string (the dictionary key) on every field access.
-    private bool TryGetStored(ReadOnlySpan<char> seg, out KVValue? value)
-    {
-        if (this.DataPath.Length == 0)
-        {
-            return this.Overlay.TryGet(seg, out value);
-        }
-
-        var length = this.DataPath.Length + 1 + seg.Length;
-        char[]? rented = length > StackPathThreshold ? ArrayPool<char>.Shared.Rent(length) : null;
-        Span<char> buffer = rented ?? stackalloc char[StackPathThreshold];
-        this.DataPath.AsSpan().CopyTo(buffer);
-        buffer[this.DataPath.Length] = '/';
-        seg.CopyTo(buffer[(this.DataPath.Length + 1)..]);
-
-        try
-        {
-            return this.Overlay.TryGet(buffer[..length], out value);
-        }
-        finally
-        {
-            if (rented is not null)
-            {
-                ArrayPool<char>.Shared.Return(rented);
-            }
-        }
-    }
-
     public void Set<TValue>(string segment, TValue value)
     {
         this.Overlay.Set(this.ResolveDataPath(segment), new KVValue<TValue>(value));
@@ -104,6 +75,35 @@ public class KVModel
     internal void SetValue(string segment, KVValue value)
     {
         this.Overlay.Set(this.ResolveDataPath(segment), value);
+    }
+
+    // Assembles DataPath + "/" + segment into a stack buffer and probes via the span overload, so a read
+    // does not allocate the combined path string (the dictionary key) on every field access.
+    private bool TryGetStored(ReadOnlySpan<char> seg, out KVValue? value)
+    {
+        if (this.DataPath.Length == 0)
+        {
+            return this.Overlay.TryGet(seg, out value);
+        }
+
+        var length = this.DataPath.Length + 1 + seg.Length;
+        char[]? rented = length > StackPathThreshold ? ArrayPool<char>.Shared.Rent(length) : null;
+        Span<char> buffer = rented ?? stackalloc char[StackPathThreshold];
+        this.DataPath.AsSpan().CopyTo(buffer);
+        buffer[this.DataPath.Length] = '/';
+        seg.CopyTo(buffer[(this.DataPath.Length + 1)..]);
+
+        try
+        {
+            return this.Overlay.TryGet(buffer[..length], out value);
+        }
+        finally
+        {
+            if (rented is not null)
+            {
+                ArrayPool<char>.Shared.Return(rented);
+            }
+        }
     }
 
     private string ResolveDataPath(string segment)

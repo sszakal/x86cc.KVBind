@@ -21,6 +21,7 @@ internal static class KVChangeReactionRuntime
 
         var root = ResolveRoot(source);
         var state = root.ReactionExecutionState;
+        state.Recorder?.Record(canonicalPath, oldValue, newValue, kind);
         var isTopLevel = state.EnterScope();
 
         try
@@ -65,6 +66,7 @@ internal static class KVChangeReactionRuntime
 
         var root = ResolveRoot(source);
         var state = root.ReactionExecutionState;
+        state.Recorder?.Record(replacedPath, oldValue: null, newValue: null, KVChangeKind.Replaced);
         var isTopLevel = state.EnterScope();
 
         try
@@ -75,6 +77,22 @@ internal static class KVChangeReactionRuntime
         {
             state.ExitScope(isTopLevel);
         }
+    }
+
+    internal static KVRootNode ResolveRoot(KVNode source)
+    {
+        KVNode? current = source;
+        while (current is not null)
+        {
+            if (current is KVRootNode root)
+            {
+                return root;
+            }
+
+            current = ParentNode(current);
+        }
+
+        throw new InvalidOperationException($"'{source.GetType().Name}' is not bound under a root aggregate.");
     }
 
     private static void NotifyReplaced(KVReactionExecutionState state, KVNode node, string replacedPath)
@@ -171,22 +189,6 @@ internal static class KVChangeReactionRuntime
             state.ActiveFrames.Remove(frame);
         }
     }
-
-    internal static KVRootNode ResolveRoot(KVNode source)
-    {
-        KVNode? current = source;
-        while (current is not null)
-        {
-            if (current is KVRootNode root)
-            {
-                return root;
-            }
-
-            current = ParentNode(current);
-        }
-
-        throw new InvalidOperationException($"'{source.GetType().Name}' is not bound under a root aggregate.");
-    }
 }
 
 internal sealed class KVReactionExecutionState
@@ -196,6 +198,9 @@ internal sealed class KVReactionExecutionState
     internal Stack<KVReactionFrame> Stack { get; } = [];
 
     internal HashSet<KVReactionFrame> ActiveFrames { get; } = [];
+
+    // Set while KVRootNode.Patch runs: collects the patch's changes, including those its reactions make.
+    internal KVPatchChangeRecorder? Recorder { get; set; }
 
     internal bool EnterScope()
     {

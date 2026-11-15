@@ -57,7 +57,7 @@ export class LoginComponent {
     const name = this.username.trim();
     if (name) {
       this.userService.setUser(name);
-      this.router.navigate(['/claims']);
+      this.router.navigate(['/models']);
     }
   }
 }

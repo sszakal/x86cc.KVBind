@@ -309,7 +309,7 @@ Operations on an enclosing object follow from that rule:
 
 ### Defaults
 
-Fields declare defaults with `f.Default(value)`, nested nodes with `DefaultType<TSubtype>()`, and collections with `Seed<TItem>(...)` or `Default(...)`. Defaults are applied once, when an object is born, and only fill values that are still unset:
+Fields declare defaults with `f.Default(value)`, nested nodes with `DefaultType<TSubtype>()` (or `DefaultType("TOKEN")`; the subtype must be bound, which is checked when the definition is built), and collections with `Seed<TItem>(...)` or `Default(...)`. Defaults are applied once, when an object is born, and only fill values that are still unset:
 
 - `KVRootNode.CreateNew(...)` applies defaults across the whole new aggregate.
 - Creating a collection item — in code or with an `ADD` patch — applies that item's defaults, including its default nested types and seeded sub-collections.

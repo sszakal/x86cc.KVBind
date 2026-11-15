@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <!-- NuGet package metadata -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>x86cc.KVBind.Schema</PackageId>
+    <Title>x86cc.KVBind.Schema</Title>
+    <Description>A serializer-neutral POCO description of a KVBind model definition (fields, groups, collections, nested nodes, allowed values, constraints, operations and annotations), plus the mapping from KVNodeDefinition. Use it to send a model's shape over the network, e.g. to drive a generated UI.</Description>
+    <Authors>Stefan Szakal</Authors>
+    <Company>x86.cc</Company>
+    <PackageProjectUrl>https://github.com/sszakal/x86cc.KVBind</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/sszakal/x86cc.KVBind</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>kvbind;schema;metadata;form;ui;domain-model</PackageTags>
+    <!-- Local/default version; CI overrides with -p:Version=<tag> on release. -->
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\x86cc.KVBind.Core\x86cc.KVBind.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

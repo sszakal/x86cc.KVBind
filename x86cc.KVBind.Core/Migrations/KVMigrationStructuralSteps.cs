@@ -144,8 +144,8 @@ internal sealed class ReplaceNestedTypeStep(KVTarget target, string toType, IRea
             leaves[setPath] = KVValue.FromObject(computed);
     }
 
-    // Moves a field or a whole subtree (a field group, a nested collection). Nothing to move is a no-op;
-    // a destination that already holds data is an error, since merging two subtrees has no obvious meaning.
+    // Moves a field or a whole subtree, such as a field group or a nested collection. With nothing to move it
+    // does nothing. A destination that already holds data is an error: merging two subtrees has no obvious meaning.
     private static void ApplyRename(Dictionary<string, KVValue> leaves, string nodePath, KVReshapeRename rename)
     {
         var from = nodePath + "/" + rename.FromRelative;
@@ -224,12 +224,12 @@ internal sealed class RenameSubtreeStep(KVTarget target, string toSegment) : IKV
 
             foreach (var key in source.Keys)
             {
-                string? rewritten =
-                    string.Equals(key, nodePath, StringComparison.Ordinal) ? newPath
-                    : key.StartsWith(prefix, StringComparison.Ordinal) ? newPath + "/" + key[prefix.Length..]
-                    : null;
-
-                if (rewritten is null)
+                string rewritten;
+                if (string.Equals(key, nodePath, StringComparison.Ordinal))
+                    rewritten = newPath;
+                else if (key.StartsWith(prefix, StringComparison.Ordinal))
+                    rewritten = newPath + "/" + key[prefix.Length..];
+                else
                     continue;
 
                 delta[rewritten] = source[key];

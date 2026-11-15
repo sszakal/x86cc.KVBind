@@ -6,13 +6,13 @@ namespace x86cc.KVBind.Core;
 // Path resolution helpers used by the validation runtime.
 public abstract partial class KVNode
 {
-    internal string ResolveStoragePath(string fieldKey)
+    internal static string ResolveStoragePath(string fieldKey)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fieldKey);
         return KVPath.NormalizeRelative(fieldKey);
     }
 
-    internal string ResolveStoragePathForCanonicalPath(string canonicalPath, string currentCanonicalPath)
+    internal static string ResolveStoragePathForCanonicalPath(string canonicalPath, string currentCanonicalPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(canonicalPath);
         var normalizedPath = KVPath.Normalize(canonicalPath);

@@ -13,7 +13,12 @@ public class AllowedElementValuesTests : KVModelTestBase
         {
             builder.Field(x => x.StatusArray, field => field.AllowedElementValues(SmartEnum.All, value => value.Id, value => value.Label));
             builder.Field(x => x.StatusList, field => field.AllowedElementValues(SmartEnum.All, value => value.Id, value => value.Label));
-            builder.Field(x => x.NumberedEnums, field => field.AllowedElementValues([FieldEnum.First, FieldEnum.Second], value => (int)value));
+            builder.Field(x => x.NumberedEnums, field => field.AllowedElementValues([FieldChoice.First, FieldChoice.Second], value => (int)value));
+            builder.Field(x => x.Tags, field =>
+            {
+                field.AllowedElementValue<string>("urgent", "urgent", "Urgent");
+                field.AllowedElementValue<string>("complex", "complex", "Complex");
+            });
             builder.Field(x => x.CompensationTypes, field =>
             {
                 field.AllowedElementValue(CompensationEmployeeType.Manager, "manager_flat", "Manager (Flat Fee)");
@@ -111,7 +116,7 @@ public class AllowedElementValuesTests : KVModelTestBase
         root.Patch(KVPatchOperation.Set("/NumberedEnums", document.RootElement.Clone()));
 
         model.Overlay.Changes["NumberedEnums"].Value.Should().BeEquivalentTo(new[] { 1, 0 }, options => options.WithStrictOrdering());
-        root.NumberedEnums.Should().Equal(FieldEnum.Second, FieldEnum.First);
+        root.NumberedEnums.Should().Equal(FieldChoice.Second, FieldChoice.First);
     }
 
     [Fact]
@@ -119,7 +124,7 @@ public class AllowedElementValuesTests : KVModelTestBase
     {
         var root = this.CreateRoot<ElementValuesModel>();
 
-        var act = () => root.NumberedEnums = [FieldEnum.First, FieldEnum.Third];
+        var act = () => root.NumberedEnums = [FieldChoice.First, FieldChoice.Third];
 
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*not part of allowed values*");
@@ -158,16 +163,16 @@ public class AllowedElementValuesTests : KVModelTestBase
         var root = this.CreateRoot<ElementValuesModel>(model);
         root.StatusArray = [SmartEnum.Second, SmartEnum.Third];
         root.StatusList = [SmartEnum.First];
-        root.NumberedEnums = [FieldEnum.Second];
+        root.NumberedEnums = [FieldChoice.Second];
         root.CompensationTypes = [CompensationEmployeeType.Assistant];
-        this.CommitSetup(model);
+        CommitSetup(model);
 
         var restoredSnapshot = JsonSerializer.Deserialize<KVSnapshot>(JsonSerializer.Serialize(model.Snapshot))!;
         var restored = this.CreateRoot<ElementValuesModel>(new KVModelRoot(KVOverlay.Create(restoredSnapshot, TestUser)));
 
         restored.StatusArray.Should().Equal(SmartEnum.Second, SmartEnum.Third);
         restored.StatusList.Should().Equal(SmartEnum.First);
-        restored.NumberedEnums.Should().Equal(FieldEnum.Second);
+        restored.NumberedEnums.Should().Equal(FieldChoice.Second);
         restored.CompensationTypes.Should().Equal(CompensationEmployeeType.Assistant);
         restored.Validate().Errors.Should().BeEmpty();
     }
@@ -207,6 +212,35 @@ public class AllowedElementValuesTests : KVModelTestBase
         root.CompensationTypes.Should().Equal(CompensationEmployeeType.Manager);
     }
 
+    [Theory]
+    [InlineData("""["urgent","nope"]""")]
+    [InlineData("""["nope"]""")]
+    public void AllowedElementValue_WhenStringElementIsUnknown_KeepsDraftAndReportsAllowedValues(string json)
+    {
+        var model = new KVModelRoot();
+        var root = this.CreateRoot<ElementValuesModel>(model);
+        root.CommitSetup();
+
+        root.Patch(KVPatchOperation.Set("/Tags", json));
+
+        model.Overlay.Changes["Tags"].Value.Should().Be(json);
+        root.Validate().Errors.Should().ContainSingle()
+            .Which.Should().BeEquivalentTo(new { Path = "Tags", Code = "allowed_values" });
+    }
+
+    [Fact]
+    public void AllowedElementValue_WhenStringElementsAreKnown_StoresTheirIds()
+    {
+        var model = new KVModelRoot();
+        var root = this.CreateRoot<ElementValuesModel>(model);
+        root.CommitSetup();
+
+        root.Patch(KVPatchOperation.Set("/Tags", """["complex","urgent"]"""));
+
+        root.Tags.Should().Equal("complex", "urgent");
+        root.Validate().Errors.Should().BeEmpty();
+    }
+
     [Fact]
     public void AllowedElementValue_WhenIdIsUnknown_ReportsAllowedValues()
     {
@@ -229,7 +263,10 @@ public partial class ElementValuesModel : KVRootNode
     public partial List<SmartEnum>? StatusList { get; set; }
 
     [KVBind("NumberedEnums")]
-    public partial FieldEnum[]? NumberedEnums { get; set; }
+    public partial FieldChoice[]? NumberedEnums { get; set; }
+
+    [KVBind("Tags")]
+    public partial string[]? Tags { get; set; }
 
     [KVBind("CompensationTypes")]
     public partial CompensationEmployeeType[]? CompensationTypes { get; set; }

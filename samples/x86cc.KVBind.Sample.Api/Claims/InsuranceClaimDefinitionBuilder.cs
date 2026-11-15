@@ -1,5 +1,6 @@
 using x86cc.KVBind.Core;
 using x86cc.KVBind.Core.Definitions;
+using x86cc.KVBind.Sample.Api;
 
 namespace x86cc.KVBind.Sample.Api.Claims;
 

@@ -480,7 +480,7 @@ public sealed class KVOverlay
             case KVConflictResolution.Ours:
                 // Keep the draft as-is. For a delete/edit conflict that means the tombstone stays.
                 if (conflict.Kind == KVConflictKind.Structural)
-                    this.TombstoneTargetLeavesNotInDraft(conflict.Path);
+                    this.KeepDraftSubtree(conflict.Path);
 
                 // For item-level DeleteEdit Ours — no changes needed:
                 //   Case A (we deleted, target modified): tombstone stays, $items already excludes the item.
@@ -512,37 +512,40 @@ public sealed class KVOverlay
             this.Changes.Remove(key);
     }
 
-    // Replace the whole subtree with ours: the draft's own values stay, but any target leaf under this path
-    // that the draft does NOT set is tombstoned, so the other type's fields (or dropped collection items)
-    // don't bleed through once the base swaps to the target.
-    private void TombstoneTargetLeavesNotInDraft(string path)
-    {
-        foreach (var key in this.RebaseTarget!.Data.Keys)
-        {
-            if (!KVPath.IsSameOrDescendant(key, path) || this.Changes.ContainsKey(key))
-                continue;
-            this.Changes[key] = KVValue.Tombstone;
-        }
-    }
+    // Replace the whole subtree with ours, i.e. with the draft's pre-rebase view of it: the draft's own
+    // changes stay, base leaves the draft left untouched are pinned where the target differs, and any
+    // target-only leaf is tombstoned, so the other type's fields (or dropped collection items) don't bleed
+    // through once the base swaps to the target.
+    private void KeepDraftSubtree(string path) => this.PinBaseSubtree(path, keepDraft: true);
 
     // Pins the pre-rebase (base = current Snapshot) state over a subtree as a counter-edit, so that after
     // the base swaps to the target the effective value under <paramref name="path"/> stays at base — i.e.
     // the incoming change is rejected. Only actual base↔target differences are written, keeping the draft clean.
-    private void ForceBaseSubtree(string path)
-    {
-        this.RemoveChangesUnder(path);
+    private void ForceBaseSubtree(string path) => this.PinBaseSubtree(path, keepDraft: false);
 
-        foreach (var key in this.Snapshot.Data.Keys.Where(k => KVPath.IsSameOrDescendant(k, path)))
+    // Writes the base over the target under a subtree: base leaves that differ from the target are pinned,
+    // target-only leaves tombstoned. Without keepDraft the draft's changes there are dropped first. With it
+    // they stay, and every leaf the draft decided is skipped: one it set, or one it deleted (itself or through
+    // a deleted ancestor, e.g. a removed collection item, whose tombstone already covers it).
+    private void PinBaseSubtree(string path, bool keepDraft)
+    {
+        if (!keepDraft)
+        {
+            this.RemoveChangesUnder(path);
+        }
+
+        bool DraftDecided(string key) => keepDraft && (this.Changes.ContainsKey(key) || this.IsRemoved(key));
+
+        foreach (var key in this.Snapshot.Data.Keys.Where(k => KVPath.IsSameOrDescendant(k, path) && !DraftDecided(k)).ToList())
         {
             this.RebaseTarget!.Data.TryGetValue(key, out var targetValue);
             if (!KVMerge.ValueEquals(this.Snapshot.Data[key], targetValue))
                 this.Changes[key] = this.Snapshot.Data[key]; // differs from target — pin base value.
         }
 
-        foreach (var key in this.RebaseTarget!.Data.Keys.Where(k => KVPath.IsSameOrDescendant(k, path)))
+        foreach (var key in this.RebaseTarget!.Data.Keys.Where(k => KVPath.IsSameOrDescendant(k, path) && !this.Snapshot.Data.ContainsKey(k) && !DraftDecided(k)).ToList())
         {
-            if (!this.Snapshot.Data.ContainsKey(key))
-                this.Changes[key] = KVValue.Tombstone; // target-only leaf — remove it so base (absence) wins.
+            this.Changes[key] = KVValue.Tombstone; // target-only leaf — remove it so base (absence) wins.
         }
     }
 

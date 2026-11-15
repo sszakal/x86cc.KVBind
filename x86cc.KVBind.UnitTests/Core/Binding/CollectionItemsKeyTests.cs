@@ -101,7 +101,7 @@ public class CollectionItemsKeyTests : KVModelTestBase
         root.Items.Create(Id3).Name = "third";
         root.Items.MoveById(Id3.ToString("D"), 0); // [Id3, Id1, Id2]
 
-        this.CommitSetup(model);
+        CommitSetup(model);
         root = this.CreateRoot<ChangeSetTestModel>(model);
 
         root.Items.Count().Should().Be(3);
@@ -116,7 +116,7 @@ public class CollectionItemsKeyTests : KVModelTestBase
         var model = new KVModelRoot();
         var root = this.CreateRoot<ChangeSetTestModel>(model);
         root.Items.Create(Id1).Name = "original";
-        this.CommitSetup(model);
+        CommitSetup(model);
         root = this.CreateRoot<ChangeSetTestModel>(model);
 
         root.Items.RemoveById(Id1.ToString("D"));

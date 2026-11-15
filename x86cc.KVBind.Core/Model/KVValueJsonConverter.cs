@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -7,7 +8,15 @@ namespace x86cc.KVBind.Core.Model;
 
 public sealed class KVValueJsonConverter : JsonConverter<KVValue>
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    // The most type names ResolvedTypes holds; beyond it, names are resolved uncached.
+    private const int MaxResolvedTypes = 1024;
+
+    // Values are written with the caller's options, so an enum arrives as its name when the host serializes
+    // enums as strings (e.g. Marten with EnumStorage.AsString) and as a number otherwise; read both.
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter() }
+    };
 
     // Strips ", Version=X, Culture=neutral, PublicKeyToken=X" from assembly-qualified type names.
     // Works for generic types too since the same pattern repeats for each type argument.
@@ -16,6 +25,11 @@ public sealed class KVValueJsonConverter : JsonConverter<KVValue>
         @", Version=[^,\[\]]+, Culture=[^,\[\]]+, PublicKeyToken=[^,\[\]]+",
         RegexOptions.Compiled,
         TimeSpan.FromSeconds(1));
+
+    // Resolving an assembly-qualified name is costly and every stored value carries one; there are few
+    // distinct value types, so each name is resolved once. Only names that resolve are cached: a type whose
+    // assembly loads later still resolves then, and unknown names in incoming documents cannot grow the cache.
+    private static readonly ConcurrentDictionary<string, Type> ResolvedTypes = new(StringComparer.Ordinal);
 
     public override KVValue Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
@@ -45,8 +59,27 @@ public sealed class KVValueJsonConverter : JsonConverter<KVValue>
         writer.WriteEndObject();
     }
 
+    // For tests: whether a type name is in the resolution cache.
+    internal static bool IsCached(string typeName) => ResolvedTypes.ContainsKey(typeName);
+
     private static string ShortTypeName(Type type) =>
         VersionSuffix.Replace(type.AssemblyQualifiedName!, string.Empty);
+
+    private static Type? ResolveType(string typeName)
+    {
+        if (ResolvedTypes.TryGetValue(typeName, out var cached))
+        {
+            return cached;
+        }
+
+        var resolved = Type.GetType(typeName, throwOnError: false);
+        if (resolved is not null && ResolvedTypes.Count < MaxResolvedTypes)
+        {
+            ResolvedTypes.TryAdd(typeName, resolved);
+        }
+
+        return resolved;
+    }
 
     private static KVValue ReadObject(ref Utf8JsonReader reader)
     {
@@ -65,7 +98,9 @@ public sealed class KVValueJsonConverter : JsonConverter<KVValue>
     private static KVValue ReadTypedValue(JsonElement root, JsonElement typeElement)
     {
         var typeName = typeElement.ValueKind == JsonValueKind.String ? typeElement.GetString() : null;
-        var valueType = !string.IsNullOrWhiteSpace(typeName) ? Type.GetType(typeName, throwOnError: false) : typeof(object);
+        var valueType = !string.IsNullOrWhiteSpace(typeName)
+            ? ResolveType(typeName)
+            : typeof(object);
         if (valueType is null)
             throw new JsonException($"Unable to resolve KV value type '{typeName}'.");
 

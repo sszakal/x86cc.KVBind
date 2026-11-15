@@ -251,7 +251,7 @@ public partial class ProRoot : KVRootNode
     public void AssignApprover(string name)
     {
         this.Approver = new ProPerson();
-        this.Approver!.Name = name;
+        this.Approver.Name = name;
     }
 }
 

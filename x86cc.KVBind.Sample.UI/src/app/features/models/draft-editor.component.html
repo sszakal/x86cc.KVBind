@@ -1,0 +1,351 @@
+<!-- Header -->
+<div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+  <div>
+    <a [routerLink]="['/m', model, id]" class="text-sm font-medium text-brand-500 hover:text-brand-600">← Back to {{ model }}</a>
+    <h1 class="mt-0.5 text-xl font-bold text-gray-900 dark:text-white">Edit draft</h1>
+    @if (draft) {
+      <p class="text-xs text-gray-500">Draft of <span class="font-mono">{{ id.slice(0, 8) }}</span> · {{ draft.user }}
+        @if (draft.parentId) { · child of <a class="font-mono text-brand-500" [routerLink]="['/m', model, draft.parentId]">{{ draft.parentId.slice(0, 8) }}</a> }
+      </p>
+    }
+  </div>
+  <div class="flex flex-wrap items-center gap-2">
+    @for (entry of computedEntries(); track entry[0]) {
+      <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" title="Computed in code from the data">
+        {{ entry[0] }}: {{ show(entry[1]) }}
+      </span>
+    }
+    @if (autoSaveLabel) { <span class="text-xs text-gray-400">{{ autoSaveLabel }}</span> }
+    @if (pendingCount > 0) {
+      <span class="rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-700 dark:bg-orange-950/40 dark:text-orange-300">{{ pendingCount }} unsaved</span>
+    }
+    <button class="h-9 rounded-lg bg-brand-500 px-4 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-40" [disabled]="saving || pendingCount === 0" (click)="saveNow()">Save now</button>
+    <button class="h-9 rounded-lg border border-gray-300 px-4 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800" [disabled]="validating || saving" (click)="validate()">{{ validating ? 'Validating…' : 'Validate' }}</button>
+    <button class="h-9 rounded-lg border border-red-200 px-4 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-40 dark:border-red-900/60 dark:hover:bg-red-950/30" [disabled]="saving || !draft?.changes?.length" (click)="discardAll()">Discard all</button>
+    <button class="h-9 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-40 dark:bg-white dark:text-gray-900" [disabled]="saving" (click)="review()">Review &amp; commit</button>
+  </div>
+</div>
+
+@if (error) {
+  <div class="mb-4 flex items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+    <span>{{ error }}</span><button class="text-xs" (click)="error = ''">✕</button>
+  </div>
+}
+@if (draft?.isStale) {
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/30">
+    <div>
+      <p class="text-sm font-semibold text-amber-800 dark:text-amber-200">Upstream changes detected</p>
+      <p class="mt-1 text-sm text-amber-700 dark:text-amber-300">Someone committed after your draft started. Rebase before committing.</p>
+    </div>
+    <button class="h-9 shrink-0 rounded-lg bg-amber-500 px-4 text-sm font-semibold text-white hover:bg-amber-600" (click)="rebaseNow()">Rebase now</button>
+  </div>
+}
+
+@if (validation) {
+  <div class="mb-4 rounded-2xl border p-5" [ngClass]="validation.isValid ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/60 dark:bg-emerald-950/20' : 'border-red-200 bg-red-50 dark:border-red-900/60 dark:bg-red-950/20'">
+    <div class="flex items-center justify-between">
+      <span class="text-sm font-semibold" [ngClass]="validation.isValid ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'">
+        @if (validation.isValid) { ✓ Valid — ready to commit } @else { {{ validation.errors.length }} validation error{{ validation.errors.length !== 1 ? 's' : '' }} }
+        <span class="font-normal text-gray-500"> · profile: {{ validation.profile }}</span>
+      </span>
+      <button class="text-xs text-gray-400 hover:text-gray-600" (click)="validation = null; errorsByPath = {}">✕</button>
+    </div>
+    @if (!validation.isValid) {
+      <ul class="mt-3 max-h-48 space-y-1 overflow-y-auto">
+        @for (err of validation.errors; track $index) {
+          <li>
+            <button class="flex items-start gap-2 text-left text-sm text-red-700 hover:underline dark:text-red-300" (click)="reveal(err.path)">
+              <span class="font-mono text-xs text-red-400">{{ err.displayPath || '(root)' }}</span>
+              <span>{{ err.message }}</span>
+              <span class="rounded bg-red-100 px-1 text-[10px] text-red-500 dark:bg-red-950/50">{{ err.code }}</span>
+            </button>
+          </li>
+        }
+      </ul>
+    }
+  </div>
+}
+
+@if (schema && draft) {
+  <nav class="mb-4 flex flex-wrap items-center gap-1 text-sm">
+    @for (p of nav; track $index; let last = $last) {
+      <button class="rounded px-1.5 py-0.5 font-medium" [ngClass]="last ? 'text-gray-900 dark:text-white' : 'text-brand-500 hover:text-brand-600'" [disabled]="last" (click)="goTo($index)">{{ crumbLabel(p) }}</button>
+      @if (!last) { <span class="text-gray-300 dark:text-gray-600">/</span> }
+    }
+  </nav>
+
+  <div class="space-y-5 pb-32">
+    @if (here; as at) {
+      @switch (at.kind) {
+        @case ('node') {
+          <section class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+            <ng-container *ngTemplateOutlet="nodeHeader; context: { label: at.label, path: at.path, node: at.node, role: at.role, ro: at.readOnly }"></ng-container>
+            <ng-container *ngTemplateOutlet="nodeBody; context: { node: at.node, path: at.path, ro: at.readOnly }"></ng-container>
+          </section>
+        }
+
+        @case ('collection') {
+          <ng-container *ngTemplateOutlet="collectionView; context: { collection: at.collection, path: at.path, items: at.items, ro: at.readOnly, label: at.label }"></ng-container>
+        }
+
+        @case ('nestedSlot') {
+          <section class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+            <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ at.label }}</h2>
+                <span class="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-950/40 dark:text-purple-300">Nested · {{ at.nested.types.length }} type{{ at.nested.types.length !== 1 ? 's' : '' }}</span>
+                @if (at.nested.isRequired) { <span class="text-xs text-red-500">required</span> }
+                @if (at.readOnly) { <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:bg-gray-800">read-only</span> }
+              </div>
+              <button class="text-sm font-medium text-brand-500 hover:text-brand-600" (click)="back()">← Back</button>
+            </div>
+            @for (message of errorsFor(at.path); track message) { <p class="mb-2 text-xs font-medium text-red-600">{{ message }}</p> }
+
+            @let active = activeType(at.nested, at.data);
+            <div class="mb-5 flex flex-wrap items-center gap-2">
+              @for (type of at.nested.types; track type.token) {
+                <button class="rounded-lg border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+                  [ngClass]="active?.token === type.token ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-950/30 dark:text-brand-300' : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800'"
+                  [disabled]="saving || at.readOnly || active?.token === type.token"
+                  [title]="active ? 'INIT: switch to this type (its data starts fresh)' : 'INIT'"
+                  (click)="initNested(at.path, type.token)">
+                  {{ typeLabel(type) }}@if (at.nested.defaultType === type.token) { <span class="ml-1 text-[10px] text-gray-400">default</span> }
+                </button>
+              }
+              @if (active && !at.readOnly) {
+                <button class="rounded-lg border border-red-200 px-3 py-2 text-xs font-medium text-red-500 hover:bg-red-50 dark:border-red-900/60" [disabled]="saving" (click)="dropNested(at.path)">Drop</button>
+              }
+              @if (active && !at.readOnly && !hasReadOnly(active.node)) {
+                <button class="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300" [disabled]="saving" (click)="resetNode(at.path)" title="RESET: wipe the data and re-apply defaults">Reset</button>
+              }
+            </div>
+
+            @if (active) {
+              <ng-container *ngTemplateOutlet="operations; context: { ops: active.node.operations, path: at.path }"></ng-container>
+              <ng-container *ngTemplateOutlet="nodeBody; context: { node: active.node, path: at.path, ro: at.readOnly }"></ng-container>
+            } @else {
+              <p class="rounded-xl border border-dashed border-gray-200 py-8 text-center text-sm text-gray-400 dark:border-gray-700">Not initialized. Pick a type to INIT it.</p>
+            }
+          </section>
+        }
+      }
+    } @else {
+      <p class="text-sm text-gray-500">This level no longer exists. <button class="text-brand-500" (click)="goTo(0)">Back to the overview</button></p>
+    }
+  </div>
+}
+
+<!-- ═══ Node header: title, badges, reset and custom operations ═══ -->
+<ng-template #nodeHeader let-label="label" let-path="path" let-node="node" let-role="role" let-ro="ro">
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+    <div class="flex items-center gap-2">
+      <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ label }}</h2>
+      @if (role === 'group') { <span class="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">Group</span> }
+      @if (role === 'item') { <span class="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">Item</span> }
+      @if (ro) { <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:bg-gray-800">read-only</span> }
+      @if (isInherited(path) && path) { <span class="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-700 dark:bg-sky-950/40 dark:text-sky-300">inherited</span> }
+    </div>
+    <div class="flex items-center gap-3">
+      @if (role === 'group' && node.isResettable && !ro) {
+        <button class="text-xs font-medium text-gray-600 hover:text-gray-900 dark:text-gray-300" [disabled]="saving" (click)="resetNode(path)" title="RESET: wipe the group and re-apply its defaults">Reset group</button>
+      }
+      @if (path && isChanged(path) && !ro) {
+        <button class="text-xs font-medium text-gray-600 hover:text-gray-900 dark:text-gray-300" [disabled]="saving" (click)="discardPath(path)" title="DISCARD: drop this draft's changes here">Discard changes</button>
+      }
+      @if (path) { <button class="text-sm font-medium text-brand-500 hover:text-brand-600" (click)="back()">← Back</button> }
+    </div>
+  </div>
+  <ng-container *ngTemplateOutlet="operations; context: { ops: node.operations, path: path }"></ng-container>
+</ng-template>
+
+<!-- ═══ Custom operations (Operation(...) in the DSL) ═══ -->
+<ng-template #operations let-ops="ops" let-path="path">
+  @if (ops.length > 0) {
+    <div class="mb-5 flex flex-wrap items-center gap-2 rounded-xl bg-indigo-50/60 p-3 dark:bg-indigo-950/20">
+      <span class="text-xs font-medium uppercase tracking-wide text-indigo-500">Operations</span>
+      @for (op of ops; track op) {
+        <span class="flex items-center gap-1">
+          <input class="h-8 w-36 rounded-md border border-indigo-200 px-2 text-xs dark:border-indigo-900 dark:bg-gray-900 dark:text-white" [(ngModel)]="payloads[payloadKey(path, op)]" placeholder="payload (optional)" />
+          <button class="h-8 rounded-md bg-indigo-500 px-3 text-xs font-semibold text-white hover:bg-indigo-600 disabled:opacity-40" [disabled]="saving" (click)="runOperation(path, op)">{{ op }}</button>
+        </span>
+      }
+    </div>
+  }
+</ng-template>
+
+<!-- ═══ Node body: fields, inline sections, and cards for groups / collections / nested nodes ═══ -->
+<ng-template #nodeBody let-node="node" let-path="path" let-ro="ro">
+  @if (node.fields.length > 0) {
+    <div class="grid gap-4 sm:grid-cols-2">
+      @for (field of node.fields; track field.key) {
+        @let fp = fieldPath(path, field);
+        <div [ngClass]="wide(field) ? 'sm:col-span-2' : ''">
+          <app-schema-field [field]="field" [path]="fp" [value]="valueOf(fp)" [readOnly]="ro || field.isReadOnly"
+            [inherited]="isInherited(fp)" [changed]="isChanged(fp)" [errors]="errorsFor(fp)" (valueChange)="onField(fp, $event)"></app-schema-field>
+        </div>
+      }
+    </div>
+  }
+
+  @for (group of node.groups; track group.key) {
+    @if (isSection(group)) {
+      @let gp = joinPath(path, group.key);
+      <div class="mt-6 border-t border-gray-100 pt-5 dark:border-gray-800">
+        <div class="mb-3 flex items-center justify-between">
+          <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ labelOf(group) }}</h3>
+          @if (group.isResettable && !ro && !group.isReadOnly) { <button class="text-xs text-gray-500 hover:text-gray-800" (click)="resetNode(gp)">Reset</button> }
+        </div>
+        <ng-container *ngTemplateOutlet="nodeBody; context: { node: group, path: gp, ro: ro || group.isReadOnly }"></ng-container>
+      </div>
+    }
+  }
+
+  @if (node.groups.length + node.collections.length + node.nestedNodes.length > 0) {
+    <div class="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      @for (group of node.groups; track group.key) {
+        @if (!isSection(group)) {
+          @let gp = joinPath(path, group.key);
+          <button type="button" class="group/card flex items-center justify-between rounded-2xl border bg-white p-4 text-left transition-colors hover:border-brand-300 dark:bg-white/[0.02]"
+            [ngClass]="errorCountUnder(gp) > 0 ? 'border-red-300 dark:border-red-800' : 'border-gray-200 dark:border-gray-800'" (click)="open(gp)">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <h3 class="truncate text-sm font-semibold text-gray-900 dark:text-white">{{ labelOf(group) }}</h3>
+                <span class="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">Group</span>
+                @if (isChanged(gp)) { <span class="h-1.5 w-1.5 rounded-full bg-orange-400"></span> }
+              </div>
+              <p class="mt-1 truncate text-xs text-gray-500">{{ groupSummary(gp, group) }}</p>
+              @if (errorCountUnder(gp) > 0) { <p class="mt-1 text-xs text-red-500">{{ errorCountUnder(gp) }} error(s)</p> }
+            </div>
+            <span class="text-gray-300 group-hover/card:text-brand-500">›</span>
+          </button>
+        }
+      }
+      @for (coll of node.collections; track coll.key) {
+        @let cp = joinPath(path, coll.key);
+        @let count = itemsOf(path, coll).length;
+        <button type="button" class="group/card flex items-center justify-between rounded-2xl border bg-white p-4 text-left transition-colors hover:border-brand-300 dark:bg-white/[0.02]"
+          [ngClass]="errorCountUnder(cp) > 0 ? 'border-red-300 dark:border-red-800' : 'border-gray-200 dark:border-gray-800'" (click)="open(cp)">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <h3 class="truncate text-sm font-semibold text-gray-900 dark:text-white">{{ labelOf(coll) }}</h3>
+              <span class="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">Collection</span>
+              @if (isChanged(cp)) { <span class="h-1.5 w-1.5 rounded-full bg-orange-400"></span> }
+            </div>
+            <p class="mt-1 text-xs text-gray-500">{{ count }} item{{ count !== 1 ? 's' : '' }}@if (countRule(coll)) { · {{ countRule(coll) }} }</p>
+            @if (errorCountUnder(cp) > 0) { <p class="mt-1 text-xs text-red-500">{{ errorCountUnder(cp) }} error(s)</p> }
+          </div>
+          <span class="text-gray-300 group-hover/card:text-brand-500">›</span>
+        </button>
+      }
+      @for (nested of node.nestedNodes; track nested.key) {
+        @let np = joinPath(path, nested.key);
+        <button type="button" class="group/card flex items-center justify-between rounded-2xl border bg-white p-4 text-left transition-colors hover:border-brand-300 dark:bg-white/[0.02]"
+          [ngClass]="errorCountUnder(np) > 0 ? 'border-red-300 dark:border-red-800' : 'border-gray-200 dark:border-gray-800'" (click)="open(np)">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <h3 class="truncate text-sm font-semibold text-gray-900 dark:text-white">{{ labelOf(nested) }}</h3>
+              <span class="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700 dark:bg-purple-950/40 dark:text-purple-300">Nested</span>
+              @if (isChanged(np)) { <span class="h-1.5 w-1.5 rounded-full bg-orange-400"></span> }
+            </div>
+            <p class="mt-1 truncate text-xs text-gray-500">{{ nestedSummary(path, nested) }}</p>
+            @if (errorCountUnder(np) > 0) { <p class="mt-1 text-xs text-red-500">{{ errorCountUnder(np) }} error(s)</p> }
+          </div>
+          <span class="text-gray-300 group-hover/card:text-brand-500">›</span>
+        </button>
+      }
+    </div>
+  }
+</ng-template>
+
+<!-- ═══ Collection: items with ADD / REMOVE / MOVE / RESET as AllowOperations permits ═══ -->
+<ng-template #collectionView let-collection="collection" let-path="path" let-items="items" let-ro="ro" let-label="label">
+  <section class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ label }}</h2>
+        <span class="text-sm text-gray-500">{{ items.length }} item{{ items.length !== 1 ? 's' : '' }}</span>
+        @if (countRule(collection)) { <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-500 dark:bg-gray-800">{{ countRule(collection) }}</span> }
+        @if (collection.allowedOperations) { <span class="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" title="AllowOperations">allows {{ collection.allowedOperations.join(', ') || 'nothing' }}</span> }
+        @if (ro) { <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:bg-gray-800">read-only</span> }
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        @if (allows(collection, 'ADD') && !ro) {
+          @for (type of collection.itemTypes; track type.token) {
+            <button class="h-9 rounded-lg border border-brand-200 bg-brand-50 px-4 text-sm font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-40 dark:border-brand-800/60 dark:bg-brand-950/30 dark:text-brand-300"
+              [disabled]="saving || (collection.maxCount != null && items.length >= collection.maxCount)" (click)="addItem(path, collection, type)">
+              + {{ collection.itemTypes.length > 1 ? typeLabel(type) : 'Add item' }}
+            </button>
+          }
+        }
+        <button class="text-sm font-medium text-brand-500 hover:text-brand-600" (click)="back()">← Back</button>
+      </div>
+    </div>
+    @for (message of errorsFor(path); track message) { <p class="mb-2 text-xs font-medium text-red-600">{{ message }}</p> }
+    <ng-container *ngTemplateOutlet="operations; context: { ops: collection.operations, path: path }"></ng-container>
+
+    @if (items.length > 0) {
+      <div class="overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800">
+        @for (item of visibleItems(path, items); track idOf(item); let i = $index; let last = $last) {
+          @let ip = joinPath(path, idOf(item));
+          <div class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/40" [ngClass]="!last ? 'border-b border-gray-100 dark:border-gray-800' : ''">
+            <button class="flex min-w-0 flex-1 items-center gap-3 text-left" (click)="open(ip)">
+              <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-gray-100 text-xs font-medium text-gray-500 dark:bg-gray-800">{{ i + 1 }}</span>
+              <span class="truncate text-sm font-medium text-gray-900 dark:text-white">{{ itemTitle(collection, item, i) }}</span>
+              @if (collection.itemTypes.length > 1) { <span class="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-600 dark:bg-blue-950/40">{{ itemTypeOf(collection, item) ? typeLabel(itemTypeOf(collection, item)!) : item['$type'] }}</span> }
+              @if (isChanged(ip)) { <span class="h-1.5 w-1.5 rounded-full bg-orange-400"></span> }
+              @if (errorCountUnder(ip) > 0) { <span class="text-xs text-red-500">{{ errorCountUnder(ip) }} error(s)</span> }
+            </button>
+            <div class="flex items-center gap-2 text-xs">
+              @if (allows(collection, 'MOVE') && !ro) {
+                <button class="rounded px-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-30" [disabled]="saving || i === 0" (click)="moveItem(ip, i - 1)" title="MOVE up">↑</button>
+                <button class="rounded px-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-30" [disabled]="saving || i === items.length - 1" (click)="moveItem(ip, i + 1)" title="MOVE down">↓</button>
+              }
+              @if (canReset(collection, item) && !ro) { <button class="text-gray-500 hover:text-gray-800 disabled:opacity-40" [disabled]="saving" (click)="resetNode(ip)" title="RESET the item">Reset</button> }
+              <button class="font-medium text-brand-500 hover:text-brand-600" (click)="open(ip)">Edit</button>
+              @if (allows(collection, 'REMOVE') && !ro) { <button class="text-red-400 hover:text-red-600 disabled:opacity-40" [disabled]="saving || (collection.minCount != null && items.length <= collection.minCount)" (click)="removeItem(ip)">Remove</button> }
+            </div>
+          </div>
+        }
+      </div>
+      @if (visibleItems(path, items).length < items.length) {
+        <button class="mt-3 text-sm font-medium text-brand-500 hover:text-brand-600" (click)="showMore(path)">Show more ({{ items.length - visibleItems(path, items).length }} hidden)</button>
+      }
+    } @else {
+      <p class="rounded-xl border border-dashed border-gray-200 py-8 text-center text-sm text-gray-400 dark:border-gray-700">No items yet.</p>
+    }
+  </section>
+</ng-template>
+
+<!-- ═══ Bottom drawer: overlay changes and pending domain events ═══ -->
+@if (draft) {
+  <div class="fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white shadow-2xl shadow-gray-900/20 dark:border-gray-700 dark:bg-gray-900">
+    <div class="flex w-full items-center justify-between px-6 py-3">
+      <button class="flex items-center gap-3" (click)="overlayOpen = !overlayOpen; eventsOpen = false">
+        <span class="text-sm font-semibold text-gray-900 dark:text-white">Overlay changes</span>
+        <span class="rounded-full px-2.5 py-0.5 text-xs font-bold" [ngClass]="draft.changes.length > 0 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'">{{ draft.changes.length }}</span>
+        @if (pendingCount > 0) { <span class="text-xs text-gray-400">· {{ pendingCount }} pending (auto-saves in 10s)</span> }
+      </button>
+      <button class="flex items-center gap-2" (click)="eventsOpen = !eventsOpen; overlayOpen = false">
+        <span class="text-sm font-semibold text-gray-900 dark:text-white">Pending events</span>
+        <span class="rounded-full px-2.5 py-0.5 text-xs font-bold" [ngClass]="draft.pendingEvents.length > 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'">{{ draft.pendingEvents.length }}</span>
+      </button>
+    </div>
+    @if (overlayOpen) {
+      <div class="max-h-[55vh] overflow-y-auto border-t border-gray-100 px-6 pb-6 pt-4 dark:border-gray-800">
+        <p class="mb-3 text-xs text-gray-400">Live diff against the committed snapshot.</p>
+        <app-change-tree-table [changes]="draft.changes"></app-change-tree-table>
+      </div>
+    }
+    @if (eventsOpen) {
+      <div class="max-h-[55vh] overflow-y-auto border-t border-gray-100 px-6 pb-6 pt-4 dark:border-gray-800">
+        <p class="mb-3 text-xs text-gray-400">Domain events raised by this draft's patches. They are published with the commit and dropped by "Discard all".</p>
+        @for (ev of draft.pendingEvents; track $index) {
+          <div class="mb-2 rounded-lg border border-gray-100 px-3 py-2 text-sm dark:border-gray-800">
+            <span class="font-semibold text-indigo-600 dark:text-indigo-300">{{ ev.type }}</span>
+            <span class="ml-2 font-mono text-xs text-gray-500">{{ eventPayload(ev.payload) }}</span>
+          </div>
+        } @empty { <p class="text-sm text-gray-400">None yet.</p> }
+      </div>
+    }
+  </div>
+}

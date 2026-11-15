@@ -11,6 +11,13 @@ public abstract class KVModelTestBase
     private readonly List<IKVModelDefinitionBuilder> definitionBuilders = [];
     private IKVDefinitionRegistry? registry;
 
+    protected static void CommitSetup(KVModelRoot model)
+    {
+        var commit = model.Overlay.ToCommit(DateTimeOffset.UtcNow);
+        model.Snapshot.Apply(commit);
+        model.ReplaceOverlay(KVOverlay.Create(model.Snapshot, model.Overlay.User));
+    }
+
     protected void RegisterModelDefinition<TModel>(Action<KVBindBuilder<TModel>> define)
         where TModel : KVRootNode
     {
@@ -26,13 +33,6 @@ public abstract class KVModelTestBase
         var modelRegistry = this.CreateRegistry();
         var definition = modelRegistry.Get<TKVRootNode>();
         return KVRootNode.Create<TKVRootNode>(model ?? new KVModelRoot(KVOverlay.Create(new KVSnapshot(), TestUser)), definition);
-    }
-
-    protected void CommitSetup(KVModelRoot model)
-    {
-        var commit = model.Overlay.ToCommit(DateTimeOffset.UtcNow);
-        model.Snapshot.Apply(commit);
-        model.ReplaceOverlay(KVOverlay.Create(model.Snapshot, model.Overlay.User));
     }
 
     protected TKVRootNode BindRoot<TKVRootNode>(TKVRootNode root, KVModelRoot model)

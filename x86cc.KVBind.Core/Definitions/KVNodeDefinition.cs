@@ -63,14 +63,10 @@ public class KVNodeDefinition : KVDefinition
         }
     }
 
-    private string[] BuildInheritedPrefixes() =>
-        this.Fields.Where(static definition => definition.IsInherited).Select(static definition => definition.SubSegmentPath)
-            .Concat(this.Nodes.Where(static definition => definition.IsInherited).Select(static definition => definition.SubSegmentPath))
-            .Concat(this.Collections.Where(static definition => definition.IsInherited).Select(static definition => definition.SubSegmentPath))
-            .Concat(this.NestedNodes.Where(static definition => definition.IsInherited).Select(static definition => definition.SubSegmentPath))
-            .ToArray();
-
     public Func<KVNode, KVNode> GetChildNode { get; init; } = _ => throw new NotSupportedException("GetChildNode is not configured.");
+
+    // Names (upper case) of the custom patch operations a client may send to this node.
+    public IReadOnlyCollection<string> OperationNames => this.PatchOperations.Keys;
 
     // Migrations sorted ascending by ToVersion, materialized once and cached (definitions are built then
     // reused, like the field indexes above). Lets the migrator binary-search to the pending tail instead of
@@ -96,18 +92,6 @@ public class KVNodeDefinition : KVDefinition
     // (root "/", a field group, a collection item, an initialized nested node) invokes the mapped method.
     internal Dictionary<string, KVPatchOperationDescriptor> PatchOperations { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-    // Names (upper case) of the custom patch operations a client may send to this node.
-    public IReadOnlyCollection<string> OperationNames => this.PatchOperations.Keys;
-
-    internal void AddPatchOperation(KVPatchOperationDescriptor operation)
-    {
-        ArgumentNullException.ThrowIfNull(operation);
-        if (!this.PatchOperations.TryAdd(operation.Operation, operation))
-        {
-            throw new InvalidOperationException($"Patch operation '{operation.Operation}' is already registered for '{this.SubSegmentPath}'.");
-        }
-    }
-
     // Lookups by SubSegmentPath, replacing allocating O(n) List.Find on warm paths (read, patch resolution,
     // validation, nested-node access). Indexes are lazy and cached; the lists remain authoritative for
     // iteration and declaration order.
@@ -123,6 +107,15 @@ public class KVNodeDefinition : KVDefinition
     public KVNestedNodeDefinition? FindNestedNode(string subSegmentPath)
         => (this.nestedNodesByKey ??= BuildIndex(this.NestedNodes)).GetValueOrDefault(subSegmentPath);
 
+    internal void AddPatchOperation(KVPatchOperationDescriptor operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        if (!this.PatchOperations.TryAdd(operation.Operation, operation))
+        {
+            throw new InvalidOperationException($"Patch operation '{operation.Operation}' is already registered for '{this.SubSegmentPath}'.");
+        }
+    }
+
     // The builder removes any existing entry before adding, so each SubSegmentPath maps to one definition.
     private static Dictionary<string, T> BuildIndex<T>(List<T> definitions)
         where T : KVDefinition
@@ -132,4 +125,11 @@ public class KVNodeDefinition : KVDefinition
             index[definition.SubSegmentPath] = definition;
         return index;
     }
+
+    private string[] BuildInheritedPrefixes() =>
+        this.Fields.Where(static definition => definition.IsInherited).Select(static definition => definition.SubSegmentPath)
+            .Concat(this.Nodes.Where(static definition => definition.IsInherited).Select(static definition => definition.SubSegmentPath))
+            .Concat(this.Collections.Where(static definition => definition.IsInherited).Select(static definition => definition.SubSegmentPath))
+            .Concat(this.NestedNodes.Where(static definition => definition.IsInherited).Select(static definition => definition.SubSegmentPath))
+            .ToArray();
 }

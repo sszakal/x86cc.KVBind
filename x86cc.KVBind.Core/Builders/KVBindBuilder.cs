@@ -238,7 +238,7 @@ public sealed class KVBindBuilder<TEntity>
         nestedNodeDefinition.AddAnnotations(options.Annotations);
         nestedNodeDefinition.IsInherited = options.IsInherited;
         nestedNodeDefinition.IsPatchReadOnly = options.IsPatchReadOnly;
-        nestedNodeDefinition.DefaultTypeToken = options.DefaultTypeTokenValue;
+        nestedNodeDefinition.DefaultTypeToken = options.ResolveDefaultTypeToken(propertyName);
         nestedNodeDefinition.IsRequired = options.IsRequired;
         this.definition.NestedNodes.Add(nestedNodeDefinition);
     }

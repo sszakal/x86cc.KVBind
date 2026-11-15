@@ -6,6 +6,8 @@ namespace x86cc.KVBind.Core;
 
 public abstract partial class KVNode
 {
+    internal static void ClearNestedNodeModelForPatch(KVModel nestedModel) => ClearNestedNodeModel(nestedModel);
+
     internal KVNestedNode? GetActiveNestedNode(KVNestedNodeDefinition definition, KVModel nestedModel)
     {
         var typeToken = KVNestedNode.GetItemType(nestedModel);
@@ -56,8 +58,6 @@ public abstract partial class KVNode
     }
 
     internal void DetachNestedNodeForPatch(string nestedNodeKey) => this.DetachActiveNestedNode(nestedNodeKey);
-
-    internal void ClearNestedNodeModelForPatch(KVModel nestedModel) => ClearNestedNodeModel(nestedModel);
 
     protected TBase? GetNestedNode<TBase>(string nestedNodeKey)
         where TBase : KVNestedNode
@@ -121,30 +121,12 @@ public abstract partial class KVNode
 
     private static void ClearNestedNodeModel(KVModel nestedModel)
     {
+        // Everything stored under the slot except its $type discriminator, in one pass over the keys: draft
+        // entries are dropped and snapshot entries tombstoned. (Removing key by key rescanned every key per
+        // removal, which made dropping a large subtree quadratic.)
         var prefix = nestedModel.DataPath;
-        var typeKey = KVPath.Combine(prefix, KVNestedNode.TypeKey);
-        var overlay = nestedModel.Overlay;
-
-        var toRemove = new List<string>();
-        foreach (var key in overlay.Changes.Keys)
-        {
-            if (IsNestedNodeData(key, prefix, typeKey))
-                toRemove.Add(key);
-        }
-
-        foreach (var key in toRemove)
-            overlay.Remove(key);
-
-        foreach (var key in overlay.Snapshot.Data.Keys)
-        {
-            if (IsNestedNodeData(key, prefix, typeKey) && !overlay.HasRemovedPath(key))
-                overlay.Remove(key);
-        }
+        nestedModel.Overlay.ResetSubtree(prefix, keepKey: KVPath.Combine(prefix, KVNestedNode.TypeKey));
     }
-
-    // Everything stored under the slot except its $type discriminator.
-    private static bool IsNestedNodeData(string key, string prefix, string typeKey) =>
-        KVPath.IsSameOrDescendant(key, prefix) && !string.Equals(key, typeKey, StringComparison.Ordinal);
 
     private KVNestedNodeDefinition GetNestedNodeDefinition(string nestedNodeKey)
     {

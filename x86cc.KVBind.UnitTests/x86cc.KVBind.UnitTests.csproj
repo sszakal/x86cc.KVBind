@@ -35,6 +35,7 @@
   <ItemGroup>
     <ProjectReference Include="..\x86cc.KVBind.Core\x86cc.KVBind.Core.csproj" />
     <ProjectReference Include="..\x86cc.KVBind.SourceGenerator\x86cc.KVBind.SourceGenerator.csproj" />
+    <ProjectReference Include="..\x86cc.KVBind.Schema\x86cc.KVBind.Schema.csproj" />
   </ItemGroup>
 
   <ItemGroup>

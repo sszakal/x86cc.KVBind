@@ -30,6 +30,7 @@ jobs:
         run: |
           dotnet pack x86cc.KVBind.Core/x86cc.KVBind.Core.csproj -c Release -p:Version=${{ steps.ver.outputs.version }} -o ./artifacts
           dotnet pack x86cc.KVBind.SourceGenerator/x86cc.KVBind.SourceGenerator.csproj -c Release -p:Version=${{ steps.ver.outputs.version }} -o ./artifacts
+          dotnet pack x86cc.KVBind.Schema/x86cc.KVBind.Schema.csproj -c Release -p:Version=${{ steps.ver.outputs.version }} -o ./artifacts
 
       # Pushing the .nupkg also pushes the adjacent .snupkg symbols. --skip-duplicate makes re-runs safe.
       - name: Push to NuGet

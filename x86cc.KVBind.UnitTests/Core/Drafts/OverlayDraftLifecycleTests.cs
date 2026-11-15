@@ -44,7 +44,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
         sourceItem.Amount = 10;
         var sourceItemId = rootNode.Items.GetItemId(sourceItem);
 
-        this.CommitSetup(model);
+        CommitSetup(model);
         rootNode.Title = "overlay";
         rootNode.Status = 99;
         rootNode.General.Code = "OVR";
@@ -72,7 +72,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
         var rootNode = this.CreateRoot<ChangeSetTestModel>(model);
         rootNode.Title = "base";
 
-        this.CommitSetup(model);
+        CommitSetup(model);
         rootNode.Title = "draft";
 
         rootNode.Title.Should().Be("draft");
@@ -91,7 +91,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
         sourceItem.Amount = 100;
         var sourceItemId = rootNode.Items.GetItemId(sourceItem);
 
-        this.CommitSetup(model);
+        CommitSetup(model);
         rootNode.Title = "changed";
         rootNode.General.Code = "OVR";
         rootNode.Items.GetById(sourceItemId)!.Amount = 101;
@@ -124,7 +124,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
         var id1 = rootNode.Items.GetItemId(item1);
         var id2 = rootNode.Items.GetItemId(item2);
 
-        this.CommitSetup(model);
+        CommitSetup(model);
         rootNode.Title = "applied";
         rootNode.Status = 13;
         rootNode.General.Code = "APPLIED";
@@ -161,7 +161,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
         var baseId = source.Items.GetItemId(baseItem);
         var addedId = Guid.Parse("33333333-3333-3333-3333-333333333333");
 
-        this.CommitSetup(model);
+        CommitSetup(model);
         source.Patch(KVPatchOperation.Set("/General/Code", "OVR"));
         source.Patch(KVPatchOperation.Add("/Items", new KVAddPatchPayload(addedId)));
 
@@ -190,7 +190,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
         sourceItem.Amount = 10;
         var sourceItemId = source.Items.GetItemId(sourceItem);
 
-        this.CommitSetup(model);
+        CommitSetup(model);
         source.Title = "updated";
         source.General.Code = "OVR";
         source.Items.GetById(sourceItemId)!.Amount = 25;
@@ -221,7 +221,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
         var source = this.CreateRoot<ChangeSetTestModel>(model);
         source.Title = "base";
 
-        this.CommitSetup(model);
+        CommitSetup(model);
         source.Patch(KVPatchOperation.Unset("/Title"));
 
         source.Title.Should().BeNull();
@@ -235,7 +235,7 @@ public class OverlayDraftLifecycleTests : KVModelTestBase
         var source = this.CreateRoot<ChangeSetTestModel>(model);
         source.Title = "base";
 
-        this.CommitSetup(model);
+        CommitSetup(model);
         source.Patch(KVPatchOperation.Unset("/Title"));
         source.Patch(KVPatchOperation.Discard("/Title"));
 

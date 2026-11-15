@@ -101,6 +101,22 @@ public class PatchExecutionTests : KVModelTestBase
         result.Changes.Should().Contain(change => change.Path == "General/Code" && change.ChangeType == KVChangeDeltaType.Updated);
     }
 
+    // A MOVE built from a client request carries the target index as a plain number, not a
+    // KVMovePatchPayload (KVPatchOperation.Move always wraps it).
+    [Fact]
+    public void PatchExecution_WhenMoveCarriesAPlainIndex_ReordersItems()
+    {
+        var model = this.CreateRoot<ChangeSetPatchModel>(new KVModelRoot());
+        var first = model.Items.Create();
+        var second = model.Items.Create();
+        var firstId = model.Items.GetItemId(first);
+        var secondId = model.Items.GetItemId(second);
+
+        model.Patch(new KVPatchOperation(KVPatchOperations.Move, $"/Items/{secondId}", 0));
+
+        model.Items.GetActiveItemIds().Should().Equal(secondId, firstId);
+    }
+
     [Fact]
     public void PatchExecution_WhenCollectionOperationsTargetItems_AppliesAddRemoveAndMove()
     {
@@ -332,7 +348,7 @@ public class PatchExecutionTests : KVModelTestBase
         var model = new KVModelRoot();
         var root = this.CreateRoot<ChangeSetPatchModel>(model);
         root.Title = "original";
-        this.CommitSetup(model);
+        CommitSetup(model);
         root = this.CreateRoot<ChangeSetPatchModel>(model);
 
         var result = root.Patch(KVPatchOperation.Unset("/Title"));
@@ -342,7 +358,7 @@ public class PatchExecutionTests : KVModelTestBase
     }
 
     [Fact]
-    public void PatchExecution_WhenUnsetTargetsDraftOnlyField_ProducesNoDelta()
+    public void PatchExecution_WhenUnsetTargetsDraftOnlyField_ReportsTheRemoval_ButLeavesNoDraftChange()
     {
         var root = this.CreateRoot<ChangeSetPatchModel>();
         root.Title = "draft-only";
@@ -350,7 +366,12 @@ public class PatchExecutionTests : KVModelTestBase
         var result = root.Patch(KVPatchOperation.Unset("/Title"));
 
         root.Title.Should().BeNull();
-        result.Changes.Should().NotContain(c => c.Path == "Title");
+
+        // The patch removed the value; the draft as a whole is back to the snapshot for Title.
+        var removed = result.Changes.Should().ContainSingle(c => c.Path == "Title").Subject;
+        removed.ChangeType.Should().Be(KVChangeDeltaType.Removed);
+        removed.OldValue.Should().Be("draft-only");
+        root.GetAllChanges().Changes.Should().NotContain(c => c.Path == "Title");
     }
 
     [Fact]
@@ -359,7 +380,7 @@ public class PatchExecutionTests : KVModelTestBase
         var model = new KVModelRoot();
         var root = this.CreateRoot<NestedNodeRoot>(model);
         root.Patch(KVPatchOperation.Init("/Animal", "DOG"));
-        this.CommitSetup(model);
+        CommitSetup(model);
         root = this.CreateRoot<NestedNodeRoot>(model);
 
         var result = root.Patch(KVPatchOperation.Drop("/Animal"));
@@ -439,6 +460,7 @@ public partial class BuiltInOverridePatchModel : KVRootNode
 
     public void GroupItems(ItemsToGroup argument)
     {
+        // Only declared: the tests need the operation's signature, not its effect.
     }
 }
 

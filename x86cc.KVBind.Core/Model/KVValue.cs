@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 namespace x86cc.KVBind.Core.Model;
 
 [JsonConverter(typeof(KVValueJsonConverter))]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S4035:Classes implementing \"IEquatable<T>\" should be sealed", Justification = "Abstract base of a closed set of value kinds that implement equality consistently; sealing it is not possible.")]
 public abstract class KVValue : IEquatable<KVValue>
 {
     // Sentinel representing a deleted path — used instead of a separate Removed set.

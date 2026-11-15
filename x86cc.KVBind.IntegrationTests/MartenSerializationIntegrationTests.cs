@@ -46,7 +46,7 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         }
 
         reloaded.Should().NotBeNull();
-        reloaded!.Snapshot.Data["DateLookingText"].Should().BeOfType<KVValue<string>>();
+        reloaded.Snapshot.Data["DateLookingText"].Should().BeOfType<KVValue<string>>();
         reloaded.Snapshot.Data["DateTimeValue"].Should().BeOfType<KVValue<DateTime>>();
         reloaded.Snapshot.Data["Price"].Should().BeOfType<KVValue<decimal>>();
         reloaded.Snapshot.Data["Tags"].Should().BeOfType<KVValue<string[]>>();
@@ -89,7 +89,7 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         }
 
         reloaded.Should().NotBeNull();
-        reloaded!.Changes[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/Amount"].Should().BeOfType<KVValue<decimal>>();
+        reloaded.Changes[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/Amount"].Should().BeOfType<KVValue<decimal>>();
         AssertStoredString(reloaded.Changes["SmartStatus"], "approved");
         AssertStoredString(reloaded.Changes["CompensationType"], "manager_flat");
         AssertStoredJsonArray(reloaded.Changes[$"Orders/{DraftOrderId:D}/Lines/{DraftLineId:D}/Adjustments/{DraftAdjustmentId:D}/StatusHistory"], ["approved", "new"]);
@@ -147,7 +147,7 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         }
 
         reloadedCommit.Should().NotBeNull();
-        reloadedCommit!.Commit.Changes["DateTimeValue"].Should().BeOfType<KVValue<DateTime>>();
+        reloadedCommit.Commit.Changes["DateTimeValue"].Should().BeOfType<KVValue<DateTime>>();
         reloadedCommit.Commit.Changes["Details"].Should().BeOfType<KVValue<ComplexDetails>>();
         AssertStoredString(reloadedCommit.Commit.Changes["SmartStatus"], "approved");
         AssertStoredString(reloadedCommit.Commit.Changes["CompensationType"], "manager_flat");
@@ -159,7 +159,7 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         reloadedCommit.Commit.Changes.Should().ContainKey($"Orders/{BaseOrderId:D}").WhoseValue.Should().Be(KVValue.Tombstone);
 
         reloadedSnapshot.Should().NotBeNull();
-        var finalRoot = Bind(KVOverlay.Create(reloadedSnapshot!.Snapshot, "reader"));
+        var finalRoot = Bind(KVOverlay.Create(reloadedSnapshot.Snapshot, "reader"));
         AssertDraftGraph(finalRoot);
     }
 
@@ -267,7 +267,7 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
         }
 
         reloaded.Should().NotBeNull();
-        var reloadedRoot = Bind(KVOverlay.Create(reloaded!.Snapshot, "reader"));
+        var reloadedRoot = Bind(KVOverlay.Create(reloaded.Snapshot, "reader"));
 
         var ids = reloadedRoot.Orders.GetActiveItemIds();
         ids.Should().BeEquivalentTo(
@@ -402,14 +402,14 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
 
         var order = root.Orders.GetById(BaseOrderId.ToString("D"));
         order.Should().NotBeNull();
-        order!.OrderNumber.Should().Be("ORD-001");
+        order.OrderNumber.Should().Be("ORD-001");
         var line = order.Lines.GetById(BaseLineId.ToString("D"));
         line.Should().NotBeNull();
-        line!.Sku.Should().Be("SKU-001");
+        line.Sku.Should().Be("SKU-001");
         line.Quantity.Should().Be(2);
         var adjustment = line.Adjustments.GetById(BaseAdjustmentId.ToString("D"));
         adjustment.Should().NotBeNull();
-        adjustment!.Reason.Should().Be("base-discount");
+        adjustment.Reason.Should().Be("base-discount");
         adjustment.Amount.Should().Be(-1.25m);
         adjustment.StatusHistory.Should().BeEquivalentTo([IntegrationSmartStatus.New, IntegrationSmartStatus.Approved], options => options.WithStrictOrdering());
         adjustment.StatusList.Should().BeEquivalentTo([IntegrationSmartStatus.InReview, IntegrationSmartStatus.Approved], options => options.WithStrictOrdering());
@@ -439,14 +439,14 @@ public sealed class MartenSerializationIntegrationTests : PostgresMartenTestBase
 
         var order = root.Orders.GetById(DraftOrderId.ToString("D"));
         order.Should().NotBeNull();
-        order!.OrderNumber.Should().Be("ORD-002");
+        order.OrderNumber.Should().Be("ORD-002");
         var line = order.Lines.GetById(DraftLineId.ToString("D"));
         line.Should().NotBeNull();
-        line!.Sku.Should().Be("SKU-002");
+        line.Sku.Should().Be("SKU-002");
         line.Quantity.Should().Be(5);
         var adjustment = line.Adjustments.GetById(DraftAdjustmentId.ToString("D"));
         adjustment.Should().NotBeNull();
-        adjustment!.Reason.Should().Be("draft-surcharge");
+        adjustment.Reason.Should().Be("draft-surcharge");
         adjustment.Amount.Should().Be(2.50m);
         adjustment.StatusHistory.Should().BeEquivalentTo([IntegrationSmartStatus.Approved, IntegrationSmartStatus.New], options => options.WithStrictOrdering());
         adjustment.StatusList.Should().BeEquivalentTo([IntegrationSmartStatus.New, IntegrationSmartStatus.InReview], options => options.WithStrictOrdering());

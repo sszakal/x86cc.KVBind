@@ -8,13 +8,13 @@ public abstract class KVRootNode : KVNode
 {
     private readonly List<object> pendingEvents = [];
 
-    internal KVReactionExecutionState ReactionExecutionState { get; } = new();
-
     /// <summary>
     /// Domain events raised (with <c>Raise(...)</c>) on this aggregate or any node beneath it since it was
     /// bound or last dequeued, in the order raised.
     /// </summary>
     public IReadOnlyList<object> PendingEvents => this.pendingEvents;
+
+    internal KVReactionExecutionState ReactionExecutionState { get; } = new();
 
     public static TSelf Create<TSelf>(KVModelRoot model, KVNodeDefinition definition)
         where TSelf : KVRootNode, new()
@@ -35,6 +35,16 @@ public abstract class KVRootNode : KVNode
         return Create<TSelf>(new KVModelRoot(overlay), definition);
     }
 
+    // Binds a child aggregate that inherits root members from its parent. Pass the parent's snapshot; the
+    // definition's inherited root members then read from it and reject writes. A null parent means "no
+    // parent" (a master) — inherited-marked members behave as normal editable fields.
+    public static TSelf Create<TSelf>(KVOverlay overlay, KVNodeDefinition definition, KVSnapshot? parentSnapshot)
+        where TSelf : KVRootNode, new()
+    {
+        ApplyInheritance(overlay, definition, parentSnapshot);
+        return Create<TSelf>(new KVModelRoot(overlay), definition);
+    }
+
     // Creates the aggregate and materializes declared defaults into the (uncommitted) overlay. Use this for a
     // brand-new aggregate; plain Create binds an existing one without touching its values.
     public static TSelf CreateNew<TSelf>(KVModelRoot model, KVNodeDefinition definition)
@@ -49,16 +59,6 @@ public abstract class KVRootNode : KVNode
         where TSelf : KVRootNode, new()
     {
         return CreateNew<TSelf>(new KVModelRoot(overlay), definition);
-    }
-
-    // Binds a child aggregate that inherits root members from its parent. Pass the parent's snapshot; the
-    // definition's inherited root members then read from it and reject writes. A null parent means "no
-    // parent" (a master) — inherited-marked members behave as normal editable fields.
-    public static TSelf Create<TSelf>(KVOverlay overlay, KVNodeDefinition definition, KVSnapshot? parentSnapshot)
-        where TSelf : KVRootNode, new()
-    {
-        ApplyInheritance(overlay, definition, parentSnapshot);
-        return Create<TSelf>(new KVModelRoot(overlay), definition);
     }
 
     public static TSelf CreateNew<TSelf>(KVOverlay overlay, KVNodeDefinition definition, KVSnapshot? parentSnapshot)
@@ -101,8 +101,6 @@ public abstract class KVRootNode : KVNode
         this.pendingEvents.Clear();
         return events;
     }
-
-    internal void AddPendingEvent(object domainEvent) => this.pendingEvents.Add(domainEvent);
 
     // Drops all draft changes, and with them the pending domain events they produced (including any a
     // reaction raises while derived values are recomputed: nothing is left to announce).
@@ -154,18 +152,29 @@ public abstract class KVRootNode : KVNode
         return this.Model.Overlay.ToCommit(timestamp);
     }
 
-    public KVPatchResult Patch(params KVPatchOperation[] operations)
-    {
-        KVPatchRuntime.Apply(this, operations);
-        var deltas = this.ComputeDeltas(string.Empty, isCollectionItem: false).Flatten();
-        return new KVPatchResult(deltas, this.Validate);
-    }
+    /// <summary>
+    /// Applies the operations. The result's <see cref="KVPatchResult.Changes"/> are this patch's changes only
+    /// (its operations and the change reactions they triggered); <see cref="GetAllChanges"/> has everything
+    /// the draft holds against its snapshot.
+    /// </summary>
+    public KVPatchResult Patch(params KVPatchOperation[] operations) => this.Patch((IEnumerable<KVPatchOperation>)operations);
 
+    /// <inheritdoc cref="Patch(KVPatchOperation[])"/>
     public KVPatchResult Patch(IEnumerable<KVPatchOperation> operations)
     {
-        KVPatchRuntime.Apply(this, operations);
-        var deltas = this.ComputeDeltas(string.Empty, isCollectionItem: false).Flatten();
-        return new KVPatchResult(deltas, this.Validate);
+        var state = this.ReactionExecutionState;
+        var recorder = new KVPatchChangeRecorder(state.Recorder);
+        state.Recorder = recorder;
+        try
+        {
+            KVPatchRuntime.Apply(this, operations);
+        }
+        finally
+        {
+            state.Recorder = recorder.Outer;
+        }
+
+        return new KVPatchResult(recorder.ToDeltas(), this.Validate);
     }
 
     public KVDraftChanges GetAllChanges()
@@ -178,6 +187,8 @@ public abstract class KVRootNode : KVNode
     {
         return KVValidationRuntime.Validate(this, this.GetValidationProfile());
     }
+
+    internal void AddPendingEvent(object domainEvent) => this.pendingEvents.Add(domainEvent);
 
     protected override void Bind(KVModel model, KVNodeDefinition definition, KVNodeBase? parent = null)
     {

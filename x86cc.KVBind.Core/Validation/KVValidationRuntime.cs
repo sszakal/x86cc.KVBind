@@ -18,6 +18,58 @@ internal static class KVValidationRuntime
         return new KVValidationResult(errors, [], true);
     }
 
+    // Shared by collection definitions and profile collection rules.
+    internal static void AddCountErrors(string collectionPath, int count, bool notEmpty, int? minCount, int? maxCount, List<KVValidationError> errors)
+    {
+        if (notEmpty && count == 0)
+        {
+            errors.Add(new KVValidationError(collectionPath, "not_empty", $"'{collectionPath}' collection cannot be empty."));
+        }
+
+        if (minCount.HasValue && count < minCount.Value)
+        {
+            errors.Add(new KVValidationError(collectionPath, "min_count", $"'{collectionPath}' collection must contain at least {minCount.Value} item(s)."));
+        }
+
+        if (maxCount.HasValue && count > maxCount.Value)
+        {
+            errors.Add(new KVValidationError(collectionPath, "max_count", $"'{collectionPath}' collection must contain at most {maxCount.Value} item(s)."));
+        }
+    }
+
+    // Shared by collection-level rules and profile rules. Null values are skipped; a value that is not a number
+    // is reported at its item field and suppresses the threshold check, since a partial sum would be misleading.
+    internal static void ValidateAggregateRule(List<KVValidationError> errors, string collectionPath, IKVCollectionNode? collectionNode, IReadOnlyList<string> children, KVCollectionAggregateRule aggregateRule)
+    {
+        decimal sum = 0m;
+        var hasNonNumeric = false;
+        foreach (var child in children)
+        {
+            if (collectionNode?.GetById(child) is not { } kvItem) continue;
+
+            var raw = kvItem.Model.Get<object?>(aggregateRule.FieldKey);
+            if (raw is null)
+            {
+                continue;
+            }
+
+            if (TryConvertToDecimal(raw, out var value))
+            {
+                sum += value;
+                continue;
+            }
+
+            hasNonNumeric = true;
+            var fieldPath = BuildPath(BuildPath(collectionPath, child), aggregateRule.FieldKey);
+            errors.Add(new KVValidationError(fieldPath, "aggregate_non_numeric", $"'{fieldPath}' value '{raw}' is not a number and cannot be summed for '{collectionPath}'."));
+        }
+
+        if (!hasNonNumeric && !Compare(sum, aggregateRule.Threshold, aggregateRule.Comparison))
+        {
+            errors.Add(new KVValidationError(collectionPath, aggregateRule.ErrorCode, $"'{collectionPath}' aggregate sum for '{aggregateRule.FieldKey}' is invalid."));
+        }
+    }
+
     private static void ValidateNode(KVNode node, KVValidationProfile profile, List<KVValidationError> errors, string currentCanonicalPath)
     {
         foreach (var field in node.Definition.Fields)
@@ -54,10 +106,10 @@ internal static class KVValidationRuntime
     private static void ValidateField(KVNode node, KVValidationProfile profile, List<KVValidationError> errors, string currentCanonicalPath, KVFieldDefinition field)
     {
         var path = BuildPath(currentCanonicalPath, field.SubSegmentPath);
-        var storagePath = node.ResolveStoragePath(field.SubSegmentPath);
+        var storagePath = KVNode.ResolveStoragePath(field.SubSegmentPath);
         var value = node.Model.Get<object?>(storagePath);
 
-        if (field.IsRequired && IsUnset(value))
+        if (field.IsRequired && KVValues.IsUnset(value))
         {
             errors.Add(new KVValidationError(path, "required", $"'{path}' is required."));
         }
@@ -71,8 +123,6 @@ internal static class KVValidationRuntime
 
         RunRules(field.ValidationRules, node, profile, errors, path, currentCanonicalPath);
     }
-
-    private static bool IsUnset(object? value) => value is null || (value is string text && string.IsNullOrWhiteSpace(text));
 
     private static void ValidateNestedNode(KVNode node, KVValidationProfile profile, List<KVValidationError> errors, string currentCanonicalPath, KVNestedNodeDefinition nestedNodeDefinition)
     {
@@ -126,58 +176,6 @@ internal static class KVValidationRuntime
             {
                 ValidateNode(itemNode, profile, errors, BuildPath(collectionPath, child));
             }
-        }
-    }
-
-    // Shared by collection definitions and profile collection rules.
-    internal static void AddCountErrors(string collectionPath, int count, bool notEmpty, int? minCount, int? maxCount, List<KVValidationError> errors)
-    {
-        if (notEmpty && count == 0)
-        {
-            errors.Add(new KVValidationError(collectionPath, "not_empty", $"'{collectionPath}' collection cannot be empty."));
-        }
-
-        if (minCount.HasValue && count < minCount.Value)
-        {
-            errors.Add(new KVValidationError(collectionPath, "min_count", $"'{collectionPath}' collection must contain at least {minCount.Value} item(s)."));
-        }
-
-        if (maxCount.HasValue && count > maxCount.Value)
-        {
-            errors.Add(new KVValidationError(collectionPath, "max_count", $"'{collectionPath}' collection must contain at most {maxCount.Value} item(s)."));
-        }
-    }
-
-    // Shared by collection-level rules and profile rules. Null values are skipped; a value that is not a number
-    // is reported at its item field and suppresses the threshold check, since a partial sum would be misleading.
-    internal static void ValidateAggregateRule(List<KVValidationError> errors, string collectionPath, IKVCollectionNode? collectionNode, IReadOnlyList<string> children, KVCollectionAggregateRule aggregateRule)
-    {
-        decimal sum = 0m;
-        var hasNonNumeric = false;
-        foreach (var child in children)
-        {
-            if (collectionNode?.GetById(child) is not { } kvItem) continue;
-
-            var raw = kvItem.Model.Get<object?>(aggregateRule.FieldKey);
-            if (raw is null)
-            {
-                continue;
-            }
-
-            if (TryConvertToDecimal(raw, out var value))
-            {
-                sum += value;
-                continue;
-            }
-
-            hasNonNumeric = true;
-            var fieldPath = BuildPath(BuildPath(collectionPath, child), aggregateRule.FieldKey);
-            errors.Add(new KVValidationError(fieldPath, "aggregate_non_numeric", $"'{fieldPath}' value '{raw}' is not a number and cannot be summed for '{collectionPath}'."));
-        }
-
-        if (!hasNonNumeric && !Compare(sum, aggregateRule.Threshold, aggregateRule.Comparison))
-        {
-            errors.Add(new KVValidationError(collectionPath, aggregateRule.ErrorCode, $"'{collectionPath}' aggregate sum for '{aggregateRule.FieldKey}' is invalid."));
         }
     }
 

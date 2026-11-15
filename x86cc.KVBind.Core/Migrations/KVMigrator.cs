@@ -40,19 +40,6 @@ public static class KVMigrator
         return BuildFromPending(snapshot, pending, user, timestamp, inheritedPrefixes: []);
     }
 
-    /// <summary>Builds the migration commits and applies them to <paramref name="snapshot"/> in place.</summary>
-    public static IReadOnlyList<KVCommit> Migrate(
-        KVSnapshot snapshot,
-        IEnumerable<KVMigration> migrations,
-        string user = MigrationUser,
-        DateTimeOffset? timestamp = null)
-    {
-        var commits = BuildCommits(snapshot, migrations, user, timestamp);
-        foreach (var commit in commits)
-            snapshot.Apply(commit);
-        return commits;
-    }
-
     /// <summary>
     /// Builds the pending migration commits using the migrations registered on a root definition. Takes an
     /// O(1) fast path when the snapshot is already current (the migration list is not scanned), and otherwise
@@ -76,6 +63,19 @@ public static class KVMigrator
 
         // A child snapshot must not migrate its inherited members (always read from the parent).
         return BuildFromPending(snapshot, pending, user, timestamp, definition.InheritedPrefixes);
+    }
+
+    /// <summary>Builds the migration commits and applies them to <paramref name="snapshot"/> in place.</summary>
+    public static IReadOnlyList<KVCommit> Migrate(
+        KVSnapshot snapshot,
+        IEnumerable<KVMigration> migrations,
+        string user = MigrationUser,
+        DateTimeOffset? timestamp = null)
+    {
+        var commits = BuildCommits(snapshot, migrations, user, timestamp);
+        foreach (var commit in commits)
+            snapshot.Apply(commit);
+        return commits;
     }
 
     /// <summary>Applies the pending migrations registered on a root definition to <paramref name="snapshot"/>.</summary>

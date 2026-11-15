@@ -4,6 +4,20 @@ using x86cc.KVBind.Core;
 
 namespace x86cc.KVBind.UnitTests.Core;
 
+public enum PvtKind
+{
+    Standard,
+    Exclusive
+}
+
+[Flags]
+public enum PvtAccess
+{
+    Read = 1,
+    Write = 2,
+    Share = 4
+}
+
 public class PatchValueTypeTests : KVModelTestBase
 {
     public PatchValueTypeTests()
@@ -214,20 +228,6 @@ public class PatchValueTypeTests : KVModelTestBase
 
         root.Validate().Errors.Should().ContainSingle(e => e.Path == "Status" && e.Code == "allowed_values");
     }
-}
-
-public enum PvtKind
-{
-    Standard,
-    Exclusive
-}
-
-[Flags]
-public enum PvtAccess
-{
-    Read = 1,
-    Write = 2,
-    Share = 4
 }
 
 public partial class PvtRoot : KVRootNode

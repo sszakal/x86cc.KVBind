@@ -46,7 +46,12 @@ public class AllowedElementSequenceTests
     [InlineData("{}")]
     [InlineData("3")]
     [InlineData("\"one\"")]
-    public void IsAllowed_WhenJsonElementIsNotAnArray_ReturnsFalse(string json)
+    [InlineData("[true]")]
+    [InlineData("[false]")]
+    [InlineData("[null]")]
+    [InlineData("[{}]")]
+    [InlineData("[2.5]")]
+    public void IsAllowed_WhenJsonIsNotAnArrayOfTokens_ReturnsFalse(string json)
     {
         using var document = JsonDocument.Parse(json);
 
@@ -59,18 +64,5 @@ public class AllowedElementSequenceTests
         using var document = JsonDocument.Parse("[3, 5]");
 
         Words.IsAllowed(document.RootElement).Should().BeTrue();
-    }
-
-    [Theory]
-    [InlineData("[true]")]
-    [InlineData("[false]")]
-    [InlineData("[null]")]
-    [InlineData("[{}]")]
-    [InlineData("[2.5]")]
-    public void IsAllowed_WhenJsonArrayHoldsNonTokenElement_ReturnsFalse(string json)
-    {
-        using var document = JsonDocument.Parse(json);
-
-        Words.IsAllowed(document.RootElement).Should().BeFalse();
     }
 }

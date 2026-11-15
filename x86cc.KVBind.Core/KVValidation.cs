@@ -14,10 +14,13 @@ public enum KVCollectionAggregateComparison
     GreaterThanOrEqual
 }
 
+// TValue ties a factory to the value type of the field it builds rules for, at compile time.
+#pragma warning disable S2326
 internal interface IKVFieldValidationRuleFactory<TValue>
 {
     IReadOnlyList<KVCompiledValidationRule> Build();
 }
+#pragma warning restore S2326
 
 internal interface IKVCollectionValidationRuleFactory
 {
@@ -61,7 +64,7 @@ public sealed class KVFieldValidationProfileBuilder<TValue> : IKVFieldValidation
             current => current is TProfile,
             (node, path, currentCanonicalPath, errors) =>
             {
-                var storagePath = node.ResolveStoragePathForCanonicalPath(path, currentCanonicalPath);
+                var storagePath = KVNode.ResolveStoragePathForCanonicalPath(path, currentCanonicalPath);
                 var value = node.Model.Get<object?>(storagePath);
                 ruleBuilder.Evaluate(path, value, errors);
             }));
@@ -124,13 +127,10 @@ public sealed class KVFieldValueRuleBuilder<TValue>
 
     internal void Evaluate(string path, object? value, List<KVValidationError> errors)
     {
-        if (this.required)
+        if (this.required && KVValues.IsUnset(value))
         {
-            if (value is null || (value is string requiredText && string.IsNullOrWhiteSpace(requiredText)))
-            {
-                errors.Add(new KVValidationError(path, "required", $"'{path}' is required."));
-                return;
-            }
+            errors.Add(new KVValidationError(path, "required", $"'{path}' is required."));
+            return;
         }
 
         this.constraints.Evaluate(path, value, errors);
@@ -257,7 +257,7 @@ public sealed class KVCollectionRuleBuilder<TModel>
 
     internal void Evaluate(string path, KVNode node, string currentCanonicalPath, List<KVValidationError> errors)
     {
-        var collectionKey = node.ResolveStoragePathForCanonicalPath(path, currentCanonicalPath);
+        var collectionKey = KVNode.ResolveStoragePathForCanonicalPath(path, currentCanonicalPath);
         var collectionDef = node.Definition.FindCollection(collectionKey);
         var collectionNode = collectionDef?.GetCollection(node);
         var children = collectionNode?.GetActiveItemIds() ?? [];
@@ -276,7 +276,6 @@ public sealed class KVCollectionRuleBuilder<TModel>
         this.aggregateRules.Add(rule);
         return this;
     }
-
 }
 
 public sealed class KVCollectionAggregateRuleBuilder<TModel>
@@ -358,7 +357,7 @@ public sealed class KVGroupRuleBuilder<TNode>
             // A nested node slot is "set" when a subtype is initialized; a field when it holds a value.
             var missing = accessor.TryGetNestedNodeInitialized(fieldKey, out var initialized)
                 ? !initialized
-                : IsUnset(accessor.GetRaw(fieldKey));
+                : KVValues.IsUnset(accessor.GetRaw(fieldKey));
             if (missing)
             {
                 var path = accessor.ResolveCanonicalPath(fieldKey);
@@ -495,8 +494,6 @@ public sealed class KVGroupRuleBuilder<TNode>
             constraints.Evaluate(accessor.ResolveCanonicalPath(fieldKey), accessor.GetRaw(fieldKey), errors));
         return this;
     }
-
-    private static bool IsUnset(object? value) => value is null || (value is string text && string.IsNullOrWhiteSpace(text));
 }
 
 public sealed class KVGroupValueAccessor<TNode>
@@ -533,6 +530,16 @@ public sealed class KVGroupValueAccessor<TNode>
         throw new InvalidOperationException($"Field '{this.ResolveCanonicalPath(fieldKey)}' contains value type '{raw.GetType().FullName}', which cannot be cast to '{typeof(TValue).FullName}'.");
     }
 
+    public object? Get(string fieldKey)
+    {
+        if (string.IsNullOrWhiteSpace(fieldKey))
+        {
+            throw new ArgumentException("Field key is required.", nameof(fieldKey));
+        }
+
+        return this.GetRaw(fieldKey);
+    }
+
     public bool HasValue<TValue>(Expression<Func<TNode, TValue>> fieldSelector)
     {
         ArgumentNullException.ThrowIfNull(fieldSelector);
@@ -548,16 +555,6 @@ public sealed class KVGroupValueAccessor<TNode>
             string text => !string.IsNullOrWhiteSpace(text),
             _ => true
         };
-    }
-
-    public object? Get(string fieldKey)
-    {
-        if (string.IsNullOrWhiteSpace(fieldKey))
-        {
-            throw new ArgumentException("Field key is required.", nameof(fieldKey));
-        }
-
-        return this.GetRaw(fieldKey);
     }
 
     public IReadOnlyList<string> GetCollectionChildIds(string collectionPath)
@@ -615,6 +612,6 @@ public sealed class KVGroupValueAccessor<TNode>
 
     private string ResolveStoragePath(string fieldKey)
     {
-        return this.node.ResolveStoragePathForCanonicalPath(this.ResolveCanonicalPath(fieldKey), this.currentCanonicalPath);
+        return KVNode.ResolveStoragePathForCanonicalPath(this.ResolveCanonicalPath(fieldKey), this.currentCanonicalPath);
     }
 }
