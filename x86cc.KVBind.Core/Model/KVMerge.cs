@@ -176,6 +176,21 @@ public static class KVMerge
             return mergedIds;
         }
 
+        // True when ours moved items (the relative order of the items it shares with the base differs) and the
+        // merged list does not keep that order for the items it shares with ours.
+        private static bool LosesOrder(List<string> baseIds, List<string> ourIds, List<string> mergedIds)
+        {
+            var moved = !Shared(ourIds, baseIds).SequenceEqual(Shared(baseIds, ourIds), System.StringComparer.Ordinal);
+            return moved && !Shared(ourIds, mergedIds).SequenceEqual(Shared(mergedIds, ourIds), System.StringComparer.Ordinal);
+        }
+
+        // The ids of order that also appear in other, in order's order.
+        private static List<string> Shared(List<string> order, List<string> other)
+        {
+            var lookup = other.ToHashSet(System.StringComparer.Ordinal);
+            return order.Where(lookup.Contains).ToList();
+        }
+
         private static bool IsReservedLeaf(string key, string segment) =>
             string.Equals(key, segment, System.StringComparison.Ordinal)
             || key.EndsWith("/" + segment, System.StringComparison.Ordinal);
@@ -315,7 +330,26 @@ public static class KVMerge
             this.AddIncomingItemAdditions(collectionPath, addedByTarget, addedByOursSet);
             this.AddIncomingItemRemovals(collectionPath, removedByTarget, removedByOurs, caseBConflicted);
 
-            var mergedIds = BuildMergedIds(targetIds, removedByOurs, addedByOurs, caseBConflicted);
+            // Upstream left the membership exactly as it was: the draft's list (its additions, removals and
+            // order) stands as is. Otherwise the target's order is the frame, as built below.
+            var targetUnchanged = targetIds.SequenceEqual(baseIds, System.StringComparer.Ordinal);
+            var mergedIds = targetUnchanged
+                ? ourIds
+                : BuildMergedIds(targetIds, removedByOurs, addedByOurs, caseBConflicted);
+
+            // The merged list is framed by the target's order: a reorder in the draft is lost. Report it.
+            if (oursTouchedItems && !targetUnchanged && LosesOrder(baseIds, ourIds, mergedIds))
+            {
+                this.conflicts.Add(new KVConflict
+                {
+                    Path = collectionPath,
+                    Kind = KVConflictKind.Order,
+                    BaseValue = this.baseSnapshot.Data.GetValueOrDefault(key),
+                    MainValue = theirsItemsValue,
+                    OursValue = oursItemsValue,
+                    Resolution = KVConflictResolution.Theirs
+                });
+            }
 
             this.consumed.Add(key);
 

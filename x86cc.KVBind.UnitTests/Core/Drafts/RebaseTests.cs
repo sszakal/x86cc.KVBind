@@ -539,6 +539,87 @@ public class RebaseTests
         Effective(overlay, "Col/y/Name").Should().Be("item y");
     }
 
+    // ── Collection membership: order ─────────────────────────────────────────
+
+    [Fact]
+    public void FinishRebase_KeepsTheDraftsOrder_WhenUpstreamLeftTheMembershipAlone()
+    {
+        var v1 = SnapshotV(("Col/$items", Items("a", "b")), ("Col/a/Name", "A"), ("Col/b/Name", "B"));
+        var overlay = KVOverlay.Create(v1.Clone(), "editor");
+        overlay.Set("Col/$items", Items("b", "a")); // MOVE
+        var v2 = SnapshotV(("Col/$items", Items("a", "b")), ("Col/a/Name", "A2"), ("Col/b/Name", "B"));
+
+        Rebase(overlay, v2).Should().Be(KVRebaseOutcome.CanAutomerge);
+        overlay.FinishRebase();
+
+        EffectiveItems(overlay, "Col/$items").Should().Equal("b", "a");
+        Effective(overlay, "Col/a/Name").Should().Be("A2");
+    }
+
+    [Fact]
+    public void BeginRebase_WhenBothChangedTheMembership_ReportsTheDraftsLostOrder_AsAFixedConflict()
+    {
+        var v1 = SnapshotV(("Col/$items", Items("a", "b", "c")), ("Col/a/Name", "A"));
+        var overlay = KVOverlay.Create(v1.Clone(), "editor");
+        overlay.Set("Col/$items", Items("c", "a", "b")); // MOVE c to the front
+        overlay.Set("Col/a/Name", "A, mine");
+        var v2 = SnapshotV(("Col/$items", Items("a", "b", "c", "d")), ("Col/a/Name", "A"), ("Col/d/Name", "D"));
+
+        Rebase(overlay, v2).Should().Be(KVRebaseOutcome.CanAutomerge, "a fixed conflict never blocks");
+
+        var order = overlay.Conflicts.Should().ContainSingle(c => c.Kind == KVConflictKind.Order).Subject;
+        order.Path.Should().Be("Col");
+        order.Resolution.Should().Be(KVConflictResolution.Theirs);
+        order.IsFixed.Should().BeTrue();
+        order.RequiresResolution.Should().BeFalse();
+        order.IsIncoming.Should().BeFalse();
+        KVMerge.ExtractItemIds(order.OursValue).Should().Equal("c", "a", "b");
+        KVMerge.ExtractItemIds(order.MainValue).Should().Equal("a", "b", "c", "d");
+        KVMerge.ExtractItemIds(order.BaseValue).Should().Equal("a", "b", "c");
+
+        overlay.FinishRebase();
+        EffectiveItems(overlay, "Col/$items").Should().Equal("a", "b", "c", "d");
+        Effective(overlay, "Col/a/Name").Should().Be("A, mine", "the fixed entry applies nothing to the collection's items");
+        Effective(overlay, "Col/d/Name").Should().Be("D");
+    }
+
+    [Fact]
+    public void ResolveConflict_OnALostOrder_Throws()
+    {
+        var v1 = SnapshotV(("Col/$items", Items("a", "b")));
+        var overlay = KVOverlay.Create(v1.Clone(), "editor");
+        overlay.Set("Col/$items", Items("b", "a"));
+        Rebase(overlay, SnapshotV(("Col/$items", Items("a", "b", "c"))));
+
+        var act = () => overlay.ResolveConflict("Col", KVConflictResolution.Ours);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*cannot be chosen*");
+    }
+
+    [Fact]
+    public void BeginRebase_WhenTheDraftOnlyAddedItems_ReportsNoLostOrder()
+    {
+        var v1 = SnapshotV(("Col/$items", Items("a", "b")));
+        var overlay = KVOverlay.Create(v1.Clone(), "editor");
+        overlay.Set("Col/$items", Items("x", "a", "b")); // ADD x at the front: an addition, not a move
+        Rebase(overlay, SnapshotV(("Col/$items", Items("a", "b", "y"))));
+
+        overlay.Conflicts.Should().NotContain(c => c.Kind == KVConflictKind.Order);
+    }
+
+    [Fact]
+    public void BeginRebase_WhenUpstreamMadeTheSameMove_ReportsNoLostOrder()
+    {
+        var v1 = SnapshotV(("Col/$items", Items("a", "b")));
+        var overlay = KVOverlay.Create(v1.Clone(), "editor");
+        overlay.Set("Col/$items", Items("b", "a"));
+        Rebase(overlay, SnapshotV(("Col/$items", Items("b", "a", "c"))));
+
+        overlay.Conflicts.Should().NotContain(c => c.Kind == KVConflictKind.Order);
+        overlay.FinishRebase();
+        EffectiveItems(overlay, "Col/$items").Should().Equal("b", "a", "c");
+    }
+
     // ── Collection membership: stable (seeded) ids added on both sides ───────
 
     [Fact]

@@ -53,6 +53,18 @@ builder.Migration(4, m => m.ReplaceNestedType(
 var commits = KVMigrator.Migrate(snapshot, definition);   // one chained commit per pending migration
 ```
 
+## Drafts
+
+A draft's base is a past commit and is never migrated in place. After migrating (and saving) the aggregate's snapshot, move each draft onto it:
+
+```csharp
+var result = KVMigrator.RebaseDraft(draft, migratedSnapshot, definition);   // conflicts → committed side by default
+// result.ResolvedConflicts / result.RemovedByMigration: what the draft lost; show them to the user
+root.NotifyReplaced();                                                       // after binding: no reactions ran
+```
+
+Batch: `KVMigrator.RebaseDraftsAsync(subjects, definition)` runs each prepare once over the drafts. Value factories run on the snapshot, the draft's base and its view, so keep them deterministic (no `Guid.NewGuid()` / now — they surface as conflicts; take those from `Prepare`, keyed by aggregate). Test drafts in `Core/Migrations/DraftMigrationTests`.
+
 ## Two correctness traps
 
 1. **Stamp new aggregates.** Mint via `definition.NewSnapshot()` so it is born at `CurrentSchemaVersion`. A raw `new KVSnapshot()` defaults to version `0` and gets needlessly re-migrated as if it were legacy data.

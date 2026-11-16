@@ -45,13 +45,15 @@ export interface DomainEvent { type: string; payload: string; raisedAt: string; 
 export interface RebaseConflict {
   path: string;
   displayPath: string;
-  kind: 'Value' | 'DeleteEdit' | 'Structural' | 'Incoming' | 'IncomingItem';
+  kind: 'Value' | 'DeleteEdit' | 'Structural' | 'Incoming' | 'IncomingItem' | 'Order';
   resolution: 'Unresolved' | 'Ours' | 'Theirs' | 'Custom';
   baseValue: unknown;
   mainValue: unknown;
   oursValue: unknown;
   isIncoming: boolean;
   requiresResolution: boolean;
+  // A conflict with a fixed outcome (Order): shown for information, it cannot be resolved.
+  isFixed: boolean;
 }
 
 export interface AggregateDraft {

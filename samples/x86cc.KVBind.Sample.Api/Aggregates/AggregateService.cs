@@ -245,6 +245,7 @@ public sealed class AggregateService(IDocumentSession session, RequestTimings ti
         if (existing is not null)
         {
             await this.AttachBaseAsync(existing, snapshotDocument, cancellationToken);
+            await this.MigrateDraftAsync(model, existing, snapshotDocument, parentSnapshot, cancellationToken);
             return this.ProjectDraft(model, existing, snapshotDocument, parentSnapshot);
         }
 
@@ -334,6 +335,7 @@ public sealed class AggregateService(IDocumentSession session, RequestTimings ti
         overlay.Reset(snapshotDocument.Snapshot);
         draft.UpdateFrom(overlay);
         draft.PendingEvents.Clear(); // nothing they announced happened
+        draft.MigrationNotices.Clear();
         session.Store(draft);
         await timings.MeasureAsync("persist", () => session.SaveChangesAsync(cancellationToken));
 
@@ -743,7 +745,8 @@ public sealed class AggregateService(IDocumentSession session, RequestTimings ti
         conflict.MainValue?.Value,
         conflict.OursValue?.Value,
         conflict.IsIncoming,
-        conflict.RequiresResolution);
+        conflict.RequiresResolution,
+        conflict.IsFixed);
 
     private static KVRebaseOutcome RebaseStateOutcome(KVOverlay overlay) =>
         overlay.HasUnresolvedConflicts ? KVRebaseOutcome.HasUnresolvedConflicts : KVRebaseOutcome.CanAutomerge;
@@ -898,7 +901,51 @@ public sealed class AggregateService(IDocumentSession session, RequestTimings ti
 
         await this.AttachBaseAsync(draft, snapshotDocument, cancellationToken);
         var parentSnapshot = await this.LoadParentSnapshotAsync(model, snapshotDocument, cancellationToken);
+        await this.MigrateDraftAsync(model, draft, snapshotDocument, parentSnapshot, cancellationToken);
         return (draft, snapshotDocument, parentSnapshot);
+    }
+
+    // A draft opened before a deployment's migration is still in the old layout. Its snapshot was migrated
+    // on load (LoadSnapshotAsync), so move the draft onto it now: its changes are migrated and merged with
+    // everything committed since its base, the committed side winning every conflict. What the draft lost
+    // is kept as notices for the user. Conflicts on derived values are not news: they are recomputed.
+    private async Task MigrateDraftAsync(
+        IAggregateModel model, AggregateDraftDocument draft, AggregateSnapshotDocument latest, KVSnapshot? parentSnapshot, CancellationToken cancellationToken)
+    {
+        if (draft.Base is not { } draftBase || draftBase.SchemaVersion >= latest.Snapshot.SchemaVersion)
+        {
+            return;
+        }
+
+        var overlay = draft.ToOverlay();
+        var result = timings.Measure("migrate", () => KVMigrator.RebaseDraft(overlay, latest.Snapshot, model.Definition));
+
+        // Migration runs no change reactions: recompute derived values against the migrated data.
+        var root = timings.Measure("bind", () => model.Bind(overlay, parentSnapshot));
+        timings.Measure("react", () => root.NotifyReplaced());
+
+        draft.UpdateFrom(overlay);
+        draft.PendingEvents.AddRange(ToEventRecords(root.DequeueEvents()));
+        draft.MigrationNotices.AddRange(result.ResolvedConflicts
+            .Where(conflict => !IsDerived(model, conflict.Path))
+            .Select(conflict => new DraftMigrationNotice
+            {
+                Path = conflict.Path,
+                Kind = conflict.Kind == KVConflictKind.Order ? "Reordered" : "Replaced",
+                DraftValue = conflict.OursValue?.Value,
+                CommittedValue = conflict.MainValue?.Value,
+                SchemaVersion = result.ToVersion
+            }));
+        draft.MigrationNotices.AddRange(result.RemovedByMigration.Select(removal => new DraftMigrationNotice
+        {
+            Path = removal.Path,
+            Kind = "Removed",
+            DraftValue = removal.Value.Value,
+            SchemaVersion = removal.Version
+        }));
+
+        session.Store(draft);
+        await timings.MeasureAsync("persist", () => session.SaveChangesAsync(cancellationToken));
     }
 
     // Gives a loaded draft its base snapshot: the aggregate's current one while the draft is up to date,
@@ -1054,7 +1101,8 @@ public sealed class AggregateService(IDocumentSession session, RequestTimings ti
                 latest.Snapshot.LastCommitId,
                 draft.IsRebasing ? draft.RebaseTarget?.LastCommitId : null,
                 draft.Conflicts.Select(conflict => ProjectConflict(model.Schema, conflict)).ToArray(),
-                draft.PendingEvents);
+                draft.PendingEvents,
+                draft.MigrationNotices);
         });
     }
 

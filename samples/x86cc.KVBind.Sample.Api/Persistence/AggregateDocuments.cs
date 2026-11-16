@@ -74,6 +74,12 @@ public sealed class AggregateDraftDocument
     /// <summary>Domain events raised by patches to this draft; published with the commit, dropped on reset.</summary>
     public List<AggregateEventRecord> PendingEvents { get; set; } = [];
 
+    /// <summary>
+    /// The draft's changes that did not survive moving the draft onto a migrated snapshot: replaced by the
+    /// committed value, or removed by a migration. Shown to the user until the draft is committed or reset.
+    /// </summary>
+    public List<DraftMigrationNotice> MigrationNotices { get; set; } = [];
+
     public static AggregateDraftDocument Create(string model, Guid aggregateId, string user, KVOverlay overlay)
     {
         var document = new AggregateDraftDocument
@@ -124,6 +130,25 @@ public sealed class AggregateDraftDocument
         this.Conflicts = [.. overlay.Conflicts];
         this.UpdatedAt = DateTimeOffset.UtcNow;
     }
+}
+
+/// <summary>
+/// One draft change lost when the draft was moved onto a migrated snapshot. <see cref="Kind"/> is
+/// <c>Replaced</c> (it conflicted with a committed change, which won), <c>Reordered</c> (the draft's order of
+/// the collection at <see cref="Path"/> gave way to the committed one; the values are the item id lists) or
+/// <c>Removed</c> (a migration deleted the field). <see cref="Path"/> is in the layout of <see cref="SchemaVersion"/>.
+/// </summary>
+public sealed class DraftMigrationNotice
+{
+    public string Path { get; set; } = string.Empty;
+
+    public string Kind { get; set; } = string.Empty;
+
+    public object? DraftValue { get; set; }
+
+    public object? CommittedValue { get; set; }
+
+    public int SchemaVersion { get; set; }
 }
 
 /// <summary>One commit of an aggregate, with its projected change rows and the domain events it published.</summary>

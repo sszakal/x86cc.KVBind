@@ -231,6 +231,31 @@ public sealed class ApiScenarioTests(SampleApiFixture fixture)
     }
 
     [Fact]
+    public async Task Rebase_ShowsALostReorder_AsAFixedConflict_ThatDoesNotBlockFinishing()
+    {
+        var id = await this.CreateAsync(patches: [Add("/Locations", "a", "BUILDING"), Set("/Locations/a/Name", "A"), Add("/Locations", "b", "BUILDING"), Set("/Locations/b/Name", "B")]);
+        var alice = await this.OpenAsync(id, "alice");
+        var bob = await this.OpenAsync(id, "bob");
+        await this.PatchAsync(id, bob, Op("MOVE", "/Locations/b", 0));
+        await this.PatchAsync(id, alice, Add("/Locations", "c", "VEHICLE"), Set("/Locations/c/Name", "C"));
+        await this.CommitAsync(id, alice, "alice");
+
+        var rebase = await fixture.Service().BeginRebaseAsync(this.Underwriting, id, bob, default);
+
+        rebase!.Outcome.Should().Be(nameof(KVBind.Core.Model.KVRebaseOutcome.CanAutomerge));
+        var order = rebase.Conflicts.Should().ContainSingle(c => c.Kind == "Order").Subject;
+        order.Path.Should().Be("Locations");
+        order.IsFixed.Should().BeTrue();
+        order.RequiresResolution.Should().BeFalse();
+        order.Resolution.Should().Be("Theirs");
+        var choose = () => fixture.Service().ResolveRebaseConflictAsync(this.Underwriting, id, bob, new ResolveRebaseConflictRequest("Locations", "Ours"), default);
+        await choose.Should().ThrowAsync<Exception>();
+
+        var finished = await fixture.Service().FinishRebaseAsync(this.Underwriting, id, bob, default);
+        finished!.Data["Locations"]!.AsArray().Select(location => location!["$id"]!.GetValue<string>()).Should().Equal("a", "b", "c");
+    }
+
+    [Fact]
     public async Task ConcurrentSaves_OfTheSameDraft_LoseNoUpdate()
     {
         var (id, draft) = await this.CreateAndOpenAsync("alice");

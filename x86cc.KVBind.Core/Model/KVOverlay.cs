@@ -457,6 +457,9 @@ public sealed class KVOverlay
 
     private void ApplyResolution(KVConflict conflict)
     {
+        if (conflict.IsFixed)
+            return; // the merged $items is already in the draft; nothing to apply
+
         if (conflict.IsIncoming)
             this.ApplyIncomingResolution(conflict);
         else

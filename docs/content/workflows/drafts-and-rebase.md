@@ -86,6 +86,9 @@ switch (outcome)
 | `Structural` | yes | Both sides switched a polymorphic node's `$type` to different types; resolved as a whole (Ours or Theirs, not Custom). |
 | `Incoming` | no | Upstream changed something the draft did not touch. Defaults to accept. |
 | `IncomingItem` | no | Upstream added or removed a collection item the draft did not touch. Defaults to accept. |
+| `Order` | no — fixed | The draft reordered a collection whose membership upstream also changed. The merged order is upstream's, with the draft's new items appended; the entry reports the draft's lost order (`Path` is the collection, the values are the `$items` lists). Always `Theirs`; `ResolveConflict` throws (`IsFixed`). |
+
+Collection order: when upstream left a collection's membership as it was, the draft's list (its additions, removals and order) stands. When both sides changed it, the merged list is framed by upstream's order, and a reorder in the draft is reported as an `Order` entry.
 
 ### Resolutions
 

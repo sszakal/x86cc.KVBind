@@ -129,6 +129,31 @@ interface ConflictRow extends RebaseConflict {
         </div>
       }
 
+      <!-- ═══ FIXED — reported, no choice ═══ -->
+      @if (fixedRows.length > 0) {
+        <div>
+          <h2 class="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">Order · taken from upstream</h2>
+          @for (row of fixedRows; track row.path) {
+            <div class="mb-2 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03]">
+              <code class="text-sm font-medium text-gray-900 dark:text-white">{{ row.displayPath || row.path }}</code>
+              <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                You reordered this list, and its items also changed upstream. The upstream order is kept, with your new items at the end.
+              </p>
+              <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                <div class="rounded-lg border border-blue-200 bg-blue-50/50 p-3 dark:border-blue-900/50 dark:bg-blue-950/20">
+                  <p class="text-[11px] font-medium uppercase text-blue-500">Upstream order (kept)</p>
+                  <p class="mt-1 text-sm text-gray-700 dark:text-gray-200">{{ order(row.mainValue) }}</p>
+                </div>
+                <div class="rounded-lg border border-brand-200 bg-brand-50/50 p-3 dark:border-brand-900/50 dark:bg-brand-950/20">
+                  <p class="text-[11px] font-medium uppercase text-brand-500">Your order</p>
+                  <p class="mt-1 text-sm text-gray-700 dark:text-gray-200">{{ order(row.oursValue) }}</p>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+
       <!-- ═══ INCOMING — default accepted, rejectable ═══ -->
       @if (incomingRows.length > 0) {
         <div>
@@ -195,6 +220,7 @@ export class DraftRebaseComponent implements OnInit {
 
   get conflictRows(): ConflictRow[] { return this.rows.filter(r => r.requiresResolution); }
   get incomingRows(): ConflictRow[] { return this.rows.filter(r => r.isIncoming); }
+  get fixedRows(): ConflictRow[] { return this.rows.filter(r => r.isFixed); }
 
   get resolvedConflictCount(): number {
     return this.conflictRows.filter(r => r.resolution !== 'Unresolved').length;
@@ -314,6 +340,11 @@ export class DraftRebaseComponent implements OnInit {
     return `${this.display(row.baseValue)} → ${this.display(row.mainValue)}`;
   }
 
+
+  // The item ids of a collection's membership list, in order.
+  order(value: unknown): string {
+    return Array.isArray(value) && value.length > 0 ? value.join(' → ') : '(none)';
+  }
 
   display(value: unknown): string {
     if (value === null || value === undefined) return '(none)';

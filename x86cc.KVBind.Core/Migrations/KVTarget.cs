@@ -91,7 +91,8 @@ public sealed class KVTarget
         => source.TryGetValue(Combine(instancePath, "$type"), out var value)
            && value?.Value as string == token;
 
-    // The distinct direct child segments of a prefix present in the data (e.g. the item ids of a collection).
+    // The distinct direct child segments of a prefix present in the data (e.g. the item ids of a collection),
+    // without the reserved '$' keys stored next to them.
     private static IEnumerable<string> ChildSegments(string prefix, KVDictionary source)
     {
         var scan = prefix.Length == 0 ? string.Empty : prefix + "/";
@@ -104,7 +105,9 @@ public sealed class KVTarget
             var rest = key.AsSpan(scan.Length);
             var slash = rest.IndexOf('/');
             var child = (slash < 0 ? rest : rest[..slash]).ToString();
-            if (child.Length > 0 && seen.Add(child))
+
+            // Reserved keys ($items, $type) are never items: item ids cannot start with '$'.
+            if (child.Length > 0 && child[0] != '$' && seen.Add(child))
                 yield return child;
         }
     }

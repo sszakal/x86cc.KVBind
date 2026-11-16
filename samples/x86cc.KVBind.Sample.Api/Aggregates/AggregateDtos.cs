@@ -65,18 +65,22 @@ public sealed record AggregateDraftResponse(
     Guid? LatestCommitId,
     Guid? RebaseTargetCommitId,
     IReadOnlyList<RebaseConflictResponse> Conflicts,
-    IReadOnlyList<AggregateEventRecord> PendingEvents);
+    IReadOnlyList<AggregateEventRecord> PendingEvents,
+
+    // Draft changes lost when the draft was moved onto a migrated snapshot (see DraftMigrationNotice).
+    IReadOnlyList<DraftMigrationNotice> MigrationNotices);
 
 public sealed record RebaseConflictResponse(
     string Path,
     string DisplayPath,
-    string Kind,             // Value | DeleteEdit | Structural | Incoming | IncomingItem
+    string Kind,             // Value | DeleteEdit | Structural | Incoming | IncomingItem | Order
     string Resolution,       // Unresolved | Ours | Theirs | Custom
     object? BaseValue,       // V1 — common ancestor
     object? MainValue,       // V2 — committed upstream
     object? OursValue,       // draft value (null when the draft deleted/never touched the path)
     bool IsIncoming,         // true = non-conflicting incoming change (default accept, rejectable)
-    bool RequiresResolution); // true = real conflict that blocks finishing until resolved
+    bool RequiresResolution, // true = real conflict that blocks finishing until resolved
+    bool IsFixed);           // true = conflict with a fixed outcome (Order): shown, not resolvable
 
 public sealed record RebaseResultResponse(
     Guid AggregateId,

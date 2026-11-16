@@ -66,6 +66,15 @@ public enum KVConflictKind
     /// the overlay did not touch. Accepting keeps the merged membership; rejecting reverses just this item.
     /// </summary>
     IncomingItem = 4,
+
+    /// <summary>
+    /// Conflict with a fixed outcome: the overlay reordered a collection whose membership the target also
+    /// changed, so the merged order is the target's (with the overlay's additions appended) and the overlay's
+    /// order is lost. Reported so it is not lost silently; always <see cref="KVConflictResolution.Theirs"/>,
+    /// it cannot be resolved and never blocks finishing. <see cref="KVConflict.Path"/> is the collection;
+    /// the values are the base's, the target's and the overlay's <c>$items</c> lists.
+    /// </summary>
+    Order = 5,
 }
 
 /// <summary>
@@ -99,12 +108,21 @@ public sealed class KVConflict
     /// <summary>True for non-conflicting incoming changes (default-accepted, individually rejectable).</summary>
     public bool IsIncoming => this.Kind is KVConflictKind.Incoming or KVConflictKind.IncomingItem;
 
+    /// <summary>True for conflicts with a fixed outcome (<see cref="KVConflictKind.Order"/>): reported, never resolvable.</summary>
+    public bool IsFixed => this.Kind is KVConflictKind.Order;
+
     public bool IsResolved => this.Resolution != KVConflictResolution.Unresolved;
 
     public void Resolve(KVConflictResolution resolution, KVValue? customValue = null)
     {
         if (resolution == KVConflictResolution.Unresolved)
             throw new ArgumentException("Cannot resolve an entry back to Unresolved.", nameof(resolution));
+
+        if (this.IsFixed)
+        {
+            throw new InvalidOperationException(
+                $"The order of '{this.Path}' cannot be chosen: when both sides changed the membership, the merged order is the target's.");
+        }
 
         if (resolution == KVConflictResolution.Custom)
         {

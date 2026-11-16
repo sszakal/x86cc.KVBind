@@ -114,6 +114,30 @@ Migrations can also be defined outside a builder with `KVMigration.Define(versio
 
 Migrations run without a bound aggregate, so no change reactions run: write derived values explicitly as part of the migration.
 
+## Drafts
+
+A draft is its base snapshot plus pending changes, and those changes are in the base's layout. The base is a past commit, so it is never migrated in place. Instead, once the aggregate's snapshot has been migrated (and saved), `KVMigrator.RebaseDraft` moves the draft onto it:
+
+```csharp
+KVMigrator.Migrate(snapshot, definition);              // the aggregate first; persist it and its commits
+var result = KVMigrator.RebaseDraft(draft, snapshot, definition);
+root.NotifyReplaced();                                 // after binding the draft: no reactions ran
+```
+
+The draft's base and its view (base plus changes) are migrated as throwaway copies, the draft's changes are re-derived in the new layout, and they are merged with everything the snapshot holds that the base did not: other users' commits made before the migration as well as the migration commits. So a draft left open over a deployment catches up on both in one go, with no review.
+
+- **Conflicts** (the draft and a committed change touched the same path) are resolved for the committed side by default; pass `KVConflictResolution.Ours` to keep the draft's value instead. They are listed in `result.ResolvedConflicts`, with the draft's value (`OursValue`) and the committed one (`MainValue`).
+- **Draft edits a migration deleted** (for example a field `Remove(...)` dropped) are listed in `result.RemovedByMigration`. Renamed and moved edits are carried, not reported.
+- Data the draft added — a new collection item, a nested node it initialized — is migrated like committed data, and value factories read the draft's values.
+- A draft whose base is already at the snapshot's schema version is left alone (`AlreadyCurrent`): catching up on ordinary commits is the normal, interactive rebase. A rebase in progress from the old layout is abandoned and redone (`result.AbandonedRebase`).
+- The snapshot must already be at the definition's current version, or `RebaseDraft` throws. KVBind never migrates or saves the snapshot for you.
+
+When to run it is up to the application: when a draft is next read, or from a background runner. `KVMigrator.RebaseDraftsAsync` takes a batch (`KVDraftMigrationSubject`: a key, the draft and its aggregate's migrated snapshot) and runs each migration's prepare phase once over the drafts that still need it. The prepare phase receives each draft's view as the subject's snapshot; the draft's base and its view share the prepared data.
+
+Value factories run on the snapshot, the draft's base and the draft's view, so they must return the same value for the same input. A factory that returns a new `Guid` or the current time would show up as a conflict the user never caused; take such values from a prepare phase keyed by the aggregate instead.
+
+Collection order follows the rebase's membership rule: when the committed side also changed a collection's membership (added or removed items), the merged order is the committed one, with the draft's additions appended. A reorder in the draft that this drops is reported in `result.ResolvedConflicts` as a `KVConflictKind.Order` entry, whose outcome is fixed whatever `onConflict` says.
+
 ## New aggregates
 
 A brand-new aggregate is already in the newest layout, so mint its snapshot through the definition to stamp the current version — otherwise it defaults to `0`, would be mistaken for legacy data, and would be needlessly re-migrated:
