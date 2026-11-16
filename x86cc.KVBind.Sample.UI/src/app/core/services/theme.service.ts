@@ -2,12 +2,12 @@ import { Injectable, signal } from '@angular/core';
 
 @Injectable({ providedIn: 'root' })
 export class ThemeService {
-  readonly isDark = signal(false);
+  readonly isDark = signal(true);
 
   constructor() {
-    // Default to light unless the user explicitly chose dark previously.
+    // Default to dark unless the user explicitly chose light previously.
     const stored = localStorage.getItem('kvbind-theme');
-    this.apply(stored === 'dark');
+    this.apply(stored !== 'light');
   }
 
   toggle(): void {

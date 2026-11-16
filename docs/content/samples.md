@@ -7,6 +7,8 @@ sidebar_position: 9
 
 The repository's [`samples/`](https://github.com/sszakal/x86cc.KVBind/tree/main/samples) folder holds an Aspire app — an API, Postgres via Marten and an Angular UI — that serves several KVBind models through **one generic API and one generic UI**. Nothing in either is written per model: each model's form, labels, options, rules and allowed operations come from its KVBind definition, via the [schema package](/schema).
 
+<video controls muted playsInline preload="metadata" poster="/video/kvbind-demo.jpg" src="/video/kvbind-demo.mp4" style={{width: '100%', borderRadius: 12}}></video>
+
 ```bash
 ASPIRE_ALLOW_UNSECURED_TRANSPORT=true dotnet run --project samples/x86cc.KVBind.Sample.AppHost --launch-profile http
 ```
@@ -64,6 +66,23 @@ The scenario tests in `x86cc.KVBind.IntegrationTests/Underwriting` follow the sa
 | Drafts, rebase, concurrency | every conflict kind, Ours / Theirs / Custom, stale commits |
 | Migrations | rename + backfill, replace nested type, remove + backfill; on read and in batch |
 | Inheritance | `Program` terms inherited from a parent application |
+
+## Custom operations in the UI
+
+The schema lists each node's and collection's custom operations by name, so the UI knows where they apply, but not what payload they take. The UI therefore draws an operation only when a **renderer** is registered for it, and shows nothing for an operation without one.
+
+A renderer is an Angular component with a `context` input (the operation, its path, the data there, a `busy` flag and `run(payload?)`). The sample registers its renderers in `x86cc.KVBind.Sample.UI/src/app/features/models/operations/sample-operations.ts`:
+
+```ts
+export const SAMPLE_OPERATION_RENDERERS: OperationRenderer[] = [
+  { operation: 'SUBMIT', component: ButtonOperationComponent },                       // any model
+  { operation: 'QUOTE', model: 'underwriting', component: QuoteOperationComponent },  // { baseRate, modifier }
+  { operation: 'DECLINE', model: 'underwriting', component: TextOperationComponent, options: { placeholder: 'reason' } },
+  // …
+];
+```
+
+To expose a new `Operation(...)` in the UI, add a line there: `ButtonOperationComponent` for an operation without a payload, `TextOperationComponent` for a single string, or your own component that builds the payload and calls `context.run(payload)`. A model-specific registration wins over a model-wide one.
 
 ## Performance
 

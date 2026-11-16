@@ -10,6 +10,10 @@ slug: /
 
 It lets you build large, document-like aggregates as ordinary strongly typed C# classes while storing their state in a canonical, versioned model. From that single representation KVBind provides draft editing, replayable commits, diffing, patch APIs, validation, schema evolution and runtime change notifications — so each application does not have to implement them again.
 
+<video controls muted playsInline preload="metadata" poster="/video/kvbind-demo.jpg" src="/video/kvbind-demo.mp4" style={{width: '100%', borderRadius: 12}}></video>
+
+<small>A 95-second tour of the [sample application](/samples): one generic UI driven by definitions, drafts, validation, collections, change reactions, commits, and a rebase with a conflict.</small>
+
 ## Where it fits
 
 KVBind suits systems where business documents evolve over time and every change matters:

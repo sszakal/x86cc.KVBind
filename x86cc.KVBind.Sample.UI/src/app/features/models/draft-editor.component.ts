@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+import { CommonModule, NgComponentOutlet } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -6,6 +6,7 @@ import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { ChangeTreeTableComponent } from '../../shared/components/change-tree-table.component';
 import { UserService } from '../../core/services/user.service';
 import { SchemaFieldComponent } from './schema-field.component';
+import { OperationContext, OperationRenderer, OperationRendererRegistry } from './operations/operation-renderers';
 import { AggregateDraft, ModelApiService, PatchOperation, ValidationResult, errorText } from './model-api.service';
 import {
   DataObject, ID_KEY, KVCollectionSchema, KVFieldSchema, KVItemTypeSchema, KVNestedNodeSchema, KVNodeSchema, KVSchemaDocument,
@@ -20,7 +21,7 @@ import {
 @Component({
   selector: 'app-draft-editor',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, ChangeTreeTableComponent, SchemaFieldComponent],
+  imports: [CommonModule, FormsModule, RouterModule, NgComponentOutlet, ChangeTreeTableComponent, SchemaFieldComponent],
   templateUrl: './draft-editor.component.html',
 })
 export class DraftEditorComponent implements OnInit, OnDestroy {
@@ -45,8 +46,8 @@ export class DraftEditorComponent implements OnInit, OnDestroy {
   pendingValues: Record<string, unknown> = {};
   autoSaveLabel = '';
 
-  // Payload text typed for a custom operation, keyed by "<path>|<operation>".
-  payloads: Record<string, string> = {};
+  // One context per rendered custom operation, keyed by "<path>|<operation>", so renderers keep their state.
+  private operationContexts = new Map<string, { inputs: { context: OperationContext } }>();
 
   private timer?: ReturnType<typeof setInterval>;
   private changedExact = new Set<string>();
@@ -57,6 +58,7 @@ export class DraftEditorComponent implements OnInit, OnDestroy {
     private readonly route: ActivatedRoute,
     private readonly router: Router,
     private readonly users: UserService,
+    private readonly operationRenderers: OperationRendererRegistry,
   ) {}
 
   ngOnInit(): void {
@@ -229,15 +231,39 @@ export class DraftEditorComponent implements OnInit, OnDestroy {
 
   dropNested(slotPath: string): void { this.send([{ operationCode: 'DROP', path: `/${slotPath}` }]); }
 
-  payloadKey(path: string, operation: string): string { return `${path}|${operation}`; }
-
-  runOperation(path: string, operation: string): void {
-    const text = (this.payloads[this.payloadKey(path, operation)] ?? '').trim();
-    let value: unknown = undefined;
-    if (text) {
-      try { value = JSON.parse(text); } catch { value = text; }
+  // Custom operations the UI can render: those with a registered renderer (see operations/sample-operations.ts).
+  // An operation without one is not shown.
+  renderableOperations(ops: string[], path: string): Array<{ op: string; renderer: OperationRenderer; inputs: { context: OperationContext } }> {
+    const result = [];
+    for (const op of ops) {
+      const renderer = this.operationRenderers.find(this.model, op);
+      if (renderer) result.push({ op, renderer, inputs: this.operationInputs(path, op, renderer) });
     }
-    this.send([{ operationCode: operation, path: path ? `/${path}` : '/', value }]);
+    return result;
+  }
+
+  runOperation(path: string, operation: string, payload?: unknown): void {
+    this.send([{ operationCode: operation, path: path ? `/${path}` : '/', value: payload }]);
+  }
+
+  private operationInputs(path: string, operation: string, renderer: OperationRenderer): { context: OperationContext } {
+    const key = `${path}|${operation}`;
+    let entry = this.operationContexts.get(key);
+    if (!entry) {
+      const editor = this;
+      const context: OperationContext = {
+        model: this.model,
+        operation,
+        path,
+        get data() { return valueAt(editor.draft?.data, path); },
+        get busy() { return editor.saving; },
+        options: renderer.options ?? {},
+        run: (payload?: unknown) => editor.runOperation(path, operation, payload),
+      };
+      entry = { inputs: { context } };
+      this.operationContexts.set(key, entry);
+    }
+    return entry.inputs;
   }
 
   // ── Save / validate / commit ────────────────────────────────────────────────

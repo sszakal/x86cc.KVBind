@@ -68,6 +68,23 @@ The scenario tests in `x86cc.KVBind.IntegrationTests/Underwriting` follow the sa
 | 1m | Migrations | v1 rename + backfill, v2 replace nested type, v3 remove + backfill; on read and in batch | `ApiScenarioTests` |
 | 1n | Inheritance | `Program` terms inherited from a parent application, read-only in the child, parent updates flow through | `ApiScenarioTests` |
 
+## Custom operations in the UI
+
+The schema lists each node's and collection's custom operations by name, so the UI knows where they apply, but not what payload they take. The UI therefore draws an operation only when a **renderer** is registered for it, and shows nothing for an operation without one.
+
+A renderer is an Angular component with a `context` input (the operation, its path, the data there, a `busy` flag and `run(payload?)`). The sample registers its renderers in `x86cc.KVBind.Sample.UI/src/app/features/models/operations/sample-operations.ts`:
+
+```ts
+export const SAMPLE_OPERATION_RENDERERS: OperationRenderer[] = [
+  { operation: 'SUBMIT', component: ButtonOperationComponent },                       // any model
+  { operation: 'QUOTE', model: 'underwriting', component: QuoteOperationComponent },  // { baseRate, modifier }
+  { operation: 'DECLINE', model: 'underwriting', component: TextOperationComponent, options: { placeholder: 'reason' } },
+  // …
+];
+```
+
+To expose a new `Operation(...)` in the UI, add a line there: `ButtonOperationComponent` for an operation without a payload, `TextOperationComponent` for a single string, or your own component that builds the payload and calls `context.run(payload)`. A model-specific registration wins over a model-wide one.
+
 ## Large forms and performance
 
 `samples/tools/GenerateLargeForms.cs` generates the large-form models (run it with

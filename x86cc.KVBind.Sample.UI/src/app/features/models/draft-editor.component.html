@@ -158,16 +158,14 @@
   <ng-container *ngTemplateOutlet="operations; context: { ops: node.operations, path: path }"></ng-container>
 </ng-template>
 
-<!-- ═══ Custom operations (Operation(...) in the DSL) ═══ -->
+<!-- ═══ Custom operations (Operation(...) in the DSL), each drawn by its registered renderer ═══ -->
 <ng-template #operations let-ops="ops" let-path="path">
-  @if (ops.length > 0) {
-    <div class="mb-5 flex flex-wrap items-center gap-2 rounded-xl bg-indigo-50/60 p-3 dark:bg-indigo-950/20">
+  @let rendered = renderableOperations(ops, path);
+  @if (rendered.length > 0) {
+    <div data-operations class="mb-5 flex flex-wrap items-center gap-3 rounded-xl bg-indigo-50/60 p-3 dark:bg-indigo-950/20">
       <span class="text-xs font-medium uppercase tracking-wide text-indigo-500">Operations</span>
-      @for (op of ops; track op) {
-        <span class="flex items-center gap-1">
-          <input class="h-8 w-36 rounded-md border border-indigo-200 px-2 text-xs dark:border-indigo-900 dark:bg-gray-900 dark:text-white" [(ngModel)]="payloads[payloadKey(path, op)]" placeholder="payload (optional)" />
-          <button class="h-8 rounded-md bg-indigo-500 px-3 text-xs font-semibold text-white hover:bg-indigo-600 disabled:opacity-40" [disabled]="saving" (click)="runOperation(path, op)">{{ op }}</button>
-        </span>
+      @for (item of rendered; track item.op) {
+        <ng-container *ngComponentOutlet="item.renderer.component; inputs: item.inputs"></ng-container>
       }
     </div>
   }
