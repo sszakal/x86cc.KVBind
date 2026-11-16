@@ -18,7 +18,9 @@ var result = agreement.Patch(
 var validation = result.Validate();
 ```
 
-Patches run through the same runtime as typed setters: defaults, change reactions, validation and domain events behave identically.
+Patches run through the same runtime as typed setters: defaults, change reactions, validation and domain events behave identically. Paths are [canonical paths](/concepts/paths); the leading slash is optional.
+
+A patch is **not transactional**: operations run in order, and when one throws, the ones before it stay applied to the in-memory draft. Do not save a draft after a failed patch — see [Web APIs](/integration/web-api#handling-errors).
 
 ## Built-in operations
 
@@ -83,4 +85,27 @@ foreach (var change in result.Changes)
     Console.WriteLine($"{change.ChangeType} {change.Path}: {change.OldValue} -> {change.NewValue}");
 
 var pending = agreement.GetAllChanges().Changes;
+```
+
+### Change types
+
+`KVChangeDelta.ChangeType` is `Added`, `Updated` or `Removed`. What each operation reports in its patch's change set:
+
+| Operation | Reported as |
+| --- | --- |
+| `SET` | `Updated` field with `OldValue` → `NewValue` (`Added` when it had no value) |
+| `UNSET` | `Removed` field, with its `OldValue` |
+| `ADD` | `Added` item (one entry for the item, not one per field) |
+| `REMOVE` | `Removed` item |
+| `MOVE`, `RESET` | `Updated` item |
+| `INIT` / `DROP` | `Added` / `Removed` nested node slot |
+| `DISCARD` | the path, as the change that reverting it makes (a discarded removal reports `Added`) |
+| Writes by change reactions | as their own field changes |
+
+`GetAllChanges()` compares the draft with its snapshot instead, so it reports net results: an added item as one `Added` entry, edits inside committed items as field-level `Updated` entries, and nothing for a change that was reverted. `OldValue` and `NewValue` are only filled in a patch's change set.
+
+```text
+Patch(MOVE /Lines/c 0)   →  Updated Lines/c
+Patch(RESET /Lines/a)    →  Updated Lines/a
+GetAllChanges()          →  Updated Lines/a/Amount, Added Lines/c, Removed Title
 ```

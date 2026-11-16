@@ -34,7 +34,7 @@ overlay.HasChanges;        // true
 overlay.BaseCommitId;      // the snapshot's LastCommitId when the draft was opened
 ```
 
-A draft can be persisted as just its `Changes` plus its `BaseCommitId`, and rebuilt later from the base snapshot. `KVOverlay.FromCommits(baseSnapshot, commits)` reconstructs an overlay from a sequence of commits.
+A draft can be persisted as just its `Changes` plus its `BaseCommitId`, and rebuilt later from the base snapshot; see [Persistence](/integration/persistence#loading-and-saving-a-draft). `KVOverlay.FromCommits(baseSnapshot, commits)` reconstructs an overlay from a sequence of commits.
 
 Ways to drop work:
 
@@ -51,7 +51,7 @@ var commit = agreement.CreateCommit(DateTimeOffset.UtcNow);   // validates first
 snapshot.Apply(commit);
 ```
 
-The commit carries `PreviousCommitId = overlay.BaseCommitId`. Before applying it, an application typically checks that the snapshot's `LastCommitId` still equals that base — if not, the draft is stale and needs a rebase (the sample API answers such a commit with `409 Conflict`).
+The commit carries `PreviousCommitId = overlay.BaseCommitId`. Before applying it, an application checks that the snapshot's `LastCommitId` still equals that base — if not, the draft is stale and needs a rebase (the sample API answers such a commit with `409 Conflict`). `snapshot.Apply(commit)` enforces the same rule and throws on a commit that does not continue the snapshot's chain.
 
 ## Rebasing
 

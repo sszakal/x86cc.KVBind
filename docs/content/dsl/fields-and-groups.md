@@ -39,24 +39,31 @@ The field's value type is the model property's type and is exposed as `KVFieldDe
 
 Value rules declared on field options are always applied; see [Validation](/behavior/validation) for profile-specific rules.
 
-### Allowed values and annotations
+### Allowed values
 
-Fields can restrict their values to a list of allowed values — plain (`AllowedValues("low", "high")`) or labelled, each with a value, an id and a label — and carry metadata for a UI:
+A field can restrict its value to a declared list, with labels and stable tokens. See [Allowed values](/dsl/allowed-values).
+
+## Display metadata
+
+Fields, field groups, collections and nested nodes all accept a display name and free-form annotations. They do not affect behavior; they are exposed on the definition (`KVDefinition.DisplayName`, `KVDefinition.Annotations`) and in the [schema](/schema) for a UI:
 
 ```csharp
-component.Field(x => x.Category, f => f
-    .DisplayName("Category")
-    .AllowedValue("mechanical", "mechanical", "Mechanical")
-    .AllowedValue("electrical", "electrical", "Electrical"));
+builder.Field(x => x.Notes, f => f
+    .DisplayName("Notes")
+    .MaxLength(500)
+    .Annotate("ui:control", "textarea"));
 
-component.Field(x => x.Tags, f => f
-    .AllowedElementValue<string>("critical", "critical", "Critical")   // element-wise, for list fields
-    .AllowedElementValue<string>("spare", "spare", "Spare"));
-
-component.Field(x => x.Notes, f => f.MaxLength(500).Annotate("ui:control", "textarea"));
+builder.Collection(x => x.LineItems, items => items
+    .DisplayName("Line items")
+    .Item<AgreementLineItem>(...));
 ```
 
-Tokens are the wire form a patch sends; see [Patch operations](/patching/operations#value-types) for how a `SET` resolves them. A value outside the list is reported by validation as `allowed_values`. Display names, allowed values and annotations are all part of the [schema](/schema).
+When no `DisplayName(...)` is declared, the definition falls back to the attribute's `DisplayName`:
+
+```csharp
+[KVBind("Title", DisplayName = "Agreement title")]
+public partial string? Title { get; set; }
+```
 
 ## Field groups
 
@@ -78,6 +85,15 @@ public AgreementGeneral General { get; } = new();
 
 Groups can nest other groups, collections and nested nodes.
 
+`FieldGroup` takes up to three arguments: the property, a definition of the group's members, and the group's options (display name, `Resettable()`, `PatchReadOnly()`, `Inherited()`):
+
+```csharp
+builder.FieldGroup(
+    x => x.Audit,
+    audit => audit.Field(x => x.ApprovedBy),
+    options => options.DisplayName("Audit").PatchReadOnly());
+```
+
 ### Resettable groups
 
 Mark a group `Resettable()` to let clients restore it to its defaults with a `RESET` patch:
@@ -90,3 +106,38 @@ builder.FieldGroup(
 ```
 
 See [Defaults and reset](/dsl/defaults-and-reset).
+
+## Reusable definitions
+
+A group type, collection item type or nested subtype can carry its own definition by implementing `IKVNodeDefinition`, the same interface a [root model can use](/integration/definitions#definitions-declared-on-the-model). It is then declared without an inline lambda, and every model that uses the type shares one definition:
+
+```csharp
+public partial class Address : KVFieldGroupNode, IKVNodeDefinition
+{
+    [KVBind("Street")] public partial string? Street { get; set; }
+    [KVBind("City")]   public partial string? City { get; set; }
+
+    public static KVNodeDefinition Definition { get; } = Build();
+
+    private static KVNodeDefinition Build()
+    {
+        var builder = new KVBindBuilder<Address>();
+        builder.Field(x => x.Street);
+        builder.Field(x => x.City, f => f.Required());
+        return builder.Build();
+    }
+}
+
+builder.FieldGroup(x => x.BillingAddress);                                   // group
+builder.FieldGroup(x => x.ShippingAddress, options => options.DisplayName("Ship to"));
+```
+
+The same works for collection item types (`KVCollectionItemNode`) and nested subtypes (`KVNestedNode`) that implement `IKVNodeDefinition`:
+
+```csharp
+builder.Collection(x => x.Contacts);                                         // single self-describing item type
+builder.Collection(x => x.Lines, lines => lines.Item<ProductLine>().Item<DiscountLine>("DISCOUNT"));
+builder.NestedNode(x => x.Payer, payer => payer.Bind<CompanyPayer>().Bind<PersonPayer>("PERSON"));
+```
+
+Without an explicit token, item types and nested subtypes use the type name as their token (`Company`).

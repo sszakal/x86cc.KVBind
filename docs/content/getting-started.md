@@ -16,6 +16,14 @@ dotnet add package x86cc.KVBind.SourceGenerator
 
 Add `x86cc.KVBind.Schema` as well if a client needs a description of the model (see [Schema package](/schema)).
 
+The examples on this site use these namespaces:
+
+```csharp
+using x86cc.KVBind.Core;              // nodes, [KVBind], KVBindBuilder<T>, patching, validation
+using x86cc.KVBind.Core.Model;        // KVSnapshot, KVOverlay, KVCommit
+using x86cc.KVBind.Core.Migrations;   // NewSnapshot(), migrations
+```
+
 ## 1. Define the model
 
 Models are ordinary C# classes deriving from KVBind node types. Scalar fields and nested nodes are `partial` properties marked with `[KVBind("Key")]`; the generator implements them. Field groups and collections are plain get-only properties.
@@ -166,4 +174,5 @@ var patchValidation = result.Validate();
 
 - Understand how snapshots, overlays and commits relate in the [mental model](/concepts/mental-model).
 - Browse the [Definition DSL](/dsl/fields-and-groups) for everything a schema can declare.
+- Register definitions and store aggregates: [Registering definitions](/integration/definitions), [Persistence](/integration/persistence), [Web APIs](/integration/web-api).
 - Run the [sample application](/samples) to see a generic API and UI driven by definitions.

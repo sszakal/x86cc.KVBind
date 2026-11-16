@@ -31,14 +31,15 @@ Typical characteristics of these domains:
 
 | Capability | Where to read |
 | --- | --- |
-| Typed C# models backed by canonical path/value storage | [Mental model](/concepts/mental-model), [Source generation](/concepts/source-generation) |
+| Typed C# models backed by canonical path/value storage | [Mental model](/concepts/mental-model), [Paths](/concepts/paths), [Source generation](/concepts/source-generation) |
 | Schema declared once with a fluent DSL | [Definition DSL](/dsl/fields-and-groups) |
 | Drafts, commits, diffs, rebase with conflict review | [Drafts and rebase](/workflows/drafts-and-rebase) |
 | A path-based patch API for clients, plus domain operations | [Patch operations](/patching/operations), [Custom operations](/patching/custom-operations) |
 | Profile-based validation, value rules and collection rules | [Validation](/behavior/validation) |
 | Change reactions and domain events | [Change reactions](/behavior/change-reactions), [Domain events](/behavior/domain-events) |
 | Schema migrations as replayable commits | [Schema migrations](/workflows/migrations) |
-| A serializer-neutral schema for generic UIs | [Schema package](/schema) |
+| Storage-agnostic persistence and HTTP-friendly patches | [Persistence](/integration/persistence), [Web APIs](/integration/web-api) |
+| A serializer-neutral schema for generic UIs | [Schema package](/schema), [Reading definitions](/advanced/definitions) |
 
 ## Packages
 

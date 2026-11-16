@@ -86,6 +86,17 @@ public partial class Agreement : KVRootNode
 }
 ```
 
+Without an override, the root uses `KVDefaultValidationProfile.Instance`: rules declared on field and collection options still apply, and rules registered under a profile apply only when that profile is active.
+
+Group rules can be registered per profile as well:
+
+```csharp
+builder.Validation((KVGroupValidationProfileBuilder<Contract> profiles) => profiles
+    .For<FullValidationProfile>(rules => rules
+        .Required(x => x.Guarantor)
+        .MaxLength(x => x.Reference, 20)));
+```
+
 ## Running validation
 
 Run validation explicitly, or from a patch result:
@@ -96,3 +107,40 @@ var validation = agreement.Validate();
 var patch = agreement.Patch(KVPatchOperation.Set("/Title", ""));
 var patchValidation = patch.Validate();
 ```
+
+Validation always evaluates the whole aggregate with the profile active at that moment. `CreateCommit(...)` runs it too and throws `KVChangeSetValidationException` (with the same `Errors`) when anything fails.
+
+## Validation results
+
+`Validate()` returns a `KVValidationResult`. Its `Errors` list holds one `KVValidationError` per failure:
+
+| Property | Content |
+| --- | --- |
+| `Path` | the [canonical path](/concepts/paths) of the field, collection or nested node slot, e.g. `LineItems/shipping/Amount` |
+| `Code` | a stable, machine-readable code (see below) |
+| `Message` | an English message for logs and developers, e.g. `'Title' is required.` |
+
+Use `Code` and `Path` to show messages in a UI and translate them there; treat `Message` as diagnostic text.
+
+```csharp
+var result = agreement.Validate();
+if (result.Errors.Count > 0)
+{
+    foreach (var error in result.Errors)
+        Console.WriteLine($"{error.Path}: {error.Code}");
+}
+```
+
+### Error codes
+
+| Code | Reported at | Raised by |
+| --- | --- | --- |
+| `required` | field or nested node slot | `Required()` |
+| `min_length` / `max_length` | field | `MinLength(n)` / `MaxLength(n)` |
+| `pattern` | field | `Pattern(regex)` |
+| `min` / `max` | field | `Min(v)` / `Max(v)` / `Range(min, max)` |
+| `allowed_values` | field | a value outside the field's [allowed values](/dsl/allowed-values) |
+| `not_empty` | collection | `NotEmpty()` |
+| `min_count` / `max_count` | collection | `MinCount(n)` / `MaxCount(n)` |
+| `aggregate_less_than`, `aggregate_less_than_or_equal`, `aggregate_greater_than`, `aggregate_greater_than_or_equal` | collection | `AggregateSum(...)` thresholds |
+| `aggregate_non_numeric` | the item field being summed | a non-numeric value in an `AggregateSum` field |

@@ -19,6 +19,20 @@ builder.Migration(3, m => m
     .RenameField(KVTarget.Root.Seg("LineItems").AnyItem().Seg("Description"), "Details"));
 ```
 
+## Operations
+
+| Operation | Effect |
+| --- | --- |
+| `Backfill(target, value, overwrite: false)` | Writes `value(view)` at every matching field. By default only fields without a value are filled; `overwrite: true` replaces existing values. |
+| `Remove(target)` | Deletes every matching field or subtree. |
+| `RenameField(target, toSegment)` | Renames the last segment of every matching field, keeping its value. |
+| `RenameNode(target, toSegment)` | Renames a group, collection or nested node slot, carrying its whole subtree. |
+| `RenameSegment(fromPath, toPath)` | Moves everything under a fixed path to another path: a renamed root-level group or collection, or a field moved to another parent (`Section1/Field1` → `Section2/Field1`). |
+| `ReplaceNestedType(target, toType, reshape)` | Switches a nested node's subtype and reshapes its fields (see below). |
+| `Prepare(...)` | An async step that loads external data once per batch (see below). |
+
+All steps of one migration read the same **pre-migration** data; the migrator applies the finished commit, so the next migration sees the result.
+
 ## Targeting with `KVTarget`
 
 `KVTarget` is a structural selector, not a regex. It resolves against the data, expanding collection rows as wildcards and filtering polymorphic instances by their stored `$type` discriminator — something a single-key pattern cannot express:
@@ -57,14 +71,46 @@ builder.Migration(4, m => m.ReplaceNestedType(
 - `Rename` moves a single field or a whole subtree, and throws if the destination already holds data — `Drop` the destination first to replace it.
 - Value factories read the **pre-migration** data, so a new field can be seeded from an old one even after it was dropped.
 
+## Reading data in a value factory
+
+`Backfill` and the reshape `Set` take a factory that receives a `KVMigrationFieldView` for the field being written:
+
+| Member | Returns |
+| --- | --- |
+| `Path` | the absolute path of the field being written, e.g. `LineItems/a1/Currency` |
+| `Exists` | whether the field already holds a value |
+| `Sibling("Name")` | a value next to this field (same parent), or `null` |
+| `Absolute("General/Code")` | any value by absolute path, or `null` |
+| `Context` | the batch context: `Key` / `KeyAs<T>()` and `Prepared` / `PreparedAs<T>()` |
+
+```csharp
+builder.Migration(6, m => m.Backfill(
+    KVTarget.Root.Seg("LineItems").AnyItem().Seg("Currency"),
+    view => view.Absolute("General/DefaultCurrency") ?? "EUR"));
+```
+
 ## Applying migrations
 
 ```csharp
 // Brings the snapshot up to the newest registered version — one chained commit per pending migration.
 var commits = KVMigrator.Migrate(snapshot, definition);
+// persist the snapshot and append the commits to its history
 ```
 
-Only migrations newer than the snapshot's `SchemaVersion` run, each as its own commit; an already-current snapshot does nothing. Applied migrations never re-run and the up-to-date check is O(1), so the list stays cheap no matter how long it grows.
+Only migrations newer than the snapshot's `SchemaVersion` run, each as its own commit; an already-current snapshot does nothing. Applied migrations never re-run and the up-to-date check is O(1), so the list stays cheap no matter how long it grows. A migration that changes no data still produces a commit, so the version advances.
+
+`Migrate` applies the commits to the snapshot in place. To inspect or store the commits first, build them without touching the snapshot and apply them yourself:
+
+```csharp
+var commits = KVMigrator.BuildCommits(snapshot, definition);
+snapshot.Apply(commits);
+```
+
+Every overload takes an optional `user` and `timestamp`. By default migration commits are authored by `KVMigrator.MigrationUser` (`"system:migration"`) and carry `MigrationToVersion`, so a history view can tell them apart from user edits.
+
+For a [child aggregate](/workflows/inheritance), the definition-based overloads leave inherited members alone: they are always read from the parent, which migrates itself.
+
+Migrations can also be defined outside a builder with `KVMigration.Define(version, m => ...)` and passed as a list to the `BuildCommits` / `Migrate` / `MigrateBatchAsync` overloads that take `IEnumerable<KVMigration>`.
 
 Migrations run without a bound aggregate, so no change reactions run: write derived values explicitly as part of the migration.
 
@@ -75,6 +121,8 @@ A brand-new aggregate is already in the newest layout, so mint its snapshot thro
 ```csharp
 var snapshot = definition.NewSnapshot();   // born stamped at CurrentSchemaVersion
 ```
+
+A snapshot created some other way (for example imported data already in the current layout) can be stamped with `snapshot.StampCurrentSchemaVersion(definition)`. Both are extension methods in `x86cc.KVBind.Core.Migrations`.
 
 ## Background migration in batches
 
@@ -90,4 +138,4 @@ var subjects = aggregates.Select(a => new KVMigrationSubject { Key = a.Id, Snaps
 var results = await KVMigrator.MigrateBatchAsync(subjects, definition, cancellationToken: ct);
 ```
 
-Subjects already at the latest version contribute no commits and trigger no prepare, so re-running a partially completed migration over already-migrated data is a no-op.
+Each `KVMigrationResult` has the subject's `Key` and the `Commits` applied to its snapshot; persist both. Subjects already at the latest version contribute no commits and trigger no prepare, so re-running a partially completed migration over already-migrated data is a no-op.

@@ -77,6 +77,52 @@ builder.Collection(x => x.Animals, animals => animals
 
 `KVCollectionDefinition.AllowedOperations` (`null` = unrestricted) and `IsOperationAllowed(...)` let a UI hide actions that would be rejected.
 
+## Working with items in code
+
+`KVCollectionNode<TItem>` is enumerable in item order and offers:
+
+| Member | Returns |
+| --- | --- |
+| `Create()`, `Create(Guid)`, `Create(string id)`, `Create<TSubtype>(...)` | the new item, with its defaults applied |
+| `GetById(id)` | the item, or `null` |
+| `Get<TSubtype>(id)` | the item typed, or `null`; throws if it is another subtype |
+| `GetItemId(item)` | the item's id |
+| `GetActiveItemIds()` | the ids in order |
+| `RemoveById(id)` | `true` if an item was removed |
+| `MoveById(id, toIndex)` | `true` if the item moved; throws when `toIndex` is out of range |
+
+```csharp
+foreach (var line in agreement.LineItems)
+    total += line.Amount ?? 0m;
+
+var id = agreement.LineItems.GetItemId(line);
+agreement.LineItems.MoveById(id, toIndex: 0);
+```
+
+These calls raise the same [change reactions](/behavior/change-reactions) as the equivalent patches (`Added`, `Removed`, `Moved`) and are not limited by `AllowOperations(...)` or `PatchReadOnly()`.
+
 ## Collection rules
 
-Collections support count and aggregate validation rules, for example `MinCount(1)` and `AggregateSum(...)`. See [Validation](/behavior/validation#collection-rules).
+Count and aggregate rules can be declared on the collection, where they always apply, or under a [validation profile](/behavior/validation#validation-profiles):
+
+```csharp
+builder.Collection(x => x.LineItems, collection => collection
+    .Item<AgreementLineItem>(item => item.Field(x => x.Amount))
+    .NotEmpty()
+    .MaxCount(100)
+    .Validation(profiles => profiles
+        .For<FullValidationProfile>(rules => rules
+            .MinCount(2)
+            .AggregateSum<AgreementLineItem, decimal>(x => x.Amount).LessThanOrEqual(10_000m))));
+```
+
+| Rule | Error code (at the collection path) |
+| --- | --- |
+| `NotEmpty()` | `not_empty` |
+| `MinCount(n)` / `MaxCount(n)` | `min_count` / `max_count` |
+| `AggregateSum(...).LessThan(x)` | `aggregate_less_than` |
+| `AggregateSum(...).LessThanOrEqual(x)` | `aggregate_less_than_or_equal` |
+| `AggregateSum(...).GreaterThan(x)` | `aggregate_greater_than` |
+| `AggregateSum(...).GreaterThanOrEqual(x)` | `aggregate_greater_than_or_equal` |
+
+`AggregateSum` selects the summed field by expression (`AggregateSum<TItem, TValue>(x => x.Amount)`) or by key (`AggregateSum("Amount")`). It skips unset values; a value that is not a number is reported as `aggregate_non_numeric` at the item's field. See [Validation](/behavior/validation#collection-rules).

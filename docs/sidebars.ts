@@ -7,13 +7,14 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Concepts',
-      items: ['concepts/mental-model', 'concepts/source-generation'],
+      items: ['concepts/mental-model', 'concepts/paths', 'concepts/source-generation'],
     },
     {
       type: 'category',
       label: 'Definition DSL',
       items: [
         'dsl/fields-and-groups',
+        'dsl/allowed-values',
         'dsl/collections',
         'dsl/nested-nodes',
         'dsl/defaults-and-reset',
@@ -35,7 +36,17 @@ const sidebars: SidebarsConfig = {
       label: 'Workflows',
       items: ['workflows/drafts-and-rebase', 'workflows/inheritance', 'workflows/migrations'],
     },
+    {
+      type: 'category',
+      label: 'Integration',
+      items: ['integration/definitions', 'integration/persistence', 'integration/web-api'],
+    },
     'schema',
+    {
+      type: 'category',
+      label: 'Advanced',
+      items: ['advanced/definitions'],
+    },
     'samples',
   ],
 };
