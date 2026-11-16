@@ -29,7 +29,8 @@ const config: Config = {
     },
   },
 
-  themes: ['cosmos-docusaurus-theme', '@docusaurus/theme-mermaid'],
+  // injectFavicon: false — Cosmos otherwise injects its own atom favicon over ours (img/logo.svg).
+  themes: [['cosmos-docusaurus-theme', { injectFavicon: false }], '@docusaurus/theme-mermaid'],
 
   presets: [
     [
